@@ -1,0 +1,184 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * obstacle.h
+ * Obstacle scanning, profiling and bypass planning (Buddy 5).
+ *
+ *  1. scan_*     a sequencer that sweeps the servo, waits for it to settle and
+ *                takes a median of ultrasonic readings at each angle: a coarse
+ *                scan first, then a finer scan around the obstacle;
+ *  2. profile    location, width, closest point and left/right clearance from
+ *                the scan points;
+ *  3. plan       stop / continue / bypass left / bypass right / reverse, with
+ *                the manoeuvre as a list of turn and move steps for the
+ *                Vehicle Controller to execute.
+ *
+ * Rules from the Tribunal: scanning starts only after the car is confirmed
+ * stopped (the Vehicle Controller guarantees that); "no echo" is never taken
+ * as free space unless explicitly configured; invalid scans or no safe route
+ * keep the car stopped and report a fault; this module never drives the
+ * wheels, it only produces a plan.
+ *
+ * Coordinates: x is lateral with RIGHT positive, y is forward.  Servo angles
+ * are measured from the car's right: 90 is straight ahead.
+ */
+#ifndef OBSTACLE_H
+#define OBSTACLE_H
+
+#include <stdbool.h>
+#include <stdint.h>
+
+#include "servo.h"
+#include "ultrasonic.h"
+
+#define SCAN_MAX_POINTS         (32U)
+#define PLAN_MAX_STEPS          (6U)
+#define SCAN_FORWARD_DEG        (90U)
+
+typedef struct {
+    servo_cfg_t servo;
+    uint8_t     coarse_min_deg;
+    uint8_t     coarse_max_deg;
+    uint8_t     coarse_step_deg;
+    uint8_t     fine_step_deg;
+    uint16_t    detect_range_mm;        /* closer than this is an obstacle */
+    uint8_t     samples_per_point;      /* readings per angle (median) */
+    uint16_t    measure_timeout_ms;     /* give up on one reading after this */
+    bool        no_echo_is_clear;       /* default false: no echo is unknown */
+    bool        left_is_high_angle;     /* servo angle > 90 points left */
+
+    uint16_t    robot_width_mm;
+    uint16_t    robot_length_mm;
+    uint16_t    margin_mm;
+    uint16_t    assumed_depth_mm;       /* the ultrasonic sees only the front face */
+    uint16_t    min_turn_distance_mm;   /* nearer than this: reverse first */
+    uint16_t    recovery_limit_mm;      /* longest allowed return leg (0.5 m) */
+} obstacle_config_t;
+
+/* ---- scan sequencer --------------------------------------------------- */
+
+typedef enum {
+    SCAN_POINT_OBSTACLE = 0,    /* valid echo closer than the detect range */
+    SCAN_POINT_FAR,             /* valid echo beyond it: confirmed free */
+    SCAN_POINT_NOECHO,          /* no echo: unknown */
+    SCAN_POINT_INVALID          /* sensor error / inconsistent */
+} scan_point_kind_t;
+
+typedef struct {
+    uint8_t           angle_deg;
+    scan_point_kind_t kind;
+    uint16_t          distance_mm;
+} scan_point_t;
+
+typedef enum {
+    SCAN_IDLE = 0,
+    SCAN_MOVING,                /* waiting for the servo to settle */
+    SCAN_MEASURING,
+    SCAN_RETURNING,             /* putting the servo back to straight ahead */
+    SCAN_DONE
+} scan_state_t;
+
+typedef struct {
+    bool    servo_move;         /* command servo_angle now */
+    uint8_t servo_angle;
+    bool    request_measure;    /* trigger one ultrasonic measurement now */
+} scan_action_t;
+
+typedef struct {
+    obstacle_config_t cfg;
+    scan_state_t      state;
+    bool              fine_phase;
+    uint8_t           angles[SCAN_MAX_POINTS];
+    uint8_t           angle_count;
+    uint8_t           angle_index;
+    uint8_t           servo_angle;      /* last commanded */
+    uint32_t          state_since_ms;
+    uint16_t          settle_ms;
+    uint32_t          request_seq;
+    bool              measure_requested;
+    uint16_t          samples[8];
+    uint8_t           sample_count;
+    uint8_t           valid_count;
+    uint8_t           noecho_count;
+    uint8_t           taken;
+    scan_point_t      coarse[SCAN_MAX_POINTS];
+    uint8_t           coarse_count;
+    scan_point_t      points[SCAN_MAX_POINTS];
+    uint8_t           point_count;
+    uint32_t          started_ms;
+    bool              move_issued;      /* the move for angle_index was commanded */
+    uint32_t          request_ms;
+    uint8_t           fine_lo;
+    uint8_t           fine_hi;
+} scan_t;
+
+void scan_start(scan_t *s, const obstacle_config_t *cfg, uint32_t now_ms);
+
+/*
+ * Advance the scan.  Call every ~10 ms with the newest reading.  Fills *act
+ * with what the HAL must do now.  Returns true once the scan is complete and
+ * the servo has been returned to straight ahead.
+ */
+bool scan_update(scan_t *s, uint32_t now_ms, const us_reading_t *reading,
+                 scan_action_t *act);
+
+/* ---- profile ----------------------------------------------------------- */
+
+typedef struct {
+    bool     valid;             /* false: the scan could not establish anything */
+    bool     obstacle_found;
+    bool     centre_clear;      /* straight ahead confirmed free */
+    uint8_t  closest_angle_deg;
+    uint16_t closest_mm;
+    int16_t  centre_x_mm;       /* lateral position of the obstacle centre */
+    uint16_t forward_mm;        /* distance to the nearest point, along y */
+    int16_t  left_edge_x_mm;    /* the obstacle's extent, right positive */
+    int16_t  right_edge_x_mm;
+    uint16_t width_mm;
+    uint16_t left_clearance_mm;     /* confirmed free space beside it; 0 = unknown/none */
+    uint16_t right_clearance_mm;
+} obstacle_profile_t;
+
+void obstacle_profile_build(const obstacle_config_t *cfg, const scan_point_t *points,
+                            uint8_t count, obstacle_profile_t *profile);
+
+/* ---- bypass plan ------------------------------------------------------- */
+
+typedef enum {
+    PLAN_CONTINUE = 0,
+    PLAN_BYPASS_LEFT,
+    PLAN_BYPASS_RIGHT,
+    PLAN_REVERSE,
+    PLAN_STOP
+} plan_action_t;
+
+typedef enum {
+    PLAN_REASON_OK = 0,
+    PLAN_REASON_NO_OBSTACLE,
+    PLAN_REASON_INVALID_SCAN,
+    PLAN_REASON_NO_CLEARANCE,
+    PLAN_REASON_DETOUR_TOO_LARGE,
+    PLAN_REASON_TOO_CLOSE
+} plan_reason_t;
+
+typedef struct {
+    bool    is_turn;            /* true: turn by value degrees (+ = left); false: move value mm */
+    int16_t value;
+} plan_step_t;
+
+typedef struct {
+    plan_action_t action;
+    plan_reason_t reason;
+    uint8_t       step_count;
+    plan_step_t   steps[PLAN_MAX_STEPS];
+    uint16_t      return_leg_mm;    /* expected travel back to the line */
+} bypass_plan_t;
+
+void obstacle_plan(const obstacle_config_t *cfg, const obstacle_profile_t *profile,
+                   bypass_plan_t *plan);
+
+/* Table-based trigonometry in per-mille, angles in whole degrees 0..180. */
+int16_t trig_sin_permille(int16_t deg);
+int16_t trig_cos_permille(int16_t deg);
+
+#endif /* OBSTACLE_H */
