@@ -21,3 +21,10 @@ config/tcp_test_config.h
 # Python
 __pycache__/
 *.pyc
+
+.DS_Store
+
+# Generated test executables
+/tests/test_mqtt_wire
+/tests/test_telemetry_bits
+/tests/test_telemetry_queue
