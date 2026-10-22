@@ -31,6 +31,9 @@
 #if TM_WIFI_STATIC || TM_WIFI_DHCP
 #include "lwip_utk_ipv4.h"
 #endif
+#if TM_WIFI_MQTT
+#include "lwip_utk_link.h"
+#endif
 #if TM_WIFI_STATIC
 #include "network_config.h"
 #endif
@@ -545,6 +548,11 @@ void cyw43_utk_task(int32_t stacd, void *exinf)
 #if TM_WIFI_STATIC || TM_WIFI_DHCP
         lwip_utk_ipv4_poll(&cyw43_state.netif[CYW43_ITF_STA]);
         update_ipv4_status();
+#endif
+#if TM_WIFI_MQTT
+        /* The application's TCP link (robot telemetry); it idles until an
+         * application task asks for a connection. */
+        lwip_utk_link_poll(&cyw43_state.netif[CYW43_ITF_STA]);
 #endif
         radio_status.poll_count++;
         radio_status.scan_active = cyw43_wifi_scan_active(&cyw43_state);
