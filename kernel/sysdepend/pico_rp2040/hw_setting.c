@@ -73,9 +73,12 @@ LOCAL const UW module_tbl[] = {
  * Setup pin functions Tadle
  */
 LOCAL const T_SETUP_REG pinfnc_tbl[] = {
+	/* GP16 is reserved for Buddy 5 ultrasonic TRIG. */
+#if !APP_BUDDY5
 	/* External LED */
 	{GPIO_CTRL(BOARD_LED_PIN),	GPIO_CTRL_FUNCSEL_SIO},	/* LED pin GPIO */
 	{GPIO_OE, (1<<BOARD_LED_PIN)},				/* LED pin output enable */
+#endif
 	/* P0,P1 : UART0 */
 	{GPIO_CTRL(0),	GPIO_CTRL_FUNCSEL_UART},	/* P0 UART0-TX */
 	{GPIO_CTRL(1),	GPIO_CTRL_FUNCSEL_UART},	/* P1 UART0-RX */

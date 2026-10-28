@@ -168,7 +168,11 @@
 /* Use Sample device driver.
  *  1: Valid  0: Invalid
  */
+#if APP_BUDDY5
+#define USE_SDEV_DRV (0) /* GP8/9 are motor pins, not sample I2C0. */
+#else
 #define USE_SDEV_DRV		(1)	/* Use Sample device driver */
+#endif
 
 /*---------------------------------------------------------------------- */
 /*
