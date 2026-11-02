@@ -48,6 +48,16 @@
 #include "usb_console_compat.h"
 #include "demo_tasks.h"
 
+#if TM_WIFI_MQTT && TK_SUPPORT_SMP
+/* Stage 5C5 hardware QUALIFICATION ONLY. Remove before robot integration. */
+#include "telemetry_crosscore_demo.h"
+#endif
+
+#if TM_WIFI_MQTT
+/* Narrow startup ABI: avoids the micro T-Kernel size_t header clash. */
+#include "telemetry_tkernel_port.h"
+#endif
+
 #if TM_WIFI_CYW43
 /* Plain C types on purpose - see the note in cyw43_utk.h. */
 #include "cyw43_utk.h"
@@ -171,6 +181,19 @@ LOCAL void consumer_task(INT stacd, void *exinf)
 		last_seen_on = THIS_PRC();
 		tk_set_flg(flgid, FLG_CONSUMED);
 
+#if TM_WIFI_MQTT && TK_SUPPORT_SMP
+        /* TEMPORARY cross-core test: the consumer is pinned to processor 2.
+         * This only submits encoded bytes to a non-waiting protected inbox.
+         * All network calls remain in the processor-1 CYW43 task. */
+        if (THIS_PRC() == 2) {
+            const int r = telemetry_crosscore_demo_emit((unsigned int)msg.seq);
+            if (msg.seq <= 2U || (msg.seq % 20U) == 0U || r != 0) {
+                tm_printf((UB *)"[telemetry-demo] prc=%d seq=%u submit=%d\n",
+                          THIS_PRC(), msg.seq, r);
+            }
+        }
+#endif
+
 		/* Return the credit. */
 		tk_sig_sem(semid, 1);
 	}
@@ -226,7 +249,21 @@ LOCAL void monitor_task(INT stacd, void *exinf)
 			  next_seq, produced, consumed, dropped,
 			  last_made_on, last_seen_on);
 
-		/* One line every REPORT_MS cannot overrun a 4 KB ring, but say
+		#if TM_WIFI_MQTT
+            /* Stage 5D1: best-effort, non-waiting stats snapshot.
+             * No mutex is held while printing. */
+            {
+                unsigned int queued = 0U;
+                unsigned int full = 0U;
+                unsigned int stale = 0U;
+                if (telemetry_rtos_stats_copy(&queued, &full, &stale)) {
+                    tm_printf((UB *)"[telemetry-stats] queued=%u full=%u stale=%u\n",
+                              queued, full, stale);
+                }
+            }
+#endif
+
+            /* One line every REPORT_MS cannot overrun a 4 KB ring, but say
 		   so out loud if the console ever does drop bytes. */
 		if(tm_usb_dropped_bytes() != 0) {
 			tm_printf((UB *)"[monitor] console dropped %u bytes\n",
@@ -286,6 +323,7 @@ LOCAL void wifi_status_task(INT stacd, void *exinf)
 
 	while(1) {
 		cyw43_utk_get_status(&st);
+
 
 		/* Link transitions, printed once each rather than every tick. */
 		if(st.link_up != last_link) {
@@ -504,6 +542,14 @@ LOCAL BOOL made(const char *what, ID id)
 EXPORT INT usermain(void)
 {
 	ID	tid;
+
+#if TM_WIFI_MQTT
+    /* Create queue mutex BEFORE any radio/producer task starts. */
+    if (!telemetry_rtos_boot_init()) {
+        tm_printf((UB *)"[init] telemetry inbox mutex creation failed\n");
+        return 1;
+    }
+#endif
 
 	mpfid = tk_cre_mpf(&cmpf); if(!made("mpf", mpfid)) return 1;
 	mtxid = tk_cre_mtx(&cmtx); if(!made("mtx", mtxid)) return 1;

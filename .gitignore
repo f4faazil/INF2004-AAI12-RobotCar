@@ -32,3 +32,13 @@ __pycache__/
 # Stage 4B and 4C generated test executables
 /tests/test_mqtt_stream
 /tests/test_mqtt_session
+
+# Local MQTT configuration and generated test executable
+/config/mqtt_test_config.h
+/tests/test_mqtt_lwip
+
+# Stage 5 generated test executables
+/tests/test_telemetry_crosscore_demo
+/tests/test_telemetry_hump_demo
+/tests/test_telemetry_inbox
+/tests/test_telemetry_rtos

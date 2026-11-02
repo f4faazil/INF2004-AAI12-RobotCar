@@ -1,0 +1,15 @@
+CC ?= cc
+CFLAGS = -std=c11 -O2 -Wall -Wextra -Werror -pedantic
+INCLUDES = -I../app_program
+SOURCES = test_telemetry_hump_demo.c ../app_program/telemetry_hump_demo.c \
+          ../app_program/telemetry_bits.c
+
+.PHONY: test clean
+test: test_telemetry_hump_demo
+	./test_telemetry_hump_demo
+
+test_telemetry_hump_demo: $(SOURCES)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(SOURCES)
+
+clean:
+	rm -f test_telemetry_hump_demo
