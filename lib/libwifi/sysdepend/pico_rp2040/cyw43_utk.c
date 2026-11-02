@@ -9,6 +9,9 @@
 #include "cyw43.h"
 #include "cyw43_country.h"
 #include "cyw43_utk.h"
+#if TM_WIFI_MQTT
+#include "mqtt_lwip.h"
+#endif
 
 #if TM_WIFI_NETIF
 #include "lwip/init.h"
@@ -387,6 +390,7 @@ static void update_dhcp_status(void)
 
     radio_status.dhcp_started = (dhcp != NULL);
     if(dhcp != NULL) radio_status.dhcp_tries = dhcp->tries;
+
     if(radio_status.netif_link_up && dhcp_started_us == 0) {
         dhcp_started_us = now;
     }
@@ -514,6 +518,9 @@ void cyw43_utk_task(int32_t stacd, void *exinf)
 #endif
 #if TM_WIFI_DHCP
         update_dhcp_status();
+#endif
+#if TM_WIFI_MQTT
+        mqtt_lwip_poll(&cyw43_state.netif[CYW43_ITF_STA]);
 #endif
 #if TM_WIFI_DNS
         update_dns_status();
