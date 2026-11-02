@@ -69,6 +69,29 @@ telemetry_queue_result_t telemetry_queue_pop_fresh(telemetry_queue_t *queue,
                                                    size_t out_capacity,
                                                    size_t *out_length);
 
+
+/*
+ * Non-destructive consumer read for the MQTT owner task.
+ * Drops any head records older than 1000 ms, then COPIES the first fresh
+ * payload without removing it. If MQTT has no TX room, retry later; it
+ * remains queued and can expire normally.
+ *
+ * The consumer must call commit_head ONLY after publish succeeds.
+ * Both calls need serialization once an RTOS producer is attached.
+ * Only one consumer may perform peek/commit; producers only append.
+ */
+telemetry_queue_result_t telemetry_queue_peek_fresh(telemetry_queue_t *queue,
+                                                    uint32_t now_ms,
+                                                    uint8_t *out_payload,
+                                                    size_t out_capacity,
+                                                    size_t *out_length);
+
+/* Remove the current head AFTER MQTT accepted the publish request.
+ * This is only a local enqueue success (QoS 0 has no broker ACK).
+ * Returns EMPTY when no entry remains; does not increment drop counters.
+ */
+telemetry_queue_result_t telemetry_queue_commit_head(telemetry_queue_t *queue);
+
 /* Snapshot helpers also require the RTOS wrapper's lock if shared. */
 uint8_t telemetry_queue_count(const telemetry_queue_t *queue);
 

@@ -73,6 +73,46 @@ telemetry_queue_result_t telemetry_queue_pop_fresh(telemetry_queue_t *queue,
     return TELEMETRY_QUEUE_EMPTY;
 }
 
+
+telemetry_queue_result_t telemetry_queue_peek_fresh(telemetry_queue_t *queue,
+                                                    uint32_t now_ms,
+                                                    uint8_t *out_payload,
+                                                    size_t out_capacity,
+                                                    size_t *out_length)
+{
+    const telemetry_queue_slot_t *slot;
+
+    if ((queue == NULL) || (out_payload == NULL) || (out_length == NULL) ||
+        (out_capacity < TELEMETRY_QUEUE_MAX_BYTES)) {
+        return TELEMETRY_QUEUE_INVALID;
+    }
+
+    while (queue->count != 0U) {
+        slot = &queue->slots[queue->head];
+        if ((uint32_t)(now_ms - slot->created_ms) > TELEMETRY_QUEUE_MAX_AGE_MS) {
+            queue->head = (uint8_t)((queue->head + 1U) % TELEMETRY_QUEUE_CAPACITY);
+            --queue->count;
+            increment_saturated(&queue->dropped_stale);
+            continue;
+        }
+
+        memcpy(out_payload, slot->payload, slot->length);
+        *out_length = slot->length;
+        return TELEMETRY_QUEUE_OK;
+    }
+    return TELEMETRY_QUEUE_EMPTY;
+}
+
+telemetry_queue_result_t telemetry_queue_commit_head(telemetry_queue_t *queue)
+{
+    if (queue == NULL) return TELEMETRY_QUEUE_INVALID;
+    if (queue->count == 0U) return TELEMETRY_QUEUE_EMPTY;
+
+    queue->head = (uint8_t)((queue->head + 1U) % TELEMETRY_QUEUE_CAPACITY);
+    --queue->count;
+    return TELEMETRY_QUEUE_OK;
+}
+
 uint8_t telemetry_queue_count(const telemetry_queue_t *queue)
 {
     return (queue == NULL) ? 0U : queue->count;
