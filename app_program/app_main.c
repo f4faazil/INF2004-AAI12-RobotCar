@@ -48,11 +48,6 @@
 #include "usb_console_compat.h"
 #include "demo_tasks.h"
 
-#if TM_WIFI_MQTT && TK_SUPPORT_SMP
-/* Stage 5C5 hardware QUALIFICATION ONLY. Remove before robot integration. */
-#include "telemetry_crosscore_demo.h"
-#endif
-
 #if TM_WIFI_MQTT
 /* Narrow startup ABI: avoids the micro T-Kernel size_t header clash. */
 #include "telemetry_tkernel_port.h"
@@ -180,19 +175,6 @@ LOCAL void consumer_task(INT stacd, void *exinf)
 		consumed++;
 		last_seen_on = THIS_PRC();
 		tk_set_flg(flgid, FLG_CONSUMED);
-
-#if TM_WIFI_MQTT && TK_SUPPORT_SMP
-        /* TEMPORARY cross-core test: the consumer is pinned to processor 2.
-         * This only submits encoded bytes to a non-waiting protected inbox.
-         * All network calls remain in the processor-1 CYW43 task. */
-        if (THIS_PRC() == 2) {
-            const int r = telemetry_crosscore_demo_emit((unsigned int)msg.seq);
-            if (msg.seq <= 2U || (msg.seq % 20U) == 0U || r != 0) {
-                tm_printf((UB *)"[telemetry-demo] prc=%d seq=%u submit=%d\n",
-                          THIS_PRC(), msg.seq, r);
-            }
-        }
-#endif
 
 		/* Return the credit. */
 		tk_sig_sem(semid, 1);

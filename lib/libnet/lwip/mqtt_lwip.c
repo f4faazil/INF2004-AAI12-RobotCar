@@ -26,14 +26,13 @@
 
 #include "mqtt_lwip.h"
 #include "mqtt_session.h"
-#include "telemetry_hump_demo.h"
 #include "telemetry_rtos.h"
 #include "mqtt_test_config.h"
 
 #define AAI12_MQTT_RX_CHUNK 64U
 
 static const uint8_t qualification_message[] = "AAI12_PICO_W_ONLINE";
-static const char qualification_binary_topic[] = "aai12/test/hump_bin";
+static const char robot_telemetry_topic[] = "aai12/robot/telemetry";
 
 typedef struct {
     struct tcp_pcb *pcb;
@@ -43,7 +42,6 @@ typedef struct {
     bool in_callback;
     bool aborted_in_callback;
     uint32_t published_online_session;
-    uint32_t diagnostic_enqueued_session;
     /* TCP may have accepted publication while the queue mutex is busy.
      * Complete the pending commit before trying another publish. */
     bool pending_commit;
@@ -264,27 +262,13 @@ void mqtt_lwip_poll(struct netif *netif)
         return;
     }
 
-    /* Qualification only: enqueue one simulated diagnostic frame per session.
-     * Other RTOS tasks may concurrently submit via telemetry_rtos_submit().
-     * The same non-waiting mutex protects all queue access. */
-    if (adapter.session.state == MQTT_SESSION_ONLINE &&
-        adapter.published_online_session == adapter.session.sessions_online &&
-        adapter.diagnostic_enqueued_session != adapter.session.sessions_online) {
-        uint8_t frame[AAI12_HUMP_DEMO_BYTES];
-        if (telemetry_hump_demo_encode(frame, 5U, 100U, false, false) &&
-            telemetry_rtos_submit(frame, sizeof frame, now) ==
-                TELEMETRY_INBOX_OK) {
-            adapter.diagnostic_enqueued_session = adapter.session.sessions_online;
-        }
-    }
-
     if (adapter.session.state == MQTT_SESSION_ONLINE &&
         adapter.published_online_session == adapter.session.sessions_online) {
         uint8_t frame[TELEMETRY_QUEUE_MAX_BYTES];
         size_t length = 0U;
         if (telemetry_rtos_peek(now, frame, sizeof frame, &length) ==
             TELEMETRY_INBOX_OK &&
-            mqtt_session_publish(&adapter.session, qualification_binary_topic,
+            mqtt_session_publish(&adapter.session, robot_telemetry_topic,
                                  frame, length, now)) {
             /* TCP accepted the QoS 0 packet locally, not broker-ACKed.
              * Contended commit is retried without republishing. */
