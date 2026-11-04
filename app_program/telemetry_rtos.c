@@ -1,5 +1,6 @@
 #include "telemetry_rtos.h"
 #include "telemetry_tkernel_port.h"
+#include "hardware/timer.h"
 
 /* Initialized once before starting other tasks: no concurrent init/reset. */
 static telemetry_inbox_t shared_inbox;
@@ -99,4 +100,12 @@ int telemetry_rtos_boot_init(void)
 bool telemetry_rtos_ready(void)
 {
     return inbox_ready;
+}
+
+int telemetry_robot_submit(const unsigned char *bytes,
+                           unsigned int length)
+{
+    const uint32_t now_ms = (uint32_t)(time_us_64() / 1000ULL);
+
+    return (int)telemetry_rtos_submit(bytes, (size_t)length, now_ms);
 }

@@ -8,6 +8,7 @@
 #include "telemetry_crosscore_demo.h"
 #include "telemetry_hump_demo.h"
 #include "telemetry_rtos.h"
+#include "telemetry_tkernel_port.h"
 
 static uint64_t clock_us = 123456000ULL;
 uint64_t time_us_64(void) { return clock_us; }
@@ -74,6 +75,25 @@ int main(void)
     assert(telemetry_rtos_snapshot(&stats) == TELEMETRY_INBOX_OK);
     assert(stats.queued == 0U);
     assert(stats.dropped_stale == TELEMETRY_QUEUE_CAPACITY);
+
+        /* Verify that real robot tasks can submit telemetry. */
+    {
+        const unsigned char sample[] = {0x21, 0x34, 0x56};
+
+        assert(telemetry_robot_submit(sample, sizeof sample)
+               == TELEMETRY_INBOX_OK);
+
+        assert(telemetry_rtos_peek(
+                   (uint32_t)(clock_us / 1000ULL),
+                   data, sizeof data, &len) == TELEMETRY_INBOX_OK);
+
+        assert(len == sizeof sample);
+        assert(data[0] == sample[0]);
+        assert(data[1] == sample[1]);
+        assert(data[2] == sample[2]);
+
+        assert(telemetry_rtos_commit() == TELEMETRY_INBOX_OK);
+    }
 
     puts("PASS: cross-core demo producer mock (encode, non-waiting, FIFO, full, stale)");
     return 0;

@@ -21,4 +21,12 @@ int telemetry_tkernel_mutex_try_lock(int mutex_id);
 void telemetry_tkernel_mutex_unlock(int mutex_id);
 void telemetry_tkernel_mutex_delete(int mutex_id);
 
+/*
+ * Submit real robot telemetry from RTOS task context.
+ * Non-blocking. Returns 0 if accepted, nonzero otherwise.
+ * Do not call from an interrupt.
+ */
+int telemetry_robot_submit(const unsigned char *bytes,
+                           unsigned int length);
+
 #endif /* AAI12_TELEMETRY_TKERNEL_PORT_H */
