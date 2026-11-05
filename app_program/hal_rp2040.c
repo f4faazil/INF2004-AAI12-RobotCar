@@ -23,19 +23,6 @@
 
 /* ---- registers not defined by the kernel's sysdef.h -------------------- */
 
-#define ADC_BASE_ADDR       (0x4004C000UL)
-#define ADC_CS_REG          (ADC_BASE_ADDR + 0x00UL)
-#define ADC_RESULT_REG      (ADC_BASE_ADDR + 0x04UL)
-#define ADC_FCS_REG         (ADC_BASE_ADDR + 0x08UL)
-#define ADC_DIV_REG         (ADC_BASE_ADDR + 0x10UL)
-#define ADC_INTE_REG        (ADC_BASE_ADDR + 0x18UL)
-#define ADC_CS_EN_BIT       (1UL << 0)
-#define ADC_CS_START_ONCE   (1UL << 2)
-#define ADC_CS_READY_BIT    (1UL << 8)
-#define ADC_CS_AINSEL_LSB   (12U)
-#define ADC_RESULT_MASK     (0x0FFFUL)
-#define ADC_READY_SPINS     (2000U)
-
 #define WATCHDOG_TICK_REG   (0x4005802CUL)
 #define WATCHDOG_TICK_RUN   (1UL << 9)
 #define TICK_CYCLES_1US     (12UL)          /* 12 MHz reference clock */
@@ -110,7 +97,8 @@ static hal_ir_frame_t g_ring[ROBOT_IR_RING_FRAMES];
 static volatile uint32_t g_ring_head;
 static volatile uint32_t g_ring_tail;
 static volatile uint32_t g_ring_overflows;
-static volatile uint32_t g_adc_timeouts;
+static volatile uint32_t g_ir_levels;           /* raw DO levels, last frame: bit 0 left, 1 centre, 2 right */
+static volatile uint32_t g_ir_edges[3];         /* DO edges seen since start-up: left, centre, right */
 
 static encoder_t g_enc_left;
 static encoder_t g_enc_right;
@@ -175,6 +163,14 @@ void hal_delay_us(uint32_t us)
 
 /* ---- pins and peripherals --------------------------------------------------- */
 
+/* The three DO pin levels as bits: 0 left, 1 centre, 2 right (1 = pin high). */
+static uint32_t ir_bits(UW levels)
+{
+    return (uint32_t)(((levels >> ROBOT_PIN_IR_LEFT) & 1UL) |
+                      (((levels >> ROBOT_PIN_IR_CENTRE) & 1UL) << 1) |
+                      (((levels >> ROBOT_PIN_IR_RIGHT) & 1UL) << 2));
+}
+
 static void release_reset(UW mask)
 {
     clr_w(RESETS_RESET, mask);
@@ -201,12 +197,6 @@ static void pin_input(uint32_t pin, bool pull_up)
     out_w(GPIO(pin), GPIO_IE | GPIO_SHEMITT | (pull_up ? GPIO_PUE : 0UL));
     out_w(GPIO_CTRL(pin), GPIO_CTRL_FUNCSEL_SIO);
     out_w(GPIO_OE_CLR, 1UL << pin);
-}
-
-static void pin_adc(uint32_t pin)
-{
-    out_w(GPIO_CTRL(pin), GPIO_CTRL_FUNCSEL_NULL);
-    out_w(GPIO(pin), GPIO_DRIVE_4MA | GPIO_SHEMITT);     /* input buffer off, no pulls */
 }
 
 static void pwm_slice_init(uint32_t slice, UW top, UW div)
@@ -260,7 +250,7 @@ void hal_init(void)
     /* Blocks the kernel's board setup leaves in reset (it only releases what
      * its own sample drivers need). */
     release_reset(RESETS_RESET_PWM | RESETS_RESET_I2C1 | RESETS_RESET_TIMER |
-                  RESETS_RESET_IO_BANK0 | RESETS_RESET_PADS_BANK0 | RESETS_RESET_ADC);
+                  RESETS_RESET_IO_BANK0 | RESETS_RESET_PADS_BANK0);
     out_w(WATCHDOG_TICK_REG, TICK_CYCLES_1US | WATCHDOG_TICK_RUN);  /* TIMER counts in us */
 
     /* motors */
@@ -280,17 +270,11 @@ void hal_init(void)
     pin_output_low(ROBOT_PIN_TRIG);
     pin_input(ROBOT_PIN_ECHO, false);
 
-    /* IR: ADC inputs, converter on, FIFO and interrupts off (this layer polls) */
-    pin_adc(26U);
-    pin_adc(27U);
-    pin_adc(28U);
-    out_w(ADC_CS_REG, ADC_CS_EN_BIT);
-    while ((in_w(ADC_CS_REG) & ADC_CS_READY_BIT) == 0UL) {
-        /* wait for the converter to power up */
-    }
-    out_w(ADC_FCS_REG, 0);
-    out_w(ADC_INTE_REG, 0);
-    out_w(ADC_DIV_REG, 0);
+    /* IR: digital DO inputs, no pulls, no interrupts (the 1 kHz tick polls them) */
+    pin_input(ROBOT_PIN_IR_LEFT, false);
+    pin_input(ROBOT_PIN_IR_CENTRE, false);
+    pin_input(ROBOT_PIN_IR_RIGHT, false);
+    g_ir_levels = ir_bits(in_w(GPIO_IN));       /* so the first frame is not counted as an edge */
 
     /* buttons */
     pin_input(ROBOT_PIN_BTN_START, true);
@@ -300,9 +284,11 @@ void hal_init(void)
     encoder_init(&g_enc_left, ROBOT_ENC_L_INVERT != 0);
     encoder_init(&g_enc_right, ROBOT_ENC_R_INVERT != 0);
     pin_input(ROBOT_PIN_ENC_L_A, true);
-    pin_input(ROBOT_PIN_ENC_L_B, true);
     pin_input(ROBOT_PIN_ENC_R_A, true);
+#if !ROBOT_ENCODER_SINGLE_CHANNEL
+    pin_input(ROBOT_PIN_ENC_L_B, true);
     pin_input(ROBOT_PIN_ENC_R_B, true);
+#endif
 
     i2c_init();
 }
@@ -343,18 +329,13 @@ void hal_servo_set_pulse_us(uint16_t us)
 
 /* ---- the 1 kHz tick: IR sampling and task release ---------------------------- */
 
-static uint16_t adc_read(uint32_t channel)
+/* One IR pin level as a frame value: BLACK counts over black, WHITE otherwise. */
+static uint16_t ir_counts(UW levels, uint32_t pin)
 {
-    uint32_t spins = ADC_READY_SPINS;
+    const bool high = ((levels >> pin) & 1UL) != 0UL;
+    const bool dark = (high == (ROBOT_IR_DARK_LEVEL != 0U));
 
-    out_w(ADC_CS_REG, ADC_CS_EN_BIT | ((UW)channel << ADC_CS_AINSEL_LSB) | ADC_CS_START_ONCE);
-    while (((in_w(ADC_CS_REG) & ADC_CS_READY_BIT) == 0UL) && (spins > 0U)) {
-        spins--;
-    }
-    if (spins == 0U) {
-        g_adc_timeouts++;
-    }
-    return (uint16_t)(in_w(ADC_RESULT_REG) & ADC_RESULT_MASK);
+    return dark ? (uint16_t)ROBOT_IR_COUNTS_BLACK : (uint16_t)ROBOT_IR_COUNTS_WHITE;
 }
 
 static void release_task(uint32_t bit, uint32_t index)
@@ -385,19 +366,27 @@ static void tick_isr(UINT intno)
     ms = g_tick_ms;
 
     {
+        const UW levels = in_w(GPIO_IN);            /* one read: all three sensors at the same instant */
+        const uint32_t bits = ir_bits(levels);
+        const uint32_t changed = bits ^ g_ir_levels;
         uint32_t head = g_ring_head;
+        uint32_t ch;
+
+        for (ch = 0U; ch < 3U; ch++) {
+            if (((changed >> ch) & 1U) != 0U) {
+                g_ir_edges[ch]++;
+            }
+        }
+        g_ir_levels = bits;
 
         if ((head - g_ring_tail) >= ROBOT_IR_RING_FRAMES) {
             g_ring_overflows++;             /* ring full: drop this frame, the consumer is told */
         } else {
             hal_ir_frame_t *slot = &g_ring[head % ROBOT_IR_RING_FRAMES];
 
-            (void)adc_read(ROBOT_ADC_CH_LEFT);      /* first read after a mux change settles */
-            slot->adc[0] = adc_read(ROBOT_ADC_CH_LEFT);
-            (void)adc_read(ROBOT_ADC_CH_CENTRE);
-            slot->adc[1] = adc_read(ROBOT_ADC_CH_CENTRE);
-            (void)adc_read(ROBOT_ADC_CH_RIGHT);
-            slot->adc[2] = adc_read(ROBOT_ADC_CH_RIGHT);
+            slot->adc[0] = ir_counts(levels, ROBOT_PIN_IR_LEFT);
+            slot->adc[1] = ir_counts(levels, ROBOT_PIN_IR_CENTRE);
+            slot->adc[2] = ir_counts(levels, ROBOT_PIN_IR_RIGHT);
             slot->ms = ms;
             Asm("dmb" ::: "memory");
             g_ring_head = head + 1U;
@@ -475,6 +464,20 @@ uint32_t hal_ir_overflows(void)
     return g_ring_overflows;
 }
 
+uint32_t hal_ir_levels(void)
+{
+    return g_ir_levels;
+}
+
+void hal_ir_edges(uint32_t edges[3])
+{
+    uint32_t ch;
+
+    for (ch = 0U; ch < 3U; ch++) {
+        edges[ch] = g_ir_edges[ch];
+    }
+}
+
 uint32_t hal_adc_max_isr_us(void)
 {
     return g_isr_max_us;
@@ -531,9 +534,11 @@ static void gpio_isr(UINT intno)
     }
 
     edge_clear(ROBOT_PIN_ENC_L_A);
-    edge_clear(ROBOT_PIN_ENC_L_B);
     edge_clear(ROBOT_PIN_ENC_R_A);
+#if !ROBOT_ENCODER_SINGLE_CHANNEL
+    edge_clear(ROBOT_PIN_ENC_L_B);
     edge_clear(ROBOT_PIN_ENC_R_B);
+#endif
     edge_clear(ROBOT_PIN_ECHO);
     ClearInt(intno);
 }

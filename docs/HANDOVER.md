@@ -21,7 +21,7 @@ Do this **before any tuning**, because every line-following, barcode and junctio
 
 **What to do, in this order:**
 
-1. ☐ **Measure where each IR sensor actually sits**, in millimetres from the car's centreline (right positive), and note which GPIO each is on (right GP26, centre GP27, left GP28).
+1. ☐ **Measure where each IR sensor actually sits**, in millimetres from the car's centreline (right positive), and note which GPIO each is on (digital DO outputs, AO unconnected: left GP6, centre GP17, right GP3).
 2. ☐ **Enter the three numbers** in `ROBOT_SENSOR_MM_LEFT / _CENTRE / _RIGHT` in `app_program/robot_config.h` (currently -6 / +6 / +39, a *proposal*, not the car's geometry). The roles are derived from them: a sensor within 25 mm of the centreline tracks the line, a sensor farther out reads barcodes and junction branches. Set `ROBOT_TRACK_REF_MM` to the distance from the centreline of the outermost *tracking* sensor (6 for the proposed pair at ±6 mm, 12 for a tight symmetric bar at ±12 mm); it scales the steering gain.
 3. ☐ **Compare with the table.**
    - *Matches the last row:* carry on with the hardware checklist (§4).
@@ -82,10 +82,10 @@ New files outside `app_program/`: `lib/libnet/lwip/lwip_utk_link.[ch]`, `config/
 | # | Decision | My default | Owner (suggested) |
 |---|---|---|---|
 | D1 | **IR sensor layout.** The simulation shows a symmetric 3-sensor bar cannot track the 18 mm line *and* read a barcode 29-49 mm away. Default assumes a close pair (±6 mm) tracking plus one far sensor (39 mm) reading barcodes and junction branches. Is the real bar that, and where exactly is each sensor? | `ROBOT_SENSOR_MM_*` = -6 / +6 / +39 | Hadi + Fazil (physical mounting) |
-| D2 | **Barcode letter → command map.** The course gives no mapping; the write-up's example (A left, B right, C straight, D U-turn) is a placeholder. Also: which printed scale and which side of the line are on the track? | `ROBOT_BARCODE_MAP` in `robot_config.c` | Hadi, lecturer |
+| D2 | **Barcode letter → command map.** Team decision: A left, F right, Z U-turn, executed only at a junction. Still open: which printed scale and which side of the line are on the track? | `ROBOT_BARCODE_MAP` in `robot_config.c` | Hadi, lecturer |
 | D3 | **Remote STOP over MQTT.** Tribunal Assumption A1 says an emergency stop during the autonomous mission needs team and lecturer agreement. | allowed (`ROBOT_ALLOW_REMOTE_STOP` 1) | Aamir + team |
 | D4 | **Who owns the Vehicle Controller and the Safety Monitor.** The Tribunal left both owners "TBD"; I wrote both (`vehicle.c`, `safety.c`). They need a named owner who understands the state machine. | - | team |
-| D5 | **Final pin map, recorded in the repo** (Tribunal risk R3). Left encoder GP6/GP7 vs GP0/GP1 depends on the console choice; TRIG shares GP16 with the template LED. | encoder L: GP6/GP7 on UART console | Fazil, Danish, Suhail |
+| D5 | **Final pin map, recorded in the repo** (Tribunal risk R3). Settled by the wiring diagram and now in `robot_config.h`: IR GP6/GP17/GP3 (DO), encoders GP28 (left) and GP1 (right), IMU GP26/GP27, TRIG GP4, ECHO GP5, encoders quadrature (left GP7/GP28, right GP0/GP1), motors M1 left GP8/GP9, M2 right GP10/GP11 (Buddy 2's note). | needs the USB console | Fazil, Danish, Suhail |
 | D6 | **What happens at a junction with no instruction.** Default: cross it straight without turning. A T-junction has no straight way on, so the car would then search for the line and fault. | cross straight | Hadi + Fazil |
 | D7 | **Servo mounting direction** (`left_is_high_angle`) and horn trim; the earlier bench test found the horn not aligned. | true, trim 0 | Danish |
 
@@ -97,8 +97,8 @@ Each step names the setting it determines and the pass criterion. Log the eviden
 
 | ☐ | Step | Determines | Pass criterion |
 |---|---|---|---|
-| ☐ | **1. Flash and watch the status line** (1 line/s). | kernel + tick + IR ring work together | `ir=` rises ~1000/s; `ovr=0/0`; tick ISR (`us(...)` last figure) well under 100 µs |
-| ☐ | **2. IR raw readings** at mounting height, white and black, all three channels; measure sensor lateral positions; confirm GP28 solder jumper open. | `ROBOT_SENSOR_MM_*` (D1) | contrast > 800 counts per used channel; the earlier left sensor read 4000+ on white - fix or exclude it |
+| ☐ | **1. Flash and watch the status line** (1 line/s). | kernel + tick + IR ring work together | `ir=` rises ~1000/s; `do=` shows the raw IR DO levels (left, centre, right) and `edges=` counts their transitions; `ovr=0/0`; tick ISR (`us(...)` last figure) well under 100 µs |
+| ☐ | **2. IR DO levels** at mounting height over white floor, the 18 mm line and a barcode, all three sensors; measure sensor lateral positions; check the DO high level is ≤ 3.3 V (a 5 V module needs a divider); set each module's trimmer so DO flips cleanly; confirm the polarity. | `ROBOT_SENSOR_MM_*` (D1), `ROBOT_IR_DARK_LEVEL` (all three IR sensors have fixed white/black readings and are trusted from boot: `vm=7`; set `ROBOT_IR_FIXED_MASK` to 0 to learn them from the sweep instead) | every sensor flips between floor and line; over a barcode the right sensor's DO toggles once per bar, all 29 elements, including the 3 mm ones |
 | ☐ | **3. Motors**, wheels raised, low duty. | `ROBOT_MOTOR_*_INVERT` | forward command spins both wheels forward |
 | ☐ | **4. Encoders:** signal level (3.3 V safe?), quadrature or single channel, counts per wheel revolution, wheel diameter, track width. | `counts_per_rev`, `wheel_diameter_mm`, `track_width_mm`, `ROBOT_ENCODER_SINGLE_CHANNEL` | rolling 1 m reads 1000 ±50 mm; direction sign correct; `illegal` count stays ~0 |
 | ☐ | **5. Speed step response** for the PID. | `kp/ki/kd`, `ff_num/ff_den` | settles within ~0.5 s without oscillation at 100-200 mm/s |
@@ -123,7 +123,7 @@ Each step names the setting it determines and the pass criterion. Log the eviden
 - ☐ **IRQ numbers and levels:** TIMER_IRQ_0 = 0, IO_IRQ_BANK0 = 13, handler levels 1 and 2 (the kernel needs level ≥ 1 to allow service calls from the ISR).
 - ☐ **IO_BANK0 offsets:** INTR0 0x0F0, PROC0_INTE0 0x100, PROC0_INTS0 0x120; 4 bits per pin, edge bits are write-1-to-clear. The encoder/ECHO interrupt depends on all of it.
 - ☐ **Encoder ISR** reads both pins once per interrupt. If both channels toggle between two interrupts it records an *illegal* transition. Check the illegal count at maximum wheel speed.
-- ☐ **ADC sampling:** each channel is read twice (the first read after a mux change is discarded) at ~2 µs per conversion; confirm there is no cross-talk between channels, and that the frame order maps GP28 → left, GP27 → centre, GP26 → right.
+- ☐ **IR sampling:** the tick reads `GPIO_IN` once and maps each DO level to a white or black count; confirm the frame order maps GP6 → left, GP17 → centre, GP3 → right, and that no other peripheral (ECHO interrupt, I2C) is still configured on those pins.
 - ☐ **PWM:** 20 kHz motor frequency (TOP 6249 at 125 MHz), compare register A in the low half and B in the high half, servo 50 Hz with a 1 MHz count.
 - ☐ **I2C1:** the init follows the SDK's formula; re-targeting the address disables and re-enables the controller; every wait is bounded. Check it recovers from an unplugged sensor.
 - ☐ **Pads and muxing:** the template mux GP8/GP9 to I2C0 at boot (`USE_SDEV_DRV`); the robot re-muxes them to PWM. The template's sample ADC/I2C drivers **must stay closed**.
@@ -151,7 +151,7 @@ Each step names the setting it determines and the pass criterion. Log the eviden
 - The stale-object guard in the makefile discards objects when the profile changes; if a link error mentions a symbol from a profile you are not building, `make clean`.
 - `build_make/` may contain old `*.uf2` files from earlier profiles; flash the one named for the profile you just built (`mtk3pico_smp0_uart.uf2` for the default).
 - `tests/host/mutation_check.py` works on temporary copies and never modifies the source tree; a mutant that "does not compile" proves nothing about the tests - fix the mutant.
-- GP0/GP1 conflict with the UART console; do not wire an encoder there on a UART-console build.
+- GP0/GP1 (right encoder) are the UART0 pins: build with `CONSOLE=usb_cdc`. GP28 (left encoder B) is the VBAT-sense pin: keep its jumper open.
 - A `PLACEHOLDER` in `robot_config.c` is a starting value, not a result. Do not quote it in the Tribunal or the report as measured.
 
 ---

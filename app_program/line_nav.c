@@ -48,6 +48,26 @@ static void lanes_reset(line_nav_t *nav)
     }
 }
 
+/* Channels with fixed readings are trusted without a sweep: returns 'mask' with their bits set. */
+static uint8_t seed_fixed_channels(line_nav_t *nav, uint8_t mask)
+{
+    uint8_t ch;
+
+    if (nav->cfg.fixed_black <= nav->cfg.fixed_white) {
+        return mask;
+    }
+    for (ch = 0U; ch < LINE_CHANNEL_COUNT; ch++) {
+        const uint8_t bit = (uint8_t)(1U << ch);
+
+        if ((nav->cfg.fixed_mask & bit) != 0U) {
+            nav->cal.min[ch] = nav->cfg.fixed_white;
+            nav->cal.max[ch] = nav->cfg.fixed_black;
+            mask = (uint8_t)(mask | bit);
+        }
+    }
+    return mask;
+}
+
 void line_nav_init(line_nav_t *nav, const line_nav_config_t *cfg)
 {
     uint8_t i;
@@ -58,6 +78,7 @@ void line_nav_init(line_nav_t *nav, const line_nav_config_t *cfg)
     nav->valid_mask = 0U;
     for (i = 0U; i < LINE_CHANNEL_COUNT; i++) {
         nav->blackness[i] = 0U;
+        nav->smooth[i] = 0U;
         nav->sum[i] = 0U;
     }
     nav->sum_n = 0U;
@@ -93,6 +114,7 @@ void line_nav_init(line_nav_t *nav, const line_nav_config_t *cfg)
     nav->overwritten_count = 0U;
     nav->expired_count = 0U;
     nav->overflow_count = 0U;
+    nav->valid_mask = seed_fixed_channels(nav, nav->valid_mask);
 }
 
 /* ---- calibration ---------------------------------------------------- */
@@ -109,6 +131,7 @@ bool line_nav_calibrate_end(line_nav_t *nav)
     uint8_t mask = line_cal_valid_mask(&nav->cal);
 
     nav->calibrating = false;
+    mask = seed_fixed_channels(nav, mask);
     if ((mask & nav->cfg.track_mask) == 0U) {
         nav->valid_mask = 0U;               /* nothing usable to follow a line with */
         return false;
@@ -243,6 +266,14 @@ static void take_means(line_nav_t *nav)
     }
     for (ch = 0U; ch < LINE_CHANNEL_COUNT; ch++) {
         nav->blackness[ch] = (uint16_t)(nav->sum[ch] / nav->sum_n);
+        if (nav->cfg.smooth_shift == 0U) {
+            nav->smooth[ch] = nav->blackness[ch];
+        } else {
+            const int32_t delta = (int32_t)nav->blackness[ch] - (int32_t)nav->smooth[ch];
+
+            nav->smooth[ch] = (uint16_t)((int32_t)nav->smooth[ch] +
+                                         (delta / (int32_t)(1U << nav->cfg.smooth_shift)));
+        }
         nav->sum[ch] = 0U;
     }
     nav->sum_n = 0U;
@@ -350,6 +381,19 @@ void line_nav_step(line_nav_t *nav, uint32_t now_ms, int16_t speed_mm_s,
     mask = (uint8_t)(nav->valid_mask & nav->cfg.track_mask & (uint8_t)(~excluded));
     out->position_valid = line_position_weighted(nav->blackness, mask,
                                                  nav->cfg.channel_pos_permille, &out->position);
+    if (!out->position_valid) {
+        for (i = 0U; i < LINE_CHANNEL_COUNT; i++) {
+            nav->smooth[i] = nav->blackness[i];     /* no line: forget the filter */
+        }
+    } else if (nav->cfg.smooth_shift != 0U) {
+        int16_t smoothed;
+
+        if (line_position_weighted(nav->smooth, mask, nav->cfg.channel_pos_permille, &smoothed)) {
+            out->position = smoothed;
+        }
+    } else {
+        /* unfiltered */
+    }
 
     /* ---- lost / found, with bounded hump masking ---- */
     visible = out->position_valid;

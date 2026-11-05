@@ -3,7 +3,7 @@
 The application for the Pico W + Robo Pico car, on top of the µT-Kernel 3.0 RP2040 port in this repository. It covers all five buddies' subsystems, the Vehicle Controller and the Safety Monitor.
 
 > [!IMPORTANT]
-> **Nothing here has run on the car yet.** The logic is unit-tested on a PC and the firmware builds clean, but every hardware-touching path (PWM, ADC, I2C, GPIO interrupts, the Wi-Fi link) and every tuning value is unverified until it is bench-tested. Section 7 lists exactly what to measure and in what order. Treat any number in this document marked *simulation* as evidence about the code, not about the car.
+> **Nothing here has run on the car yet.** The logic is unit-tested on a PC and the firmware builds clean, but every hardware-touching path (PWM, IR sampling, I2C, GPIO interrupts, the Wi-Fi link) and every tuning value is unverified until it is bench-tested. Section 7 lists exactly what to measure and in what order. Treat any number in this document marked *simulation* as evidence about the code, not about the car.
 
 ---
 
@@ -25,7 +25,7 @@ The code follows the Barr C standard as far as the µT-Kernel glue allows (4-spa
 ## 2. Architecture
 
 ```
- IR x3 ──ADC──┐                                         ┌── telemetry queue (16 x 128 B, drop-new)
+ IR x3 ──DO───┐                                         ┌── telemetry queue (16 x 128 B, drop-new)
               ▼                                         │            │
    1 kHz tick ISR ──ring(256)──▶ LINE task ──snapshot──▶ VEHICLE ──▶ NET task ──MQTT──▶ laptop
    (TIMER alarm0)               calibrate, barcode,       task        (lowest priority)
@@ -69,18 +69,18 @@ Robo Pico GPIO numbers (Tribunal Version B/C map):
 
 | Function | Pins | Notes |
 |---|---|---|
-| Motors | GP8/GP9 (M1, right), GP10/GP11 (M2, left) | PWM slices 4 and 5, 20 kHz. A = forward, B = backward. Swap with `ROBOT_MOTOR_*_INVERT`. |
+| Motors | GP8/GP9 (M1, left), GP10/GP11 (M2, right) | PWM slices 4 and 5, 20 kHz. A = forward, B = backward. Swap with `ROBOT_MOTOR_*_INVERT`. |
 | Scan servo | GP12 | PWM slice 6, 50 Hz, parked at 90°. Trim/invert in `ROBOT_OBSTACLE_CFG.servo`. |
-| Ultrasonic | TRIG GP16, ECHO GP17 | ECHO is 5 V: needs the 1 kΩ + 2 kΩ divider. Timed by interrupt capture, not busy-waiting. |
-| IR sensors | right GP26 (ADC0), centre GP27 (ADC1), left GP28 (ADC2) | GP28 is also the VBAT-sense pin: the back-of-board jumper must be **open**. |
-| IMU | SDA GP2, SCL GP3 (I2C1) | LSM303D at 0x1D, or LSM303DLHC accelerometer at 0x19; probed at start-up. |
-| Encoders | right GP4/GP5; left GP6/GP7 (UART console) or GP0/GP1 (USB console) | See conflict 1 below. |
+| Ultrasonic | TRIG GP4, ECHO GP5 | ECHO is 5 V: needs the 1 kΩ + 2 kΩ divider. Timed by interrupt capture, not busy-waiting. |
+| IR sensors | digital DO (AO unconnected): left GP6, centre GP17, right GP3 | Read as plain HIGH/LOW; `ROBOT_IR_DARK_LEVEL` is the level over black. The DO high level must not exceed 3.3 V. |
+| IMU | SDA GP26, SCL GP27 (I2C1) | LSM303D at 0x1D, or LSM303DLHC accelerometer at 0x19; probed at start-up. |
+| Encoders | left A GP7 / B GP28, right A GP0 / B GP1 (quadrature) | Left counts negative going forward, flipped by `ROBOT_ENC_L_INVERT`. See conflicts 1 and 2 below. |
 | Buttons | START GP20, STOP GP21 | Active low, 30 ms debounce. |
 
 **Template pin conflicts (Tribunal risk R3) and how they are handled:**
 
-1. **GP0/GP1 are the UART console** in the default build. The Tribunal's left encoder there would corrupt the console, so the default left encoder moves to GP6/GP7 unless the build uses the USB console (`TM_CONSOLE_USB_CDC`). If the encoder is already wired to GP0/GP1, build with the USB console or override `ROBOT_PIN_ENC_L_A/B`. The kernel's UART mirror stays on GP0/GP1 in the USB build.
-2. **GP16 is the template's LED pin** (`BOARD_LED_PIN`), which the kernel sets as an output at boot. The robot does not blink it; it becomes TRIG.
+1. **GP0/GP1 are the UART0 pins** and now carry the right encoder, so the robot needs the **USB console** (`make CONSOLE=usb_cdc PICO_SDK_PATH=...`). With the default UART console the kernel owns GP0/GP1 and the console would be dead after `hal_init()` takes the pins.
+2. **GP28 is also the VBAT-sense pin** (left encoder B): the back-of-board jumper must be **open**.
 3. **GP8/GP9 are muxed to I2C0 by the template's sample drivers** (`USE_SDEV_DRV`). The robot re-muxes them to PWM in `hal_init()`; the sample ADC/I2C drivers must stay closed because the HAL drives those blocks directly.
 
 ---
@@ -93,13 +93,13 @@ make -j8                      # single-core, UART console: the default
 # -> mtk3pico_smp0_uart.uf2    hold BOOTSEL on the Pico W, copy the .uf2 to the drive
 ```
 
-Console: UART0, GP0 TX / GP1 RX, 115200 8N1. One status line per second (the values below are only an illustration of the format):
+Console: USB CDC (build with `CONSOLE=usb_cdc`), because UART0's GP0/GP1 are the right encoder; 115200 8N1. One status line per second (the values below are only an illustration of the format):
 
 ```
-[robot] st=3 f=0000 pos=2 v=150/149 d=412mm enc=1940/1931 bad=0/0 ir=8123 ovf=0 drop=0 net=0 us(m/l/v/isr)=410/880/260/38 ovr=0/0
+[robot] st=3 f=0000 pos=2 v=150/149 d=412mm enc=1940/1931 bad=0/0 ir=8123 do=110 edges=12/0/30 vm=7 bc=A ovf=0 drop=0 net=0 us(m/l/v/isr)=410/880/260/38 ovr=0/0
 ```
 
-(`st` = vehicle state, `f` = fault mask, `enc` = raw encoder counts and `bad` = illegal (missed-edge) transitions per wheel, `us(...)` = worst-case microseconds of the Motion, Line and Vehicle tasks and the tick interrupt, `ovr` = ticks that arrived before the previous one was handled. This is the loop-timing evidence the Tribunal asks for.)
+(`st` = vehicle state, `f` = fault mask, `enc` = raw encoder counts and `bad` = illegal (missed-edge) transitions per wheel, `us(...)` = worst-case microseconds of the Motion, Line and Vehicle tasks and the tick interrupt, `do` = raw IR DO levels (left, centre, right; 1 = pin high), `edges` = DO transitions per sensor, `vm` = sensors calibration trusts (bit 0 left, 1 centre, 2 right; 0 before the first calibration), `bc` = stored barcode letter or `-`, `ovr` = ticks that arrived before the previous one was handled. This is the loop-timing evidence the Tribunal asks for.)
 
 To go back to the lecturer's original demo, set `ROBOT_FIRMWARE` to 0 in `app_program/robot_config.h`.
 
@@ -139,7 +139,7 @@ make sim                                                    # barcode decode-rat
 
 ### Barcode instructions (Line → Vehicle)
 
-A decoded Code 39 letter is mapped to a command by `ROBOT_BARCODE_MAP` and **stored**; it is executed once at the next junction (advance to put the wheels over it, turn, reacquire the line). It expires after 20 s, a newer barcode replaces it, and an ADC-ring overflow voids a barcode in progress. A letter not in the table is rejected and reported, never guessed.
+A decoded Code 39 letter is mapped to a command by `ROBOT_BARCODE_MAP` and **stored**; it is executed once at the next junction (advance to put the wheels over it, turn, reacquire the line). It expires after 20 s, a newer barcode replaces it, and an IR-ring overflow voids a barcode in progress. A letter not in the table is rejected and reported, never guessed.
 
 ### Telemetry: the data representation table (minimum-bit change)
 
@@ -194,7 +194,7 @@ So a sensor pair must be spaced closer than the line is wide (about 16 mm), and 
 
 **5. Obstacle-to-stop timing.** With a 70 ms HC-SR04 period the normal path (median of 3, two confirming readings) can take 140-210 ms. A single valid reading closer than half the stop distance now declares the obstacle at once (worst case roughly 70 + 10 + 5 ms plus braking), but **no end-to-end time has been measured**.
 
-**6. The letter-to-command mapping is not specified by the course.** The write-up example (A left, B right, C straight, D U-turn) is the placeholder in `ROBOT_BARCODE_MAP`.
+**6. The letter-to-command mapping is not specified by the course.** The team chose A = left, F = right, Z = U-turn in `ROBOT_BARCODE_MAP`; a turn runs only at a junction, and a junction with no stored instruction goes straight. Confirm with the lecturer.
 
 ---
 
@@ -205,7 +205,7 @@ Everything in `robot_config.c` marked `PLACEHOLDER`, in the order that unblocks 
 | # | Measure / verify | Why it matters |
 |---|---|---|
 | 1 | **Flash and read the status line.** `ir=` should count up at ~1000/s and `ovr=0/0`; the tick interrupt (the last `us(...)` figure) should stay well under 100 µs. These are expectations, not measurements. | proves the kernel, the 1 kHz tick and the IR ring work together |
-| 2 | **IR raw readings** at mounting height on white and black, and the sensor lateral positions. GP28 jumper open. | sets `ROBOT_SENSOR_MM_*`; the left sensor read 4000+ on white during the earlier bench test |
+| 2 | **IR DO levels** at mounting height over white floor, the line and a barcode (all 29 elements must toggle the right sensor's DO), the DO high level (≤ 3.3 V), the trimmer settings, and the sensor lateral positions. | sets `ROBOT_SENSOR_MM_*` and `ROBOT_IR_DARK_LEVEL` |
 | 3 | **Motors**: run `hal_motor_set` at low duty with wheels raised; fix direction with `ROBOT_MOTOR_*_INVERT`. | the Motion task is the only thing that may do this later |
 | 4 | **Encoders**: signal levels (3.3 V safe?), counts per wheel revolution, wheel diameter, track width. | `counts_per_rev`, `wheel_diameter_mm`, `track_width_mm`; all distances and turns scale with them |
 | 5 | **Speed-step response** for the PID gains and the feed-forward `ff_num/ff_den`. | the placeholder gains are only a start |
