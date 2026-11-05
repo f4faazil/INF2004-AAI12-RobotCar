@@ -24,7 +24,8 @@
 #define WHITE           (150.0)
 #define BLACK           (4000.0)
 #define LINE_HALF_MM    (9.0)
-#define SPOT_MM         (2.1)
+#define SPOT_DEFAULT_MM (2.1)
+#define DIGITAL_THRESHOLD (0.5)     /* a DO comparator: black above half coverage */
 #define TRACK_MM        (150.0)
 #define SENSOR_AHEAD_MM (70.0)
 #define STRIP_NEAR_MM   (29.0)      /* barcode near edge, from the line centre */
@@ -33,6 +34,9 @@
 #define CURVE_SPEED     (90.0)
 
 static const nav_map_entry_t MAP[] = { { 'A', NAV_CMD_LEFT } };
+
+static double g_spot_mm = SPOT_DEFAULT_MM;      /* sensor footprint along and across the line */
+static bool   g_digital;                        /* frames hold only white or black (DO wiring) */
 
 static uint32_t g_rng = 99U;
 
@@ -104,18 +108,18 @@ static double overlap(double a0, double a1, double b0, double b1)
 static double coverage(double x, double y, const strip_t *strip)
 {
     double lx = line_x(y);
-    double cov = overlap(x - (SPOT_MM / 2.0), x + (SPOT_MM / 2.0),
-                         lx - LINE_HALF_MM, lx + LINE_HALF_MM) / SPOT_MM;
+    double cov = overlap(x - (g_spot_mm / 2.0), x + (g_spot_mm / 2.0),
+                         lx - LINE_HALF_MM, lx + LINE_HALF_MM) / g_spot_mm;
 
     if (strip->enabled && (x > (lx + STRIP_NEAR_MM - 1.0)) &&
         (x < (lx + STRIP_NEAR_MM + STRIP_WIDTH_MM + 1.0))) {
         size_t i;
 
         for (i = 0U; i < BARCODE_ELEMENT_COUNT; i += 2U) {
-            cov += overlap(y - (SPOT_MM / 2.0), y + (SPOT_MM / 2.0), strip->edge[i],
-                           strip->edge[i + 1U]) / SPOT_MM *
-                   overlap(x - (SPOT_MM / 2.0), x + (SPOT_MM / 2.0), lx + STRIP_NEAR_MM,
-                           lx + STRIP_NEAR_MM + STRIP_WIDTH_MM) / SPOT_MM;
+            cov += overlap(y - (g_spot_mm / 2.0), y + (g_spot_mm / 2.0), strip->edge[i],
+                           strip->edge[i + 1U]) / g_spot_mm *
+                   overlap(x - (g_spot_mm / 2.0), x + (g_spot_mm / 2.0), lx + STRIP_NEAR_MM,
+                           lx + STRIP_NEAR_MM + STRIP_WIDTH_MM) / g_spot_mm;
         }
     }
     return (cov > 1.0) ? 1.0 : cov;
@@ -139,6 +143,7 @@ typedef struct {
     char   letter;
     double end_y;
     bool   finished;
+    double steer_jerk;          /* mean step-to-step change of the steering command, mm/s */
 } result_t;
 
 /* A sensor layout: where the three sensors sit, and which do what. */
@@ -150,23 +155,24 @@ typedef struct {
     uint8_t junction_mask;
     int kp;
     int td;
+    int smooth;                 /* line_nav smooth_shift */
 } layout_t;
 
 static layout_t layout_a(void)      /* three close sensors; cannot reach a barcode */
 {
-    layout_t l = { { -12.0, 0.0, 12.0 }, 12.0, 0x07U, 0x00U, 0x00U, 160, 120 };
+    layout_t l = { { -12.0, 0.0, 12.0 }, 12.0, 0x07U, 0x00U, 0x00U, 160, 120, 0 };
     return l;
 }
 
 static layout_t layout_b(void)      /* symmetric and wide: reads a barcode, cannot track */
 {
-    layout_t l = { { -39.0, 0.0, 39.0 }, 39.0, 0x07U, 0x05U, 0x05U, 160, 120 };
+    layout_t l = { { -39.0, 0.0, 39.0 }, 39.0, 0x07U, 0x05U, 0x05U, 160, 120, 0 };
     return l;
 }
 
 static layout_t layout_c(void)      /* close pair tracks, far sensor reads the barcode */
 {
-    layout_t l = { { -6.0, 6.0, 39.0 }, 6.0, 0x03U, 0x04U, 0x04U, 80, 120 };
+    layout_t l = { { -6.0, 6.0, 39.0 }, 6.0, 0x03U, 0x04U, 0x04U, 80, 120, 0 };
     return l;
 }
 
@@ -195,6 +201,10 @@ static line_nav_config_t make_cfg(const layout_t *lay)
     c.track_mask = lay->track_mask;
     c.lane_mask = lay->lane_mask;
     c.junction_mask = lay->junction_mask;
+    c.fixed_white = 0U;
+    c.fixed_black = 0U;
+    c.fixed_mask = 0U;
+    c.smooth_shift = (uint8_t)lay->smooth;
     return c;
 }
 
@@ -208,8 +218,9 @@ static void sensors(const car_t *car, const layout_t *lay, const strip_t *strip,
 
     for (ch = 0; ch < 3; ch++) {
         double off = lay->off_mm[ch];
-        double v = WHITE + ((BLACK - WHITE) * coverage(cx + (off * rx), cy + (off * ry), strip)) +
-                   (rnd() * 30.0);
+        double cov = coverage(cx + (off * rx), cy + (off * ry), strip);
+        double v = g_digital ? ((cov >= DIGITAL_THRESHOLD) ? BLACK : WHITE)
+                             : (WHITE + ((BLACK - WHITE) * cov) + (rnd() * 30.0));
 
         adc[ch] = (uint16_t)((v < 0.0) ? 0.0 : ((v > 4095.0) ? 4095.0 : v));
     }
@@ -220,7 +231,10 @@ static result_t drive(const layout_t *lay, double speed_mm_s, const strip_t *str
     line_nav_config_t cfg = make_cfg(lay);
     line_nav_t nav;
     car_t car = { start_off_mm, 0.0, 0.0, 0.0, { 0.0, 0.0, 0.0 }, speed_mm_s };
-    result_t r = { 0.0, 0.0, 0, 0, 0, '?', 0.0, false };
+    result_t r = { 0.0, 0.0, 0, 0, 0, '?', 0.0, false, 0.0 };
+    double jerk_sum = 0.0;
+    double prev_diff = 0.0;
+    uint32_t jerk_n = 0U;
     uint32_t t = 1000U;
     uint32_t step;
     uint16_t adc[3];
@@ -252,6 +266,9 @@ static result_t drive(const layout_t *lay, double speed_mm_s, const strip_t *str
             car.y += v * cos(car.psi) * 0.001;
         }
         line_nav_step(&nav, t, (int16_t)v, &out);
+        jerk_sum += fabs((double)out.steer_diff_mm_s - prev_diff);
+        prev_diff = (double)out.steer_diff_mm_s;
+        jerk_n++;
 
         if ((out.events & NAV_EVENT_LINE_LOST) != 0U) { r.lost_events++; }
         if ((out.events & NAV_EVENT_JUNCTION) != 0U) { r.junction_events++; }
@@ -288,6 +305,7 @@ static result_t drive(const layout_t *lay, double speed_mm_s, const strip_t *str
         }
     }
     r.end_y = car.y;
+    r.steer_jerk = jerk_sum / (double)((jerk_n > 0U) ? jerk_n : 1U);
     return r;
 }
 
@@ -375,11 +393,104 @@ static void test_layout_b_wide_symmetric_bar_cannot_track_the_line(void)
 static void test_a_sensor_gap_wider_than_the_line_loses_it(void)
 {
     strip_t none = { false, 0.0, { 0.0 } };
-    layout_t lay = { { -20.0, 0.0, 20.0 }, 20.0, 0x07U, 0x00U, 0x00U, 160, 120 };
+    layout_t lay = { { -20.0, 0.0, 20.0 }, 20.0, 0x07U, 0x00U, 0x00U, 160, 120, 0 };
     result_t r = drive(&lay, CRUISE, &none, 0.0);
 
     printf("    20 mm spacing: lost %d events, max error %.1f mm\n", r.lost_events, r.max_err_mm);
     CHECK(r.lost_events > 0);
+}
+
+/* The car's IR sensors are the modules' digital DO outputs, so a frame holds
+ * only white or black.  With a 2.1 mm footprint, layout C still follows the
+ * course, recovers from a 10 mm start offset and reads the barcode at the
+ * course speeds.  SIMULATION. */
+static void test_digital_sensors_follow_and_read_a_barcode(void)
+{
+    static const double SPEEDS[] = { 100.0, 150.0, 200.0 };
+    strip_t none = { false, 0.0, { 0.0 } };
+    layout_t lay = layout_c();
+    result_t base;
+    result_t off;
+    size_t i;
+
+    g_digital = true;
+    base = drive(&lay, CRUISE, &none, 0.0);
+    off = drive(&lay, CRUISE, &none, 10.0);
+    printf("    digital: 150 mm/s err %.1f | start-off err %.1f, lost %d/%d\n",
+           base.max_err_mm, off.max_err_mm, base.lost_events, off.lost_events);
+    CHECK(base.finished && off.finished);
+    CHECK_INT(0, base.lost_events);
+    CHECK_INT(0, off.lost_events);
+    CHECK(base.max_err_mm < 8.0);
+
+    for (i = 0U; i < 3U; i++) {
+        strip_t strip = make_strip('A', 1500.0, 141.0);
+        result_t r = drive(&lay, SPEEDS[i], &strip, 0.0);
+
+        printf("    digital barcode at %.0f mm/s: decoded %d x '%c', junctions %d, lost %d\n",
+               SPEEDS[i], r.barcodes, r.letter, r.junction_events, r.lost_events);
+        CHECK_INT(1, r.barcodes);
+        CHECK_INT('A', r.letter);
+        CHECK_INT(0, r.junction_events);
+        CHECK_INT(0, r.lost_events);
+        CHECK(r.finished);
+    }
+    g_digital = false;
+}
+
+/* THE FINDING: a digital sensor cannot report grey, so a footprint much wider
+ * than the 3 mm barcode bars blurs them into one black run: the barcode is not
+ * decoded and the run reads as a junction.  Following the line is unaffected.
+ * The mounting height and the module's trimmer must give a footprint close to
+ * the bar width (check it on the bench).  SIMULATION. */
+static void test_digital_sensor_with_a_wide_spot_cannot_read_the_barcode(void)
+{
+    layout_t lay = layout_c();
+    strip_t strip = make_strip('A', 1500.0, 141.0);
+    result_t r;
+
+    g_digital = true;
+    g_spot_mm = 6.0;
+    r = drive(&lay, CRUISE, &strip, 0.0);
+    g_spot_mm = SPOT_DEFAULT_MM;
+    g_digital = false;
+
+    printf("    digital, 6 mm spot: decoded %d, junctions %d, lost %d\n",
+           r.barcodes, r.junction_events, r.lost_events);
+    CHECK_INT(0, r.barcodes);
+    CHECK(r.junction_events > 0);
+    CHECK_INT(0, r.lost_events);
+}
+
+/* Digital sensors change in whole steps, so the raw position jumps by a sensor
+ * spacing and the derivative term turns each jump into a full-scale steering
+ * kick.  Low-pass filtering the readings and a lighter derivative cut the
+ * step-to-step change of the steering command several-fold with the line still
+ * tracked.  SIMULATION. */
+static void test_smoothing_calms_the_steering_of_digital_sensors(void)
+{
+    strip_t none = { false, 0.0, { 0.0 } };
+    layout_t raw = layout_c();
+    layout_t smooth = layout_c();
+    result_t a;
+    result_t b;
+    result_t c;
+
+    smooth.td = 30;
+    smooth.smooth = 2;
+    g_digital = true;
+    a = drive(&raw, CRUISE, &none, 0.0);
+    b = drive(&smooth, CRUISE, &none, 0.0);
+    c = drive(&smooth, CRUISE, &none, 10.0);
+    g_digital = false;
+
+    printf("    steering jerk: raw %.1f -> smoothed %.1f mm/s per step; max error %.1f mm\n",
+           a.steer_jerk, b.steer_jerk, b.max_err_mm);
+    CHECK(b.steer_jerk < (a.steer_jerk / 3.0));
+    CHECK(b.finished && c.finished);
+    CHECK_INT(0, b.lost_events);
+    CHECK_INT(0, c.lost_events);
+    CHECK(b.max_err_mm < 8.0);
 }
 
 int main(void)
@@ -387,6 +498,9 @@ int main(void)
     RUN(test_layout_a_close_sensors_follow_an_s_curve);
     RUN(test_layout_c_follows_and_recovers);
     RUN(test_layout_c_reads_a_barcode_beside_the_line);
+    RUN(test_digital_sensors_follow_and_read_a_barcode);
+    RUN(test_digital_sensor_with_a_wide_spot_cannot_read_the_barcode);
+    RUN(test_smoothing_calms_the_steering_of_digital_sensors);
     RUN(test_layout_b_wide_symmetric_bar_cannot_track_the_line);
     RUN(test_a_sensor_gap_wider_than_the_line_loses_it);
     return TEST_REPORT();

@@ -46,6 +46,10 @@ static line_nav_config_t make_cfg(void)
     c.track_mask = LINE_CHANNEL_ALL_MASK;
     c.lane_mask = (uint8_t)((1U << LINE_CHANNEL_LEFT) | (1U << LINE_CHANNEL_RIGHT));
     c.junction_mask = (uint8_t)((1U << LINE_CHANNEL_LEFT) | (1U << LINE_CHANNEL_RIGHT));
+    c.fixed_white = 0U;
+    c.fixed_black = 0U;
+    c.fixed_mask = 0U;
+    c.smooth_shift = 0U;
     return c;
 }
 
@@ -220,6 +224,110 @@ static void test_calibration_fails_without_centre_contrast(void)
     frames(&r, 40U, WHITE, 4000U, WHITE);
     CHECK(!line_nav_calibrate_end(&r.nav));
     CHECK_INT(0, r.nav.valid_mask);
+}
+
+/* A barcode-only sensor with fixed readings (a digital DO sensor) is trusted
+ * from start-up and after a sweep that never crossed black on it; the tracking
+ * pair still has to show contrast.  Without the fixed readings the same sweep
+ * leaves it out, and its barcodes would silently never decode. */
+static void test_fixed_lane_sensor_is_trusted_without_seeing_black(void)
+{
+    rig_t r;
+    line_nav_config_t cfg = layout_c_cfg();
+
+    line_nav_init(&r.nav, &cfg);
+    r.t = 0U;
+    line_nav_calibrate_begin(&r.nav);
+    frames(&r, 20U, WHITE, WHITE, WHITE);
+    frames(&r, 20U, BLACK, BLACK, WHITE);               /* the far sensor never sees black */
+    CHECK(line_nav_calibrate_end(&r.nav));
+    CHECK_INT(0x03, r.nav.valid_mask);                  /* learned: the far sensor is left out */
+
+    cfg.fixed_white = WHITE;
+    cfg.fixed_black = BLACK;
+    cfg.fixed_mask = (uint8_t)(1U << LINE_CHANNEL_RIGHT);
+    line_nav_init(&r.nav, &cfg);
+    CHECK_INT(0x04, r.nav.valid_mask);                  /* trusted before any calibration */
+    r.t = 0U;
+    line_nav_calibrate_begin(&r.nav);
+    frames(&r, 20U, WHITE, WHITE, WHITE);
+    frames(&r, 20U, BLACK, BLACK, WHITE);
+    CHECK(line_nav_calibrate_end(&r.nav));
+    CHECK_INT(0x07, r.nav.valid_mask);
+}
+
+/* The tracking pair is still checked: with fixed readings for the far sensor,
+ * a stuck pair still fails calibration. */
+static void test_fixed_lane_sensor_does_not_hide_a_dead_tracking_pair(void)
+{
+    rig_t r;
+    line_nav_config_t cfg = layout_c_cfg();
+
+    cfg.fixed_white = WHITE;
+    cfg.fixed_black = BLACK;
+    cfg.fixed_mask = (uint8_t)(1U << LINE_CHANNEL_RIGHT);
+    line_nav_init(&r.nav, &cfg);
+    r.t = 0U;
+    line_nav_calibrate_begin(&r.nav);
+    frames(&r, 20U, 4000U, 4001U, WHITE);
+    frames(&r, 20U, 4002U, 3998U, BLACK);
+    CHECK(!line_nav_calibrate_end(&r.nav));
+    CHECK_INT(0, r.nav.valid_mask);
+}
+
+/* Digital sensors: with fixed readings for every channel, a sweep over a constant
+ * surface (the car held in the air) still leaves all three trusted, and a black
+ * line under the centre sensor then gives a position. */
+static void test_fixed_readings_on_every_channel_need_no_sweep(void)
+{
+    rig_t r;
+    line_nav_config_t cfg = layout_c_cfg();
+    line_nav_out_t out;
+
+    cfg.fixed_white = WHITE;
+    cfg.fixed_black = BLACK;
+    cfg.fixed_mask = LINE_CHANNEL_ALL_MASK;
+    line_nav_init(&r.nav, &cfg);
+    CHECK_INT(0x07, r.nav.valid_mask);
+    r.t = 0U;
+    line_nav_calibrate_begin(&r.nav);
+    frames(&r, 40U, WHITE, WHITE, WHITE);               /* nothing crosses the line */
+    CHECK(line_nav_calibrate_end(&r.nav));
+    CHECK_INT(0x07, r.nav.valid_mask);
+
+    frames(&r, 10U, BLACK, BLACK, WHITE);
+    out = step(&r, 100);
+    CHECK(out.position_valid);
+}
+
+/* With smoothing, a sensor pair that flips between black and white every step
+ * gives a settled in-between position instead of jumping the full spacing. */
+static void test_smoothing_turns_flicker_into_a_small_position(void)
+{
+    static const unsigned SHIFTS[] = { 0U, 2U };
+    unsigned s;
+
+    for (s = 0U; s < 2U; s++) {
+        rig_t r;
+        line_nav_config_t cfg = layout_c_cfg();
+        line_nav_out_t out = { 0 };
+        int16_t last_abs = 0;
+        unsigned k;
+
+        cfg.smooth_shift = (uint8_t)SHIFTS[s];
+        rig_init_with(&r, &cfg);
+        for (k = 0U; k < 12U; k++) {
+            frames(&r, 10U, (k % 2U) == 0U ? BLACK : WHITE, (k % 2U) == 0U ? WHITE : BLACK, WHITE);
+            out = step(&r, 100);
+            last_abs = (int16_t)((out.position < 0) ? -out.position : out.position);
+        }
+        CHECK(out.position_valid);
+        if (SHIFTS[s] == 0U) {
+            CHECK_INT(1000, last_abs);                  /* raw: the full jump every step */
+        } else {
+            CHECK(last_abs < 500);                      /* filtered: a small swing */
+        }
+    }
 }
 
 /* ---- steering --------------------------------------------------------- */
@@ -966,6 +1074,10 @@ int main(void)
 {
     RUN(test_calibration_excludes_a_stuck_sensor);
     RUN(test_calibration_fails_without_centre_contrast);
+    RUN(test_fixed_lane_sensor_is_trusted_without_seeing_black);
+    RUN(test_fixed_lane_sensor_does_not_hide_a_dead_tracking_pair);
+    RUN(test_fixed_readings_on_every_channel_need_no_sweep);
+    RUN(test_smoothing_turns_flicker_into_a_small_position);
     RUN(test_steering_direction);
     RUN(test_steering_is_limited);
     RUN(test_derivative_damps_steering);

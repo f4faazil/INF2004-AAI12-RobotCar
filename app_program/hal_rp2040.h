@@ -59,6 +59,8 @@ uint32_t hal_tick_overruns(uint32_t bit);   /* times a tick came before the last
 /* IR frames (single consumer). */
 bool hal_ir_pop(hal_ir_frame_t *frame);
 uint32_t hal_ir_overflows(void);            /* frames dropped because the ring was full */
+uint32_t hal_ir_levels(void);               /* raw DO pin levels of the latest frame: bit 0 left, 1 centre, 2 right (1 = pin high) */
+void hal_ir_edges(uint32_t edges[3]);       /* DO edges counted since start-up: left, centre, right */
 uint32_t hal_adc_max_isr_us(void);          /* longest tick ISR, a CPU-cost measurement */
 
 void hal_motor_set(int16_t left_pwm, int16_t right_pwm);     /* signed per-mille */

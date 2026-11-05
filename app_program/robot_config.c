@@ -12,17 +12,17 @@
 #include "ultrasonic.h"
 
 /*
- * Letter -> command table.  The write-up gives A/B/C/D as an example
- * (left/right/straight/U-turn); the lecturer's sample sheets use A, F, Z, W,
- * X and Y but the course has not published which command each means.  Edit
- * this table when it does.  A decoded letter that is not listed is rejected
- * and reported, never guessed at.  PLACEHOLDER.
+ * Letter -> command table, as decided by the team: A turns left, F turns
+ * right, Z makes a U-turn.  A turn runs only when the car reaches a junction;
+ * a junction with no stored instruction goes straight, so there is no letter
+ * for straight.  A decoded letter that is not listed is rejected and reported,
+ * never guessed at.
  */
-const nav_map_entry_t ROBOT_BARCODE_MAP[] = {
+#define ROBOT_BARCODE_MAP_COUNT (3U)
+const nav_map_entry_t ROBOT_BARCODE_MAP[ROBOT_BARCODE_MAP_COUNT] = {
     { 'A', NAV_CMD_LEFT },
-    { 'B', NAV_CMD_RIGHT },
-    { 'C', NAV_CMD_STRAIGHT },
-    { 'D', NAV_CMD_UTURN }
+    { 'F', NAV_CMD_RIGHT },
+    { 'Z', NAV_CMD_UTURN }
 };
 const uint8_t ROBOT_BARCODE_MAP_LEN = (uint8_t)(sizeof(ROBOT_BARCODE_MAP) /
                                                 sizeof(ROBOT_BARCODE_MAP[0]));
@@ -59,7 +59,7 @@ const motion_config_t ROBOT_MOTION_CFG = {
 #define IS_FAR(mm)          (MM_ABS(mm) >= ROBOT_FAR_SENSOR_MM)
 #define POS_OF(mm)          ((int16_t)((((mm) * 1000) / ROBOT_TRACK_REF_MM)))
 #define TRACK_BIT(ch, mm)   (IS_FAR(mm) ? 0 : (1 << (ch)))
-#define LANE_BIT(ch, mm)    (IS_FAR(mm) ? (1 << (ch)) : 0)
+#define LANE_BIT(ch, mm)    ((ROBOT_USE_BARCODE_SENSOR && IS_FAR(mm)) ? (1 << (ch)) : 0)
 
 /*
  * Line following and barcodes.  junction_min_mm: the widest barcode bar is
@@ -70,7 +70,7 @@ const motion_config_t ROBOT_MOTION_CFG = {
 const line_nav_config_t ROBOT_LINE_NAV_CFG = {
     .lost_frames = 5U,                  /* 50 ms without a line */
     .found_frames = 3U,
-    .junction_min_mm = 13U,
+    .junction_min_mm = (ROBOT_BARCODE_WIDE_MM + ROBOT_LINE_WIDTH_MM) / 2U,     /* 13 */
     .junction_merge_ms = 30U,
     .barcode_quiet_ms = 250U,
     .instruction_ttl_ms = 20000U,       /* PLACEHOLDER: stale instruction expires */
@@ -78,10 +78,10 @@ const line_nav_config_t ROBOT_LINE_NAV_CFG = {
     .hump_fresh_ms = 100U,
     .stale_ms = 50U,
     .steer_kp_mm_s = 13 * ROBOT_TRACK_REF_MM,
-    .steer_td_ms = 120U,                /* damping: the simulation is unstable below ~100 ms */
+    .steer_td_ms = 30U,                 /* light derivative: the position is smoothed, see smooth_shift */
     .steer_limit_mm_s = 150,
     .map = ROBOT_BARCODE_MAP,
-    .map_len = 4U,
+    .map_len = ROBOT_BARCODE_MAP_COUNT,
     .channel_pos_permille = {
         [LINE_CHANNEL_LEFT] = POS_OF(ROBOT_SENSOR_MM_LEFT),
         [LINE_CHANNEL_CENTRE] = POS_OF(ROBOT_SENSOR_MM_CENTRE),
@@ -93,7 +93,11 @@ const line_nav_config_t ROBOT_LINE_NAV_CFG = {
     .lane_mask = (uint8_t)(LANE_BIT(LINE_CHANNEL_LEFT, ROBOT_SENSOR_MM_LEFT) |
                            LANE_BIT(LINE_CHANNEL_RIGHT, ROBOT_SENSOR_MM_RIGHT)),
     .junction_mask = (uint8_t)(LANE_BIT(LINE_CHANNEL_LEFT, ROBOT_SENSOR_MM_LEFT) |
-                               LANE_BIT(LINE_CHANNEL_RIGHT, ROBOT_SENSOR_MM_RIGHT))
+                               LANE_BIT(LINE_CHANNEL_RIGHT, ROBOT_SENSOR_MM_RIGHT)),
+    .fixed_white = ROBOT_IR_COUNTS_WHITE,       /* DO sensors: nothing for a sweep to learn */
+    .fixed_black = ROBOT_IR_COUNTS_BLACK,
+    .fixed_mask = ROBOT_IR_FIXED_MASK,
+    .smooth_shift = 2U                          /* digital sensors: gain 1/4 per 10 ms step, about 35 ms */
 };
 
 const hump_config_t ROBOT_HUMP_CFG = {

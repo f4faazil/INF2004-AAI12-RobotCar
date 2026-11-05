@@ -95,6 +95,30 @@ typedef struct {
     uint8_t  track_mask;            /* sensors that steer the car (bit per channel) */
     uint8_t  lane_mask;             /* sensors that read barcodes (LEFT and/or RIGHT) */
     uint8_t  junction_mask;         /* sensors that spot junction branches (LEFT and/or RIGHT) */
+
+    /*
+     * Fixed white and black readings for the sensors in fixed_mask.  A digital
+     * (DO) sensor only ever reads one of two values, so a sweep has nothing to
+     * learn from it, and a sweep that never crosses black on it (the car held in
+     * the air, or a far sensor that never reaches the line) would leave it
+     * untrusted.  With fixed_black > fixed_white those channels are trusted
+     * from start-up and after every calibration; the cost is that a dead one is
+     * no longer caught by the sweep (watch the edge counts instead).  fixed_mask
+     * 0 learns every channel from the sweep.
+     */
+    uint16_t fixed_white;
+    uint16_t fixed_black;
+    uint8_t  fixed_mask;            /* bit per channel */
+
+    /*
+     * Smoothing of the line position: each sensor's 10 ms mean is low-pass
+     * filtered with a gain of 1 / 2^smooth_shift before the position is formed (0 =
+     * off).  A digital sensor flickering at the edge of the line then gives a
+     * smooth in-between value instead of a hard 0/1 step, which would otherwise
+     * jerk the steering and the speed schedule.  Whether the line is visible is
+     * still decided on the unfiltered reading, so line-lost timing is unchanged.
+     */
+    uint8_t  smooth_shift;
 } line_nav_config_t;
 
 typedef struct {
@@ -111,6 +135,7 @@ typedef struct {
     bool              calibrating;
     uint8_t           valid_mask;
     uint16_t          blackness[LINE_CHANNEL_COUNT];   /* mean over the last step */
+    uint16_t          smooth[LINE_CHANNEL_COUNT];      /* the same, low-pass filtered */
     uint32_t          sum[LINE_CHANNEL_COUNT];
     uint16_t          sum_n;
 
@@ -169,10 +194,11 @@ void line_nav_init(line_nav_t *nav, const line_nav_config_t *cfg);
 void line_nav_calibrate_begin(line_nav_t *nav);
 
 /*
- * Finish calibration.  Returns true when the centre sensor saw enough
+ * Finish calibration.  Returns true when a tracking sensor saw enough
  * contrast to follow a line; the trusted channels are then available in
- * valid_mask (a sensor with no contrast, like the stuck left IR, is left
- * out).  Returns false (and keeps no sensor trusted) otherwise.
+ * valid_mask (a sensor with no contrast, like a stuck IR, is left out, except
+ * channels with fixed readings, see fixed_mask).  Returns false
+ * (and keeps no sensor trusted) otherwise.
  */
 bool line_nav_calibrate_end(line_nav_t *nav);
 

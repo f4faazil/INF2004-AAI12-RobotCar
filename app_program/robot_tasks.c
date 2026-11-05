@@ -557,7 +557,7 @@ static void vehicle_task(INT stacd, void *exinf)
         /* Safety monitor: turn producer health into fault bits. */
         health.line_required = (out.activity & VC_ACT_LINE_REQUIRED) != 0U;
         health.driving = (out.activity & VC_ACT_DRIVING) != 0U;
-        health.obstacle_watch_required = (out.activity & VC_ACT_OBSTACLE_WATCH) != 0U;
+        health.obstacle_watch_required = ROBOT_REQUIRE_ULTRASONIC && ((out.activity & VC_ACT_OBSTACLE_WATCH) != 0U);
         health.line_stale = line.out.stale;
         health.encoder_fault = motion.encoder_fault;
         health.motion_age_ms = now - motion.status.timestamp_ms;
@@ -973,6 +973,8 @@ static void diag_task(INT stacd, void *exinf)
         encoder_snapshot_t enc_l;
         encoder_snapshot_t enc_r;
         robot_irq_state_t state;
+        uint32_t ir_edges[3];
+        uint32_t ir_do;
 
         (void)tk_dly_tsk(1000);
         state = robot_irq_save();
@@ -980,12 +982,18 @@ static void diag_task(INT stacd, void *exinf)
         motion = g_motion_share;
         robot_irq_restore(state);
         hal_encoders_snapshot(&enc_l, &enc_r);
+        ir_do = hal_ir_levels();
+        hal_ir_edges(ir_edges);
         tm_printf((UB *)"[robot] st=%d f=%04x pos=%d v=%d/%d d=%dmm enc=%d/%d bad=%u/%u ir=%u "
-                        "ovf=%u drop=%u net=%u us(m/l/v/isr)=%u/%u/%u/%u ovr=%u/%u\n",
+                        "do=%u%u%u edges=%u/%u/%u vm=%x bc=%c ovf=%u drop=%u net=%u us(m/l/v/isr)=%u/%u/%u/%u ovr=%u/%u\n",
                   (INT)g_vstate, (UINT)fault_read(&g_faults), (INT)line.out.position,
                   (INT)motion.status.left_mm_s, (INT)motion.status.right_mm_s,
                   (INT)motion.status.distance_mm, (INT)enc_l.count, (INT)enc_r.count,
                   (UINT)enc_l.illegal, (UINT)enc_r.illegal, (UINT)g_ir_frames,
+                  (UINT)(ir_do & 1U), (UINT)((ir_do >> 1) & 1U), (UINT)((ir_do >> 2) & 1U),
+                  (UINT)ir_edges[0], (UINT)ir_edges[1], (UINT)ir_edges[2],
+                  (UINT)line.out.valid_mask,
+                  (INT)(line.instruction_valid ? line.instruction.letter : '-'),
                   (UINT)hal_ir_overflows(), (UINT)g_tel_q.dropped_full, (UINT)g_mqtt_state,
                   (UINT)g_max_motion_us, (UINT)g_max_line_us, (UINT)g_max_vehicle_us,
                   (UINT)hal_adc_max_isr_us(), (UINT)hal_tick_overruns(HAL_TICK_MOTION),
