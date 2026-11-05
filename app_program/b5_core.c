@@ -1,13 +1,24 @@
 #if APP_BUDDY5
 #include "b5.h"
 #include <string.h>
-/* Q15 sine values for -60..+60 degrees, at five-degree intervals.
- * Intermediate arithmetic is wider to avoid overflow; stored results are packed. */
-static const int16_t sine_q15[25] = {-28378,-26842,-25102,-23170,-21063,-18795,-16384,-13848,-11207,-8481,-5690,-2856,0,2856,5690,8481,11207,13848,16384,18795,21063,23170,25102,26842,28378};
-_Static_assert(B5_INVALID_LIMIT>=1 && B5_INVALID_LIMIT<=3, "retry field supports 1..3 attempts");
-_Static_assert(B5_STOP_MM>=20 && B5_STOP_MM<=4000, "stop threshold outside measurement range");
-_Static_assert(B5_PING_PERIOD_MS>=61, "HC-SR04 needs more than 60 ms between triggers");
-_Static_assert(B5_RECOVERY_MAX_MM<=500, "travel range is 0..500 mm");
+/* Q15 sine values for -30..+30 degrees, in 2.5-degree steps.
+ * Slot 0 = right, slot 12 = forward, slot 24 = left.
+ */
+static const int16_t sine_q15[25] = {
+    -16384, -15131, -13848, -12540, -11207, -9854,
+    -8481, -7092, -5690, -4277, -2856, -1429,
+    0,
+    1429, 2856, 4277, 5690, 7092, 8481,
+    9854, 11207, 12540, 13848, 15131, 16384
+};
+_Static_assert(B5_INVALID_LIMIT >= 1 && B5_INVALID_LIMIT <= 3,
+               "retry field supports 1..3 attempts");
+_Static_assert(B5_STOP_MM >= 20 && B5_STOP_MM <= 4000,
+               "stop threshold outside measurement range");
+_Static_assert(B5_PING_PERIOD_MS >= 61,
+               "ping interval must exceed 60 ms");
+_Static_assert(B5_RECOVERY_MAX_MM <= 500,
+               "travel range is 0..500 mm");
 static uint32_t age(uint32_t now,uint32_t then) {return now-then;}
 static void fault(b5_core *b,unsigned bits) {
     b->hw.cancel();b->waiting=0;b->s.state=B5_FAULT;b->s.request=B5_STOP;

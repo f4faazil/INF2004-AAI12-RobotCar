@@ -52,7 +52,8 @@ int main(void){
     ticks(&b,&now,200);assert(b.s.state==B5_FAULT && (b.s.faults&B5_F_NO_ECHO));++cases;
     b5_feedback f=fb(++now);f.mode=B5_MODE_RESET;b5_step(&b,&f,now);assert(b.s.state==B5_MONITOR);
     mode=1;ticks(&b,&now,9000);assert(b.s.state==B5_READY && b.s.request==B5_LEFT);
-    assert(b.s.width.valid && b.s.width.mm>100 && b.s.width.mm<200);
+    /* Simulated obstacle span with the calibrated +/-25 degree geometry. */
+    assert(b.s.width.valid && b.s.width.mm==69);
     assert(b.s.left.mm==900 && b.s.right.mm==900 && b.s.count>5);
     assert(sizeof b.scan==41 && (b.scan[40]&0xe0u)==0);
     for(unsigned i=0;i<25;++i){b5_range q=b5_scan_get(&b,i);

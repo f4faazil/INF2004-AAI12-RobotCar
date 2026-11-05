@@ -15,15 +15,15 @@ static void copy_bytes(void *to,const void *from,unsigned n) {
  * GP17 has four events at bits 4..7; bit 6 falling, bit 7 rising.
  * This port owns IRQ13 exclusively. Merge a GPIO dispatcher before adding
  * encoder interrupts; another tk_def_int(13,...) would replace this handler. */
-#define ECHO_INTR (IO_BANK0_BASE + 0xf8u)
-#define ECHO_INTE (IO_BANK0_BASE + 0x108u)
-#define ECHO_INTS (IO_BANK0_BASE + 0x128u)
-#define EDGE_FALL (1u << 6)
-#define EDGE_RISE (1u << 7)
+#define ECHO_INTR (IO_BANK0_BASE + 0xf0u)
+#define ECHO_INTE (IO_BANK0_BASE + 0x100u)
+#define ECHO_INTS (IO_BANK0_BASE + 0x120u)
+#define EDGE_FALL (1u << 22)
+#define EDGE_RISE (1u << 23)
 #define EDGES (EDGE_FALL | EDGE_RISE)
 #define GPIO_IRQ 13u
 #define PWM6 (PWM_BASE + 6u * 0x14u)
-_Static_assert(B5_ECHO_GP == 17u, "Update IRQ register offsets for a different ECHO pin");
+_Static_assert(B5_ECHO_GP == 5u, "Update IRQ register offsets for a different ECHO pin");
 _Static_assert(B5_SERVO_GP == 12u, "This port reserves PWM slice 6 for GP12");
 _Static_assert(XOSC_MHz == 12, "Recalculate watchdog tick divider when changing reference clock");
 _Static_assert(TMCLK_MHz == 125, "Recalculate servo divider when changing system clock");
@@ -94,7 +94,18 @@ static bool poll_ping(uint16_t *mm,uint8_t *result) {
     if(capture.phase!=3){barrier();EI(saved);return false;}
     *result=capture.result;
     *mm=(uint16_t)(((uint32_t)capture.width_us*10u+29u)/58u);
-    capture.phase=0;barrier();EI(saved);return true;
+    capture.phase=0;
+    barrier();
+    EI(saved);
+
+    #if APP_BUDDY5 == 3
+        tm_printf((UB *)"[b5] slot=%u result=%u mm=%u\n",
+              (unsigned)core.s.slot,
+              (unsigned)*result,
+              (unsigned)*mm);
+    #endif
+
+return true;
 }
 static void cancel_ping(void) {
     UW saved;DI(saved);barrier();capture.phase=0;out_w(ECHO_INTR,EDGES);barrier();EI(saved);
@@ -179,6 +190,10 @@ static void b5_task(INT stacd,void *exinf) {
     const unsigned positions[4]={B5_SERVO_CENTRE_US,B5_SERVO_RIGHT_US,B5_SERVO_CENTRE_US,B5_SERVO_LEFT_US};
     for(;;)for(unsigned i=0;i<4;++i){pulse(positions[i]);tm_printf((UB *)"[b5] pulse=%u us\n",positions[i]);tk_dly_tsk(4000);}
 #else
+#if APP_BUDDY5 == 3
+    tm_printf((UB *)"[b5] Waiting 15 seconds before scan test\n");
+    tk_dly_tsk(15000);
+#endif
     b5_init(&core,(b5_hal){servo,start_ping,poll_ping,cancel_ping},b5_now_ms());
     uint32_t last_ping=b5_now_ms()-B5_PING_PERIOD_MS,last_print=b5_now_ms();bool waiting=false;
     for(;;){
@@ -212,6 +227,11 @@ static void b5_task(INT stacd,void *exinf) {
 #if APP_BUDDY5 != 4
         if(now-last_print>=500u){
             last_print=now;
+            tm_printf((UB *)"[b5] left=%u valid=%u right=%u valid=%u\n",
+            (unsigned)core.s.left.mm,
+            (unsigned)core.s.left.valid,
+            (unsigned)core.s.right.mm,
+            (unsigned)core.s.right.valid);
             if(core.s.front.valid)tm_printf((UB *)"[b5] mm=%u state=%u request=%u faults=0x%x samples=%u\n",core.s.front.mm,core.s.state,core.s.request,core.s.faults,core.s.count);
             else tm_printf((UB *)"[b5] range=INVALID state=%u faults=0x%x\n",core.s.state,core.s.faults);
         }

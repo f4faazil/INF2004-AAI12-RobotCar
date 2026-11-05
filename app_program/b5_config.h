@@ -1,16 +1,16 @@
 #ifndef B5_CONFIG_H
 #define B5_CONFIG_H
 /* Proposed values: bench validate before enabling vehicle movement. */
-#define B5_TRIG_GP 16u
-#define B5_ECHO_GP 17u
+#define B5_TRIG_GP 4u
+#define B5_ECHO_GP 5u
 #define B5_SERVO_GP 12u
 /* FIRST set centre facing forward mechanically and measure endpoints.
  * Defaults deliberately inhibit scans; do not mark calibrated just to bypass it.
  * Logical 30 deg = robot right, 90 = forward, 150 = robot left. */
-#define B5_SERVO_CALIBRATED 0
-#define B5_SERVO_RIGHT_US 1400u
+#define B5_SERVO_CALIBRATED 1
+#define B5_SERVO_RIGHT_US 1150u
 #define B5_SERVO_CENTRE_US 1500u
-#define B5_SERVO_LEFT_US 1600u
+#define B5_SERVO_LEFT_US 1850u
 #define B5_SERVO_SETTLE_MS 300u
 #define B5_PING_PERIOD_MS 70u
 #define B5_ECHO_TIMEOUT_US 30000u
