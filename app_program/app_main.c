@@ -47,6 +47,7 @@
 
 #include "usb_console_compat.h"
 #include "demo_tasks.h"
+#include "imu.h"			/* Buddy 4: IMU / hump task */
 
 #if TM_WIFI_CYW43
 /* Plain C types on purpose - see the note in cyw43_utk.h. */
@@ -94,6 +95,10 @@ LOCAL ID	flgid;			/* both -> monitor                   */
 LOCAL UW	next_seq;
 LOCAL UW	produced, consumed, dropped;
 LOCAL INT	last_made_on, last_seen_on;
+EXPORT volatile INT imu_launch_status;
+IMPORT volatile UW imu_debug_stage;
+IMPORT volatile INT imu_debug_error;
+IMPORT volatile UW imu_debug_init_step;
 
 /* Backing store for the pool and the message buffer.  Static, because a
    kernel object must not own memory that can go out of scope. */
@@ -206,6 +211,9 @@ LOCAL void monitor_task(INT stacd, void *exinf)
 #endif
 	tm_printf((UB *)"producer -> [mbf] -> consumer, %d credits, %d ms period\n\n",
 		  CREDITS, PRODUCE_MS);
+	tm_printf((UB *)"[monitor] IMU launch=%d task_stage=%u init_step=%u error=%d\n",
+		  imu_launch_status, imu_debug_stage,
+		  imu_debug_init_step, imu_debug_error);
 
 	while(1) {
 		/* Wait until both ends have moved at least once since the
@@ -222,9 +230,12 @@ LOCAL void monitor_task(INT stacd, void *exinf)
 		}
 
 		tm_printf((UB *)"[monitor] seq=%u produced=%u consumed=%u dropped=%u"
-			       "  made_on=prc%d seen_on=prc%d\n",
+			       "  made_on=prc%d seen_on=prc%d imu_launch=%d imu_stage=%u"
+			       " init_step=%u imu_error=%d\n",
 			  next_seq, produced, consumed, dropped,
-			  last_made_on, last_seen_on);
+			  last_made_on, last_seen_on,
+			  imu_launch_status, imu_debug_stage,
+			  imu_debug_init_step, imu_debug_error);
 
 		/* One line every REPORT_MS cannot overrun a 4 KB ring, but say
 		   so out loud if the console ever does drop bytes. */
@@ -450,10 +461,21 @@ LOCAL T_CTSK ctsk_monitor = {
 	.tskatr		= TA_HLNG | TA_RNG3,
 };
 
+/* Blink task remains disabled; the IMU uses Grove 6 (GP26/GP27). */
+#if 0
 LOCAL T_CTSK ctsk_blink = {
 	.itskpri	= 10,
 	.stksz		= STACK_SZ,
 	.task		= blink_task,
+	.tskatr		= TA_HLNG | TA_RNG3,
+};
+#endif
+
+/* Buddy 4: IMU / hump task. 20 ms period; below safety-critical tasks. */
+LOCAL T_CTSK ctsk_imu = {
+	.itskpri	= 7,
+	.stksz		= STACK_SZ,
+	.task		= imu_task,
 	.tskatr		= TA_HLNG | TA_RNG3,
 };
 
@@ -504,6 +526,7 @@ LOCAL BOOL made(const char *what, ID id)
 EXPORT INT usermain(void)
 {
 	ID	tid;
+	ER	er;
 
 	mpfid = tk_cre_mpf(&cmpf); if(!made("mpf", mpfid)) return 1;
 	mtxid = tk_cre_mtx(&cmtx); if(!made("mtx", mtxid)) return 1;
@@ -511,7 +534,21 @@ EXPORT INT usermain(void)
 	semid = tk_cre_sem(&csem); if(!made("sem", semid)) return 1;
 	flgid = tk_cre_flg(&cflg); if(!made("flg", flgid)) return 1;
 
-	tid = tk_cre_tsk(&ctsk_blink);    if(made("tsk(blink)",    tid)) tk_sta_tsk(tid, 0);
+	/* tid = tk_cre_tsk(&ctsk_blink);    if(made("tsk(blink)",    tid)) tk_sta_tsk(tid, 0); */
+	tid = tk_cre_tsk(&ctsk_imu);
+	if(made("tsk(imu)", tid)) {
+		imu_launch_status = 1;
+		er = tk_sta_tsk(tid, 0);
+		if(er < E_OK) {
+			imu_launch_status = -2;
+			tm_printf((UB *)"[init] tk_sta_tsk(imu) failed, er=%d\n", er);
+		} else {
+			imu_launch_status = 2;
+			tm_printf((UB *)"[init] IMU task started\n");
+		}
+	} else {
+		imu_launch_status = -1;
+	}
 	tid = tk_cre_tsk(&ctsk_monitor);  if(made("tsk(monitor)",  tid)) tk_sta_tsk(tid, 0);
 	tid = tk_cre_tsk(&ctsk_consumer); if(made("tsk(consumer)", tid)) tk_sta_tsk(tid, 0);
 	tid = tk_cre_tsk(&ctsk_producer); if(made("tsk(producer)", tid)) tk_sta_tsk(tid, 0);
