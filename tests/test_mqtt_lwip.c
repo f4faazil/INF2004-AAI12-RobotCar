@@ -13,6 +13,10 @@
 #include "mock_mutex_port.h"
 
 static uint32_t clock_ms;
+uint64_t time_us_64(void)
+{
+    return (uint64_t)clock_ms * 1000ULL;
+}
 static struct tcp_pcb pcb;
 static void *callback_arg;
 static err_t (*connected_handler)(void *, struct tcp_pcb *, err_t);
@@ -158,6 +162,12 @@ int main(void)
     mqtt_lwip_poll(&interface);
     assert(send_count == 2 && last_send[0] == 0x30U); /* MQTT PUBLISH */
     assert(contains_bytes(last_send, last_send_len, "AAI12_PICO_W_ONLINE", 18U));
+    /* Simulate another robot component submitting telemetry. */
+{
+    static const uint8_t frame[] = {0x04U, 0x25U, 0x03U};
+    assert(telemetry_rtos_submit(frame, sizeof frame, clock_ms)
+           == TELEMETRY_INBOX_OK);
+}
     /* The one-owner queue retains its message when the TCP send buffer
      * cannot accommodate the full MQTT PUBLISH packet. */
     mock_tx_room = 0U;
@@ -167,7 +177,9 @@ int main(void)
     mock_tx_room = 1024U;
     mqtt_lwip_poll(&interface);
     assert(send_count == 3 && last_send[0] == 0x30U); /* Queued PUBLISH */
-    assert(contains_bytes(last_send, last_send_len, "aai12/test/hump_bin", 19U));
+    assert(contains_bytes(last_send, last_send_len,
+                      "aai12/robot/telemetry",
+                      sizeof("aai12/robot/telemetry") - 1U));
     assert(last_send_len >= 3U);
     assert(last_send[last_send_len - 3U] == 0x04U);
     assert(last_send[last_send_len - 2U] == 0x25U);

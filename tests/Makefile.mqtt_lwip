@@ -1,6 +1,6 @@
 CC ?= cc
 CFLAGS = -std=c11 -O2 -Wall -Wextra -Werror -pedantic
-INCLUDES = -Imock_lwip -I../lib/libnet/lwip/include -I../app_program
+INCLUDES = -Imock_pico -Imock_lwip -I../lib/libnet/lwip/include -I../app_program
 SOURCES = test_mqtt_lwip.c ../lib/libnet/lwip/mqtt_lwip.c \
           ../app_program/mqtt_session.c ../app_program/mqtt_stream.c \
           ../app_program/mqtt_wire.c \
