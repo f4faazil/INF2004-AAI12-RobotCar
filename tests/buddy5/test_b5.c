@@ -37,6 +37,10 @@ static void codec(void){
 }
 int main(void){
     codec();unsigned cases=1;
+    const unsigned monitor_ticks = B5_SERVO_SETTLE_MS + 100u;
+    const unsigned scan_ticks =
+    (B5_SCAN_SLOTS + 2u) *
+    (B5_SERVO_SETTLE_MS + B5_PING_PERIOD_MS + 2u);
     /* Decoder rejects malformed fields before a consumer can act on them. */
     b5_status bad={0},decoded;uint8_t wire[B5_STATUS_BYTES];
     bad.front=(b5_range){.mm=4001,.valid=1};b5_encode_status(&bad,wire);
@@ -46,14 +50,16 @@ int main(void){
     b5_feedback badf={.travel_mm=501},goodf;uint8_t fw[B5_FEEDBACK_BYTES];
     b5_encode_feedback(&badf,fw);assert(!b5_decode_feedback(fw,&goodf));++cases;
     uint32_t now=0;mode=0;b5_core b=setup(now);
-    ticks(&b,&now,400);assert(b.s.state==B5_MONITOR && b.s.request==B5_NONE);++cases;
+    ticks(&b,&now,monitor_ticks);assert(b.s.state==B5_MONITOR && b.s.request==B5_NONE);++cases;
     /* No echo stops on the FIRST invalid sample, faults on third. */
     mode=2;ticks(&b,&now,70);assert(b.s.request==B5_STOP && !b.s.front.valid);
     ticks(&b,&now,200);assert(b.s.state==B5_FAULT && (b.s.faults&B5_F_NO_ECHO));++cases;
     b5_feedback f=fb(++now);f.mode=B5_MODE_RESET;b5_step(&b,&f,now);assert(b.s.state==B5_MONITOR);
-    mode=1;ticks(&b,&now,9000);assert(b.s.state==B5_READY && b.s.request==B5_LEFT);
-    /* Simulated obstacle span with the calibrated +/-25 degree geometry. */
-    assert(b.s.width.valid && b.s.width.mm==69);
+    mode=1;	ticks(&b,&now,scan_ticks);assert(b.s.state==B5_READY && b.s.request==B5_LEFT);
+    /* Synthetic span calculation for the +/-30 degree scan.
+    * This tests arithmetic, not physical sensor accuracy. */
+    assert(b.s.width.mm==69);
+    assert(b.s.width.valid==(B5_WIDTH_VALIDATED ? 1u : 0u));
     assert(b.s.left.mm==900 && b.s.right.mm==900 && b.s.count>5);
     assert(sizeof b.scan==41 && (b.scan[40]&0xe0u)==0);
     for(unsigned i=0;i<25;++i){b5_range q=b5_scan_get(&b,i);
@@ -66,14 +72,14 @@ int main(void){
     b5_step(&b,&f,++now);assert(b.s.request==B5_RESUME);++cases;
     f.at_ms=now-101;b5_step(&b,&f,now);assert(b.s.faults&B5_F_FEEDBACK);++cases;
     /* Stop feedback from before request cannot authorize scan. */
-    mode=1;now=0;b=setup(now);ticks(&b,&now,301);assert(b.s.state==B5_WAIT_STOP);
+    mode=1;now=0;b=setup(now);ticks(&b,&now,B5_SERVO_SETTLE_MS + 1u);assert(b.s.state==B5_WAIT_STOP);
     f=fb(now);b5_step(&b,&f,now);assert(b.s.state==B5_WAIT_STOP);
     f=fb(++now);b5_step(&b,&f,now);assert(b.s.state==B5_COARSE);
     f=fb(++now);f.stopped=0;b5_step(&b,&f,now);assert(b.s.faults&B5_F_SCAN);++cases;
     /* Saturation is not a valid distance. */
-    mode=3;now=0;b=setup(now);ticks(&b,&now,600);assert(b.s.faults&B5_F_BAD_RANGE);++cases;
+    mode=3;now=0;b=setup(now);ticks(&b,&now,B5_SERVO_SETTLE_MS + 300u);assert(b.s.faults&B5_F_BAD_RANGE);++cases;
     /* No candidate corridor -> STOP, not a blind reverse command. */
-    mode=4;now=0;b=setup(now);ticks(&b,&now,11000);assert(b.s.faults&B5_F_NO_ROUTE);++cases;
+    mode=4;now=0;b=setup(now);ticks(&b,&now,scan_ticks);assert(b.s.faults&B5_F_NO_ROUTE);++cases;
     /* Recovery travel and time limits, at the exact boundary. */
     for(unsigned which=0;which<2;++which){mode=0;now=10000;b=setup(now);
         b.s.state=B5_RECOVERY;b.recovery_ms=now;
@@ -81,9 +87,9 @@ int main(void){
         if(which==0)f.travel_mm=500;else {now+=5000;f.at_ms=now;}
         b5_step(&b,&f,now);assert(b.s.faults&B5_F_RECOVERY);++cases;}
     /* Unsigned monotonic wrap remains correct for bounded elapsed intervals. */
-    mode=0;now=0xffffff00u;b=setup(now);ticks(&b,&now,600);assert(b.s.request==B5_NONE);++cases;
+    mode=0;now=0xffffff00u;b=setup(now);ticks(&b,&now,B5_SERVO_SETTLE_MS + 300u);assert(b.s.request==B5_NONE);++cases;
     /* Waiting for stop must eventually fault even with fresh moving reports. */
-    mode=1;now=0;b=setup(now);ticks(&b,&now,301);
+    mode=1;now=0;b=setup(now);ticks(&b,&now,B5_SERVO_SETTLE_MS + 1u);
     for(unsigned i=0;i<501;++i){f=fb(++now);f.stopped=0;b5_step(&b,&f,now);}
     assert(b.s.faults&B5_F_STOP_TIMEOUT);++cases;
     printf("PASS: %u test scenarios; 4001 distance codec round trips. status=%u B feedback=%u B core=%zu B\n",

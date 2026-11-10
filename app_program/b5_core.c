@@ -93,7 +93,10 @@ static void finish_profile(b5_core *b,uint32_t now) {
        b5_scan_get(b,hi+1).valid && b5_scan_get(b,lo-1).mm>B5_PROFILE_MM &&
        b5_scan_get(b,hi+1).mm>B5_PROFILE_MM) {
         unsigned w=(unsigned)((xmax-xmin+16384)/32768);
-        if(w<=4095){b->s.width.mm=w;b->s.width.valid=1;}
+        if(w<=4095){
+        b->s.width.mm=w; /* retain candidate estimate for diagnostics */
+        b->s.width.valid=B5_WIDTH_VALIDATED ? 1u : 0u;
+        }
     }
     bool left=b->s.left.valid && b->s.left.mm>=B5_SIDE_CLEAR_MM;
     bool right=b->s.right.valid && b->s.right.mm>=B5_SIDE_CLEAR_MM;
