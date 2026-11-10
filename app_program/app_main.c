@@ -291,6 +291,7 @@ LOCAL void wifi_status_task(INT stacd, void *exinf)
 	UW			stalled_polls = 0;
 	UW			shown_session = 0xffffffffU;
 	UW			summarised = 0xffffffffU;
+	UW diag_ticks = 0;
 	INT			i;
 
 	(void)stacd; (void)exinf;
@@ -303,8 +304,16 @@ LOCAL void wifi_status_task(INT stacd, void *exinf)
 	}
 	tk_dly_tsk(700);		/* let the monitor print its banner first */
 
-	while(1) {
-		cyw43_utk_get_status(&st);
+
+        while(1) {
+                cyw43_utk_get_status(&st);
+
+                if(++diag_ticks >= 5U) {
+                        diag_ticks = 0;
+                        tm_printf((UB *)"[net-diag] polls=%u link=%u netif=%u netlink=%u dhcp=%u\n",
+                                  st.poll_count, st.link_up, st.netif_up,
+                                  st.netif_link_up, st.dhcp_complete);
+                }
 
 
 		/* Link transitions, printed once each rather than every tick. */
