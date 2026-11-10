@@ -1,15 +1,17 @@
 #if APP_BUDDY5
 #include "b5.h"
 #include <string.h>
-/* Q15 sine values for -30..+30 degrees, in 2.5-degree steps.
- * Slot 0 = right, slot 12 = forward, slot 24 = left.
+/* Nominal angles interpolated between measured calibration points:
+ * slot 0 = 32 degrees right, slot 12 = forward,
+ * slot 24 = 28 degrees left.
+ * Intermediate physical angles still require verification.
  */
 static const int16_t sine_q15[25] = {
-    -16384, -15131, -13848, -12540, -11207, -9854,
-    -8481, -7092, -5690, -4277, -2856, -1429,
+    -17364, -16053, -14706, -13328, -11921, -10488,
+    -9032, -7557, -6065, -4560, -3046, -1525,
     0,
-    1429, 2856, 4277, 5690, 7092, 8481,
-    9854, 11207, 12540, 13848, 15131, 16384
+    1334, 2666, 3993, 5314, 6626, 7927,
+    9215, 10488, 11743, 12979, 14193, 15384
 };
 _Static_assert(B5_INVALID_LIMIT >= 1 && B5_INVALID_LIMIT <= 3,
                "retry field supports 1..3 attempts");
@@ -26,7 +28,9 @@ static void fault(b5_core *b,unsigned bits) {
 }
 static void point(b5_core *b,unsigned slot,uint32_t now) {
     b->hw.cancel();b->waiting=0;b->s.slot=slot;b->hw.servo((uint8_t)slot);
-    b->servo_ms=now;b->retries=0;
+    b->servo_ms=now;
+    b->retries=0;
+    b->sample_count=0;
 }
 static void scan_put(b5_core *b,unsigned slot,b5_range r) {
     unsigned v=r.valid?(r.mm|0x1000u):0;
@@ -89,9 +93,24 @@ static void finish_profile(b5_core *b,uint32_t now) {
     /* Observed horizontal span only. Require sampled clear brackets; never
        advertise a clipped FOV or one-ray return as a valid width estimate. */
     b->s.width.valid=0;b->s.width.mm=0;
-    if(lo>0 && lo<hi && hi<24 && b5_scan_get(b,lo-1).valid &&
-       b5_scan_get(b,hi+1).valid && b5_scan_get(b,lo-1).mm>B5_PROFILE_MM &&
-       b5_scan_get(b,hi+1).mm>B5_PROFILE_MM) {
+    /* A width candidate must contain one uninterrupted nearby region.
+    * Missing samples or background inside it make the span ambiguous. */
+    bool continuous = true;
+
+    if(lo < 25u) {
+        for(unsigned i = lo; i <= hi; ++i) {
+            b5_range sample = b5_scan_get(b, i);
+
+            if(!sample.valid || sample.mm > B5_PROFILE_MM) {
+                continuous = false;
+                break;
+            }
+        }
+    }
+    if(continuous && lo>0 && lo<hi && hi<24 &&
+        b5_scan_get(b,lo-1).valid &&
+        b5_scan_get(b,hi+1).valid && b5_scan_get(b,lo-1).mm>B5_PROFILE_MM &&
+        b5_scan_get(b,hi+1).mm>B5_PROFILE_MM) {
         unsigned w=(unsigned)((xmax-xmin+16384)/32768);
         if(w<=4095){
         b->s.width.mm=w; /* retain candidate estimate for diagnostics */
@@ -130,10 +149,37 @@ void b5_step(b5_core *b,const b5_feedback *f,uint32_t now) {
         b5_range r={0};uint8_t reason;
         if(!measure(b,now,&r,&reason))return;
         if(!r.valid){
+            b->sample_count=0;
             if(++b->retries>=B5_INVALID_LIMIT)fault(b,reason==B5_MEASURE_NO_ECHO?B5_F_NO_ECHO:B5_F_BAD_RANGE);
             return;
         }
-        scan_put(b,b->s.slot,r);++b->s.count;
+        /* Require three consecutive valid readings at this position. */
+if(b->sample_count==0){
+    b->sample_a=r.mm;
+    b->sample_count=1;
+    return;
+}
+
+if(b->sample_count==1){
+    b->sample_b=r.mm;
+    b->sample_count=2;
+    return;
+}
+
+/* Sort three values; the middle value is the median. */
+unsigned a=b->sample_a;
+unsigned middle=b->sample_b;
+unsigned c=r.mm;
+
+if(a>middle){unsigned t=a;a=middle;middle=t;}
+if(middle>c){unsigned t=middle;middle=c;c=t;}
+if(a>middle){unsigned t=a;a=middle;middle=t;}
+
+r.mm=middle;
+b->sample_count=0;
+
+scan_put(b,b->s.slot,r);
+++b->s.count;
         if(b->s.state==B5_COARSE) {
             if(b->s.slot<24){point(b,b->s.slot+6,now);return;}
             unsigned first=25,last=0;

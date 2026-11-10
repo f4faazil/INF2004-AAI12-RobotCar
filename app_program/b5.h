@@ -32,7 +32,8 @@ typedef struct {
 #define B5_SCAN_SLOTS 25u
 #define B5_SCAN_BYTES 41u
 /* HAL start returns false if busy/unavailable. poll returns once per attempt.
- * servo(slot) sets 30+5*slot degrees, never a raw unbounded pulse. */
+ * servo(slot) selects a calibrated position:
+ * 0 = right, 12 = forward, 24 = left; nominal sweep +/-30 degrees. */
 typedef struct {
     void (*servo)(uint8_t slot);
     bool (*start)(void);
@@ -45,6 +46,7 @@ typedef struct {
     uint8_t scan[B5_SCAN_BYTES]; /* 25 consecutive 13-bit samples; top 3 bits zero */
     uint32_t phase_ms, servo_ms, ping_ms, recovery_ms;
     unsigned waiting:1, retries:2, first:5, last:5;
+    unsigned sample_a:12, sample_b:12, sample_count:2;
 } b5_core;
 void b5_init(b5_core *b, b5_hal hw, uint32_t now);
 void b5_step(b5_core *b, const b5_feedback *f, uint32_t now);

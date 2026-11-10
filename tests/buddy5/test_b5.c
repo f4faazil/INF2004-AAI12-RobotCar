@@ -2,21 +2,61 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
-static unsigned slot;static bool pending;static unsigned mode;
-static void servo(uint8_t s){slot=s;}
+static unsigned slot;
+static bool pending;
+static unsigned mode;
+static unsigned slot_attempts;
+static unsigned slot10_attempts;
+
+static void servo(uint8_t s){
+    slot=s;
+    slot_attempts=0;
+}
 static bool start(void){assert(!pending);pending=true;return true;}
 static bool poll(uint16_t *mm,uint8_t *reason){
     if(!pending)return false;
     pending=false;
+
+    ++slot_attempts;
+    if(slot==10)++slot10_attempts;
+
     *reason=mode==2?B5_MEASURE_NO_ECHO:B5_MEASURE_OK;
     *mm=mode==0?1000:((slot>=8 && slot<=16)?200:900);
+
     if(mode==3)*mm=4100;
     if(mode==4)*mm=200;
+
+    /* Existing test: background splits the nearby region. */
+    if(mode==5 && slot==10)*mm=900;
+
+    /* Modes 6/7/8: outlier is first/second/third reading. */
+    if(mode>=6 && mode<=8 &&
+       slot==10 && slot_attempts==mode-5){
+        *mm=598;
+    }
+
+    /* Mode 9: interrupt a partial batch with one invalid reading. */
+    if(mode==9 && slot==10 && slot_attempts==2){
+        *reason=B5_MEASURE_NO_ECHO;
+        *mm=0;
+    }
+
+    /* Mode 10: every attempt at this position fails. */
+    if(mode==10 && slot==10){
+        *reason=B5_MEASURE_NO_ECHO;
+        *mm=0;
+    }
+
     return true;
 }
 static void cancel(void){pending=false;}
 static b5_feedback fb(uint32_t now){b5_feedback f={0};f.motion_valid=1;f.stopped=1;f.at_ms=now;return f;}
-static b5_core setup(uint32_t now){b5_core b;b5_init(&b,(b5_hal){servo,start,poll,cancel},now);return b;}
+static b5_core setup(uint32_t now){
+    b5_core b;
+    slot10_attempts=0;
+    b5_init(&b,(b5_hal){servo,start,poll,cancel},now);
+    return b;
+}
 static void ticks(b5_core *b,uint32_t *now,unsigned count){
     for(unsigned i=0;i<count;++i){b5_feedback f=fb(++*now);b5_step(b,&f,*now);}
 }
@@ -40,7 +80,7 @@ int main(void){
     const unsigned monitor_ticks = B5_SERVO_SETTLE_MS + 100u;
     const unsigned scan_ticks =
     (B5_SCAN_SLOTS + 2u) *
-    (B5_SERVO_SETTLE_MS + B5_PING_PERIOD_MS + 2u);
+    (B5_SERVO_SETTLE_MS + 3u * B5_PING_PERIOD_MS + 6u);
     /* Decoder rejects malformed fields before a consumer can act on them. */
     b5_status bad={0},decoded;uint8_t wire[B5_STATUS_BYTES];
     bad.front=(b5_range){.mm=4001,.valid=1};b5_encode_status(&bad,wire);
@@ -92,6 +132,56 @@ int main(void){
     mode=1;now=0;b=setup(now);ticks(&b,&now,B5_SERVO_SETTLE_MS + 1u);
     for(unsigned i=0;i<501;++i){f=fb(++now);f.stopped=0;b5_step(&b,&f,now);}
     assert(b.s.faults&B5_F_STOP_TIMEOUT);++cases;
+    /* Separate nearby regions must not become one width candidate. */
+    mode=5;
+    now=0;
+    b=setup(now);
+    ticks(&b,&now,scan_ticks);
+    assert(b.s.state==B5_READY);
+    assert(b.s.width.mm==0 && !b.s.width.valid);
+    ++cases;
+    /* Median rejects an outlier in any of the three positions. */
+for(unsigned test_mode=6;test_mode<=8;++test_mode){
+    mode=test_mode;
+    now=0;
+    b=setup(now);
+    ticks(&b,&now,scan_ticks);
+
+    b5_range q=b5_scan_get(&b,10);
+    assert(b.s.state==B5_READY);
+    assert(q.valid && q.mm==200);
+    assert(slot10_attempts==3);
+    assert(b.s.width.mm==69);
+    ++cases;
+}
+
+/* One invalid reading discards the partial batch.
+ * Sequence: valid, invalid, valid, valid, valid.
+ * Five attempts are needed before this position is stored. */
+mode=9;
+now=0;
+b=setup(now);
+ticks(&b,&now,scan_ticks);
+
+b5_range recovered=b5_scan_get(&b,10);
+assert(b.s.state==B5_READY);
+assert(recovered.valid && recovered.mm==200);
+assert(slot10_attempts==5);
+assert(b.s.width.mm==69);
+++cases;
+
+/* Repeated no echo faults without storing the failed position. */
+mode=10;
+now=0;
+b=setup(now);
+ticks(&b,&now,scan_ticks);
+
+assert(b.s.state==B5_FAULT);
+assert(b.s.request==B5_STOP);
+assert(b.s.faults & B5_F_NO_ECHO);
+assert(slot10_attempts==B5_INVALID_LIMIT);
+assert(!b5_scan_get(&b,10).valid);
+++cases;
     printf("PASS: %u test scenarios; 4001 distance codec round trips. status=%u B feedback=%u B core=%zu B\n",
            cases,B5_STATUS_BYTES,B5_FEEDBACK_BYTES,sizeof(b5_core));
 }

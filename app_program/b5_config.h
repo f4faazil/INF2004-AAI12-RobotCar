@@ -8,7 +8,7 @@
  * Defaults deliberately inhibit scans; do not mark calibrated just to bypass it.
  * Logical 30 deg = robot right, 90 = forward, 150 = robot left. */
 #define B5_SERVO_CALIBRATED 1
-#define B5_SERVO_RIGHT_US 1150u
+#define B5_SERVO_RIGHT_US 1100u
 #define B5_SERVO_CENTRE_US 1500u
 #define B5_SERVO_LEFT_US 1850u
 #define B5_SERVO_SETTLE_MS 1000u

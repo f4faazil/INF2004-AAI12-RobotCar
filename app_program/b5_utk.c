@@ -94,14 +94,16 @@ static bool poll_ping(uint16_t *mm,uint8_t *result) {
     if(capture.phase!=3){barrier();EI(saved);return false;}
     *result=capture.result;
     *mm=(uint16_t)(((uint32_t)capture.width_us*10u+29u)/58u);
+    unsigned raw_us = capture.width_us;
     capture.phase=0;
     barrier();
     EI(saved);
 
     #if APP_BUDDY5 == 3
-        tm_printf((UB *)"[b5] slot=%u result=%u mm=%u\n",
+        tm_printf((UB *)"[b5] slot=%u result=%u raw_us=%u mm=%u\n",
               (unsigned)core.s.slot,
               (unsigned)*result,
+              raw_us,
               (unsigned)*mm);
     #endif
 
@@ -187,14 +189,28 @@ static void b5_task(INT stacd,void *exinf) {
     if(er<E_OK){tm_printf((UB *)"[b5] hardware init failed: %d\n",er);tk_ext_tsk();}
     tm_printf((UB *)"[b5] mode=%d TRIG=GP16 ECHO=GP17 servo=GP12; stationary bench modes never drive motors\n",APP_BUDDY5);
 #if APP_BUDDY5 == 2
-    const unsigned positions[4]={B5_SERVO_CENTRE_US,B5_SERVO_RIGHT_US,B5_SERVO_CENTRE_US,B5_SERVO_LEFT_US};
-    for(;;)for(unsigned i=0;i<4;++i){pulse(positions[i]);tm_printf((UB *)"[b5] pulse=%u us\n",positions[i]);tk_dly_tsk(4000);}
+    const uint8_t slots[5]={0,6,12,18,24};
+
+for(;;){
+    for(unsigned i=0;i<5;++i){
+        servo(slots[i]);
+        tm_printf((UB *)"[b5] angle check: slot=%u\n",
+                  (unsigned)slots[i]);
+        tk_dly_tsk(8000);
+    }
+}
 #else
 #if APP_BUDDY5 == 3
     tm_printf((UB *)"[b5] Waiting 15 seconds before scan test\n");
     tk_dly_tsk(15000);
 #endif
     b5_init(&core,(b5_hal){servo,start_ping,poll_ping,cancel_ping},b5_now_ms());
+    #if APP_BUDDY5 == 3
+    /* TEMPORARY: start a stationary bench scan. */
+    core.s.state = B5_WAIT_STOP;
+    core.s.request = B5_STOP;
+    core.phase_ms = b5_now_ms();
+    #endif
     uint32_t last_ping=b5_now_ms()-B5_PING_PERIOD_MS,last_print=b5_now_ms();bool waiting=false;
     for(;;){
         uint32_t now=b5_now_ms();
@@ -225,13 +241,18 @@ static void b5_task(INT stacd,void *exinf) {
 #endif
         publish();
 #if APP_BUDDY5 != 4
-        if(now-last_print>=500u){
+        if(now-last_print>=500u && !core.waiting){
             last_print=now;
             tm_printf((UB *)"[b5] left=%u valid=%u right=%u valid=%u\n",
             (unsigned)core.s.left.mm,
             (unsigned)core.s.left.valid,
             (unsigned)core.s.right.mm,
             (unsigned)core.s.right.valid);
+            tm_printf((UB *)"[b5] width=%u valid=%u closest=%u valid=%u\n",
+            (unsigned)core.s.width.mm,
+            (unsigned)core.s.width.valid,
+            (unsigned)core.s.closest.mm,
+            (unsigned)core.s.closest.valid);
             if(core.s.front.valid)tm_printf((UB *)"[b5] mm=%u state=%u request=%u faults=0x%x samples=%u\n",core.s.front.mm,core.s.state,core.s.request,core.s.faults,core.s.count);
             else tm_printf((UB *)"[b5] range=INVALID state=%u faults=0x%x\n",core.s.state,core.s.faults);
         }
