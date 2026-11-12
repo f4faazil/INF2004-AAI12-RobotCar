@@ -42,7 +42,6 @@
 /* Bounded so a reader can never wedge if the writer is starved; an exhausted
  * budget returns the last copy and is visible through status_retries. */
 #define CYW43_STATUS_READ_ATTEMPTS 16
-#define CYW43_JOIN_TIMEOUT_US 30000000ULL
 #define CYW43_DHCP_TIMEOUT_US 30000000ULL
 #define CYW43_DNS_TIMEOUT_US  30000000ULL
 
@@ -552,6 +551,69 @@ static int scan_result(void *env, const cyw43_ev_scan_result_t *result)
     return 0;
 }
 
+#if TM_WIFI_JOIN
+static void publish_join_status(const T_CYW43_UTK_JOIN_POLICY *policy)
+{
+    radio_status.join_state = policy->state;
+    radio_status.join_started = policy->started;
+    radio_status.join_complete = policy->complete;
+    radio_status.join_result = policy->result;
+    radio_status.join_elapsed_ms = policy->elapsed_ms;
+    radio_status.join_attempts = policy->attempts;
+    radio_status.join_failures = policy->failures;
+    radio_status.join_successes = policy->successes;
+    radio_status.join_recoveries = policy->recoveries;
+    radio_status.link_losses = policy->link_losses;
+    radio_status.join_retry_delay_ms = policy->retry_delay_ms;
+    radio_status.join_retry_remaining_ms = policy->retry_remaining_ms;
+}
+
+static void refresh_join_link_details(void)
+{
+    (void)cyw43_wifi_get_bssid(&cyw43_state, radio_status.bssid);
+    (void)cyw43_wifi_get_rssi(&cyw43_state,
+                              (int32_t *)&radio_status.link_rssi);
+}
+
+static void issue_join_request(T_CYW43_UTK_JOIN_POLICY *policy, uint64_t now)
+{
+    int32_t result;
+
+    result = cyw43_wifi_join(&cyw43_state,
+                             sizeof(wifi_ssid) - 1, wifi_ssid,
+                             sizeof(wifi_password) - 1, wifi_password,
+                             UTK_WIFI_AUTH, NULL, CYW43_CHANNEL_NONE);
+    radio_status.join_request_result = result;
+    radio_status.link_status = cyw43_wifi_link_status(
+            &cyw43_state, CYW43_ITF_STA);
+    cyw43_utk_join_policy_request_result(policy, now, result);
+}
+
+static void start_join_attempt(T_CYW43_UTK_JOIN_POLICY *policy, uint64_t now)
+{
+    cyw43_utk_join_policy_begin(policy, now);
+    issue_join_request(policy, now);
+    publish_join_status(policy);
+}
+
+static void update_join_state(T_CYW43_UTK_JOIN_POLICY *policy)
+{
+    uint64_t now = time_us_64();
+    int32_t link = cyw43_wifi_link_status(&cyw43_state, CYW43_ITF_STA);
+    T_CYW43_UTK_JOIN_ACTION action;
+
+    radio_status.link_status = link;
+    action = cyw43_utk_join_policy_update(
+            policy, now, radio_status.link_up, link, -CYW43_ETIMEDOUT);
+    if(action == CYW43_UTK_JOIN_ACTION_START) {
+        issue_join_request(policy, now);
+    } else if(action == CYW43_UTK_JOIN_ACTION_CONNECTED) {
+        refresh_join_link_details();
+    }
+    publish_join_status(policy);
+}
+#endif
+
 void cyw43_utk_task(int32_t stacd, void *exinf)
 {
     cyw43_wifi_scan_options_t options = {0};
@@ -561,12 +623,16 @@ void cyw43_utk_task(int32_t stacd, void *exinf)
     uint32_t link_was_up;
 #endif
 #if TM_WIFI_JOIN
-    uint64_t join_started_us = 0;
+    T_CYW43_UTK_JOIN_POLICY join_policy;
 #endif
 
     (void)stacd;
     (void)exinf;
     radio_status.owner_prc = (uint32_t)CYW43_THIS_PRC();
+#if TM_WIFI_JOIN
+    cyw43_utk_join_policy_init(&join_policy, radio_status.join_result);
+    publish_join_status(&join_policy);
+#endif
 
 #if TM_WIFI_NETIF
     lwip_init();
@@ -672,50 +738,11 @@ void cyw43_utk_task(int32_t stacd, void *exinf)
             mp_memory_barrir();
             radio_status.scan_complete = 1;
 #if TM_WIFI_JOIN
-            radio_status.join_started = 1;
-            radio_status.join_complete = 0;
-            radio_status.link_up = 0;
-            radio_status.link_status = CYW43_LINK_DOWN;
-            join_started_us = time_us_64();
-            result = cyw43_wifi_join(&cyw43_state,
-                                     sizeof(wifi_ssid) - 1, wifi_ssid,
-                                     sizeof(wifi_password) - 1, wifi_password,
-                                     UTK_WIFI_AUTH, NULL,
-                                     CYW43_CHANNEL_NONE);
-            radio_status.join_request_result = result;
-            if(result != 0) {
-                radio_status.join_result = result;
-                radio_status.join_complete = 1;
-            }
+            start_join_attempt(&join_policy, time_us_64());
 #endif
         }
 #if TM_WIFI_JOIN
-        if(radio_status.join_started && !radio_status.join_complete) {
-            uint64_t now = time_us_64();
-            int32_t link = cyw43_wifi_link_status(&cyw43_state,
-                                                  CYW43_ITF_STA);
-
-            radio_status.join_elapsed_ms = (uint32_t)
-                    ((now - join_started_us) / 1000ULL);
-            radio_status.link_status = link;
-            if(radio_status.link_up) {
-                (void)cyw43_wifi_get_bssid(&cyw43_state,
-                                           radio_status.bssid);
-                (void)cyw43_wifi_get_rssi(&cyw43_state,
-                                          (int32_t *)&radio_status.link_rssi);
-                radio_status.join_result = 0;
-                mp_memory_barrir();
-                radio_status.join_complete = 1;
-            } else if(link < CYW43_LINK_DOWN) {
-                radio_status.join_result = link;
-                mp_memory_barrir();
-                radio_status.join_complete = 1;
-            } else if(now - join_started_us >= CYW43_JOIN_TIMEOUT_US) {
-                radio_status.join_result = -CYW43_ETIMEDOUT;
-                mp_memory_barrir();
-                radio_status.join_complete = 1;
-            }
-        }
+        update_join_state(&join_policy);
 #endif
         status_publish_end();
         cyw43_utk_poll_requested = 0;

@@ -387,7 +387,8 @@ $(error lwIP not found below $(PICO_SDK_PATH); initialize the pico-sdk submodule
 endif
 endif
 
-WIFI_LOCAL_SRCS := cyw43_utk.c cyw43_utk_kernel.c cyw43_utk_compat.c
+WIFI_LOCAL_SRCS := cyw43_utk.c cyw43_utk_join.c cyw43_utk_kernel.c \
+                   cyw43_utk_compat.c
 WIFI_LOCAL_OBJS := $(addprefix ./mtkernel_3/lib/libwifi/sysdepend/pico_rp2040/,$(WIFI_LOCAL_SRCS:.c=.o))
 
 CYW43_OBJS := ./mtkernel_3/cyw43/cyw43_ll.o \

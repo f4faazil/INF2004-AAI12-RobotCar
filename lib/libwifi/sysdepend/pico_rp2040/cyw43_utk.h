@@ -9,6 +9,8 @@
 
 #include <stdint.h>
 
+#include "cyw43_utk_join.h"
+
 #define CYW43_UTK_DNS_TEST_HOSTNAME "example.com"
 
 #define CYW43_UDP_RING     32
@@ -33,6 +35,14 @@ typedef struct {
     volatile int32_t link_status;
     volatile uint32_t link_up;
     volatile uint32_t join_elapsed_ms;
+    volatile uint32_t join_state;
+    volatile uint32_t join_attempts;
+    volatile uint32_t join_failures;
+    volatile uint32_t join_successes;
+    volatile uint32_t join_recoveries;
+    volatile uint32_t link_losses;
+    volatile uint32_t join_retry_delay_ms;
+    volatile uint32_t join_retry_remaining_ms;
     volatile int32_t link_rssi;
     uint8_t bssid[6];
     volatile uint32_t lwip_initialized;

@@ -295,6 +295,20 @@ LOCAL const UB *mqtt_state_name(UW state)
 }
 #endif
 
+#if TM_WIFI_JOIN
+LOCAL const UB *wifi_join_state_name(UW state)
+{
+	switch(state) {
+	case CYW43_UTK_JOIN_WAIT_SCAN: return (const UB *)"WAIT_SCAN";
+	case CYW43_UTK_JOIN_JOINING: return (const UB *)"JOINING";
+	case CYW43_UTK_JOIN_CONNECTED: return (const UB *)"CONNECTED";
+	case CYW43_UTK_JOIN_LOSS_GRACE: return (const UB *)"LOSS_GRACE";
+	case CYW43_UTK_JOIN_BACKOFF: return (const UB *)"BACKOFF";
+	default: return (const UB *)"UNKNOWN";
+	}
+}
+#endif
+
 LOCAL void wifi_status_task(INT stacd, void *exinf)
 {
 	T_CYW43_UTK_STATUS	st;
@@ -323,6 +337,20 @@ LOCAL void wifi_status_task(INT stacd, void *exinf)
 
 		if(++diag_ticks >= 5U) {
 			diag_ticks = 0;
+#if TM_WIFI_JOIN
+			tm_printf((UB *)"[net-diag] polls=%u wifi=%s attempt=%u fail=%u ok=%u recover=%u loss=%u retry=%u join_rc=%d link=%u netif=%u netlink=%u dhcp_ok=%u timeout=%u started=%u tries=%u ms=%u rc=%d gw=%u dns=%u\n",
+				  st.poll_count, wifi_join_state_name(st.join_state),
+				  st.join_attempts, st.join_failures,
+				  st.join_successes, st.join_recoveries,
+				  st.link_losses, st.join_retry_remaining_ms,
+				  st.join_result, st.link_up, st.netif_up,
+				  st.netif_link_up, st.dhcp_complete,
+				  st.dhcp_timed_out, st.dhcp_started,
+				  st.dhcp_tries,
+				  st.dhcp_elapsed_ms, st.dhcp_result,
+				  st.dhcp_gateway_available,
+				  st.dhcp_dns_available);
+#else
 			tm_printf((UB *)"[net-diag] polls=%u link=%u netif=%u netlink=%u dhcp_ok=%u timeout=%u started=%u tries=%u ms=%u rc=%d gw=%u dns=%u\n",
 				  st.poll_count, st.link_up, st.netif_up,
 				  st.netif_link_up, st.dhcp_complete,
@@ -331,6 +359,7 @@ LOCAL void wifi_status_task(INT stacd, void *exinf)
 				  st.dhcp_elapsed_ms, st.dhcp_result,
 				  st.dhcp_gateway_available,
 				  st.dhcp_dns_available);
+#endif
 #if TM_WIFI_MQTT
 			tm_printf((UB *)"[mqtt-diag] init=%u polls=%u state=%s tcp=%u last=%u tx=%u ping=%u/%u resp=%u wait=%u wr=%u/%u out=%u rc=%d/%d err=%u:%d\n",
 				  st.mqtt_initialized,
