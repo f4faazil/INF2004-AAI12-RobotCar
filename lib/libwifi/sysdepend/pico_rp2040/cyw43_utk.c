@@ -310,11 +310,12 @@ static void update_bulk_status(void)
 #if TM_WIFI_DNS
 static void copy_ip4(uint8_t dst[4], const ip4_addr_t *src);
 static uint64_t dns_started_us;
+static uint32_t dns_generation;
 
 static void dns_found(const char *name, const ip_addr_t *address, void *arg)
 {
     (void)name;
-    (void)arg;
+    if((uint32_t)(uintptr_t)arg != dns_generation) return;
     if(radio_status.dns_complete) return;
 
     radio_status.dns_elapsed_ms =
@@ -341,7 +342,8 @@ static void update_dns_status(void)
         radio_status.dns_started = 1;
         dns_started_us = now;
         result = dns_gethostbyname(CYW43_UTK_DNS_TEST_HOSTNAME, &address,
-                                   dns_found, NULL);
+                                   dns_found,
+                                   (void *)(uintptr_t)dns_generation);
         radio_status.dns_request_result = result;
         if(result == ERR_OK) {
             copy_ip4(radio_status.dns_address, ip_2_ip4(&address));
@@ -407,6 +409,53 @@ static void copy_ip4(uint8_t dst[4], const ip4_addr_t *src)
     dst[3] = ip4_addr4(src);
 }
 
+static void clear_ip4(uint8_t dst[4])
+{
+    for(unsigned int i = 0; i < 4; i++) dst[i] = 0;
+}
+
+static void handle_dhcp_link_transition(struct netif *netif, uint32_t link_up)
+{
+    if(link_up) {
+        /* netif_set_link_up() already makes lwIP reboot/discover DHCP. */
+        return;
+    }
+
+    dhcp_started_us = 0;
+    dhcp_ipv4_adopted = 0;
+    radio_status.dhcp_started = 0;
+    radio_status.dhcp_complete = 0;
+    radio_status.dhcp_timed_out = 0;
+    radio_status.dhcp_result = ERR_INPROGRESS;
+    radio_status.dhcp_elapsed_ms = 0;
+    radio_status.dhcp_tries = 0;
+    radio_status.dhcp_gateway_available = 0;
+    radio_status.dhcp_dns_available = 0;
+    clear_ip4(radio_status.dhcp_address);
+    clear_ip4(radio_status.dhcp_netmask);
+    clear_ip4(radio_status.dhcp_gateway);
+    clear_ip4(radio_status.dhcp_dns);
+
+    /* The SDK changes only the link flag. Invalidate the old lease locally;
+     * lwIP retains the DHCP offer and handles INIT-REBOOT on the next link-up. */
+    netif_set_addr(netif, IP4_ADDR_ANY4, IP4_ADDR_ANY4, IP4_ADDR_ANY4);
+    dns_setserver(0, IP_ADDR_ANY);
+    lwip_utk_ipv4_reset(netif);
+
+#if TM_WIFI_DNS
+    /* lwIP has no public DNS cancellation API. Ignore any callback retained
+     * by the resolver from before this link loss. */
+    dns_generation++;
+    dns_started_us = 0;
+    radio_status.dns_started = 0;
+    radio_status.dns_complete = 0;
+    radio_status.dns_request_result = ERR_INPROGRESS;
+    radio_status.dns_result = ERR_INPROGRESS;
+    radio_status.dns_elapsed_ms = 0;
+    clear_ip4(radio_status.dns_address);
+#endif
+}
+
 static void update_dhcp_status(void)
 {
     struct netif *netif = &cyw43_state.netif[CYW43_ITF_STA];
@@ -418,18 +467,26 @@ static void update_dhcp_status(void)
     uint64_t now = time_us_64();
     uint32_t lease_valid;
 
-    radio_status.dhcp_started = (dhcp != NULL);
-    radio_status.dhcp_tries = (dhcp != NULL) ? dhcp->tries : 0;
+    radio_status.dhcp_started =
+            (dhcp != NULL) && radio_status.netif_link_up;
+    radio_status.dhcp_tries = radio_status.dhcp_started ? dhcp->tries : 0;
 
     /* Refresh the mirror even after a lease was obtained so renewals and
      * option changes cannot leave stale status values. Gateway and DNS are
      * useful route/service information, but neither is part of lease validity. */
-    copy_ip4(radio_status.dhcp_address, address);
-    copy_ip4(radio_status.dhcp_netmask, netmask);
-    copy_ip4(radio_status.dhcp_gateway, gateway);
     lease_valid = dhcp != NULL && dhcp_supplied_address(netif)
+               && radio_status.netif_link_up
                && !ip4_addr_isany_val(*address)
                && !ip4_addr_isany_val(*netmask);
+    if(lease_valid) {
+        copy_ip4(radio_status.dhcp_address, address);
+        copy_ip4(radio_status.dhcp_netmask, netmask);
+        copy_ip4(radio_status.dhcp_gateway, gateway);
+    } else {
+        clear_ip4(radio_status.dhcp_address);
+        clear_ip4(radio_status.dhcp_netmask);
+        clear_ip4(radio_status.dhcp_gateway);
+    }
     radio_status.dhcp_gateway_available =
             lease_valid && !ip4_addr_isany_val(*gateway);
     if(lease_valid && dns != NULL) {
@@ -500,6 +557,9 @@ void cyw43_utk_task(int32_t stacd, void *exinf)
     cyw43_wifi_scan_options_t options = {0};
     int32_t result;
     bool was_scanning;
+#if TM_WIFI_NETIF
+    uint32_t link_was_up;
+#endif
 #if TM_WIFI_JOIN
     uint64_t join_started_us = 0;
 #endif
@@ -559,10 +619,16 @@ void cyw43_utk_task(int32_t stacd, void *exinf)
         if(cyw43_poll != NULL) cyw43_poll();
         status_publish_begin();
 #if TM_WIFI_NETIF
+        link_was_up = radio_status.netif_link_up;
         sys_check_timeouts();
         update_netif_status();
 #endif
 #if TM_WIFI_DHCP
+        if(link_was_up != radio_status.netif_link_up) {
+            handle_dhcp_link_transition(
+                    &cyw43_state.netif[CYW43_ITF_STA],
+                    radio_status.netif_link_up);
+        }
         update_dhcp_status();
 #endif
 #if TM_WIFI_MQTT

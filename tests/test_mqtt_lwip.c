@@ -252,8 +252,12 @@ int main(void)
     interface.link = 0;
     mqtt_lwip_poll(&interface);
     assert(abort_count == 1);        /* Link loss releases PCB */
+    interface.ip_addr.addr = 0U;     /* Owner invalidates the old DHCP lease. */
     interface.link = 1;
     clock_ms = 20300U;
+    mqtt_lwip_poll(&interface);
+    assert(connection_attempts == 1); /* No stale-address reconnect. */
+    interface.ip_addr.addr = 1U;      /* Model a fresh DHCP bind. */
     mqtt_lwip_poll(&interface);
     assert(connection_attempts == 2); /* Can reconnect */
     assert(connected_handler(callback_arg, &pcb, ERR_OK) == ERR_OK);
