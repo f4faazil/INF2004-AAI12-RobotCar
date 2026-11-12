@@ -22,10 +22,12 @@ static struct tcp_pcb pcb;
 static void *callback_arg;
 static err_t (*connected_handler)(void *, struct tcp_pcb *, err_t);
 static err_t (*receive_handler)(void *, struct tcp_pcb *, struct pbuf *, err_t);
+static err_t (*sent_handler)(void *, struct tcp_pcb *, u16_t);
 static void (*error_handler)(void *, err_t);
 static int connection_attempts;
 static int abort_count;
 static int send_count;
+static int output_count;
 static err_t mock_write_result = ERR_OK;
 static err_t mock_output_result = ERR_OK;
 static u16_t mock_tx_room = 1024U;
@@ -53,7 +55,7 @@ void tcp_recv(struct tcp_pcb *p, err_t (*cb)(void *, struct tcp_pcb *, struct pb
 void tcp_sent(struct tcp_pcb *p, err_t (*cb)(void *, struct tcp_pcb *, u16_t))
 {
     (void)p;
-    (void)cb;
+    sent_handler = cb;
 }
 void tcp_err(struct tcp_pcb *p, void (*cb)(void *, err_t))
 {
@@ -103,6 +105,7 @@ u16_t tcp_sndbuf(const struct tcp_pcb *p)
 err_t tcp_output(struct tcp_pcb *p)
 {
     assert(p == &pcb);
+    output_count++;
     return mock_output_result;
 }
 void tcp_recved(struct tcp_pcb *p, u16_t n)
@@ -145,6 +148,9 @@ int main(void)
     struct netif interface = {0};
     T_MQTT_LWIP_STATUS diagnostics;
     uint32_t write_failures_before;
+    int sends_before_output_retry;
+    void (*saved_error_handler)(void *, err_t);
+    void *saved_callback_arg;
 
     interface.ip_addr.addr = 1U;
     interface.up = 1;
@@ -228,6 +234,12 @@ int main(void)
     mqtt_lwip_get_status(&diagnostics);
     assert(diagnostics.ping_responses == 1U);
     assert(diagnostics.waiting_pingresp == 0U);
+    assert(sent_handler != NULL);
+    assert(sent_handler(callback_arg, &pcb, 2U) == ERR_OK);
+    mqtt_lwip_get_status(&diagnostics);
+    assert(diagnostics.tcp_sent_callbacks == 1U);
+    assert(diagnostics.tcp_acked_bytes == 2U);
+    assert(diagnostics.last_tcp_ack_ms == clock_ms);
 
     write_failures_before = diagnostics.tcp_write_failures;
     mock_write_result = ERR_MEM;
@@ -246,7 +258,15 @@ int main(void)
     assert(diagnostics.pings_queued == 2U);
     assert(diagnostics.tcp_output_failures == 1U);
     assert(diagnostics.last_tcp_output_result == ERR_MEM);
+    assert(diagnostics.tcp_output_pending == 1U);
+    sends_before_output_retry = send_count;
     mock_output_result = ERR_OK;
+    clock_ms = 40252U;
+    mqtt_lwip_poll(&interface);
+    assert(send_count == sends_before_output_retry);
+    mqtt_lwip_get_status(&diagnostics);
+    assert(diagnostics.tcp_output_pending == 0U);
+    assert(diagnostics.tcp_output_retries == 1U);
     simulate_recv(pingresp, sizeof pingresp);
 
     interface.link = 0;
@@ -254,7 +274,7 @@ int main(void)
     assert(abort_count == 1);        /* Link loss releases PCB */
     interface.ip_addr.addr = 0U;     /* Owner invalidates the old DHCP lease. */
     interface.link = 1;
-    clock_ms = 20300U;
+    clock_ms = 40300U;
     mqtt_lwip_poll(&interface);
     assert(connection_attempts == 1); /* No stale-address reconnect. */
     interface.ip_addr.addr = 1U;      /* Model a fresh DHCP bind. */
@@ -269,14 +289,79 @@ int main(void)
     mock_tx_room = 0U;
     mqtt_lwip_poll(&interface);
     assert(send_count == 8);            /* New diagnostic enqueued */
-    clock_ms = 21301U;                 /* Head now 1001ms old: stale */
+    clock_ms = 41301U;                 /* Head now 1001ms old: stale */
     mock_tx_room = 1024U;
     mqtt_lwip_poll(&interface);
     assert(send_count == 8);            /* Stale item NOT published */
     mqtt_lwip_poll(&interface);
     assert(send_count == 8);            /* No accidental requeue */
 
-    (void)error_handler;
-    puts("PASS: shared RTOS inbox MQTT retry/commit/stale/reconnect mock test");
+    /* The recovered session must independently schedule its keepalive. */
+    clock_ms = 60300U;
+    mqtt_lwip_poll(&interface);
+    assert(send_count == 9 && last_send[0] == 0xc0U);
+    simulate_recv(pingresp, sizeof pingresp);
+
+    /* A fatal tcp_write result closes the unusable PCB immediately. */
+    mock_write_result = ERR_CONN;
+    clock_ms = 80300U;
+    mqtt_lwip_poll(&interface);
+    assert(send_count == 9 && abort_count == 2);
+    mqtt_lwip_get_status(&diagnostics);
+    assert(diagnostics.state == MQTT_SESSION_BACKOFF);
+    assert(diagnostics.last_tcp_write_result == ERR_CONN);
+    assert(diagnostics.tcp_write_fatal_errors == 1U);
+    mock_write_result = ERR_OK;
+
+    /* Backoff reconnects, and a raw lwIP fatal callback also reconnects. */
+    clock_ms = 82300U;
+    mqtt_lwip_poll(&interface);
+    assert(connection_attempts == 3);
+    assert(connected_handler(callback_arg, &pcb, ERR_OK) == ERR_OK);
+    simulate_recv(connack_part1, sizeof connack_part1);
+    simulate_recv(connack_part2, sizeof connack_part2);
+    mqtt_lwip_poll(&interface);
+    assert(send_count == 11); /* CONNECT plus session-3 online marker. */
+    saved_error_handler = error_handler;
+    saved_callback_arg = callback_arg;
+    assert(saved_error_handler != NULL);
+    saved_error_handler(saved_callback_arg, ERR_RST);
+    mqtt_lwip_get_status(&diagnostics);
+    assert(diagnostics.state == MQTT_SESSION_BACKOFF);
+    assert(diagnostics.tcp_errors == 1U);
+    assert(diagnostics.last_tcp_error == ERR_RST);
+
+    clock_ms = 84300U;
+    mqtt_lwip_poll(&interface);
+    assert(connection_attempts == 4);
+    assert(connected_handler(callback_arg, &pcb, ERR_OK) == ERR_OK);
+    simulate_recv(connack_part1, sizeof connack_part1);
+    simulate_recv(connack_part2, sizeof connack_part2);
+    mqtt_lwip_poll(&interface);
+    assert(send_count == 13); /* CONNECT plus session-4 online marker. */
+
+    /* A persistently failed tcp_output retries the queued bytes, never calls
+     * tcp_write again, then abandons the connection after a bounded timeout. */
+    mock_output_result = ERR_MEM;
+    clock_ms = 104300U;
+    mqtt_lwip_poll(&interface);
+    assert(send_count == 14 && last_send[0] == 0xc0U);
+    sends_before_output_retry = send_count;
+    clock_ms = 109299U;
+    mqtt_lwip_poll(&interface);
+    assert(send_count == sends_before_output_retry);
+    clock_ms = 109300U;
+    mqtt_lwip_poll(&interface);
+    assert(send_count == sends_before_output_retry && abort_count == 3);
+    mqtt_lwip_get_status(&diagnostics);
+    assert(diagnostics.state == MQTT_SESSION_BACKOFF);
+    assert(diagnostics.tcp_output_timeouts == 1U);
+    assert(diagnostics.tcp_output_pending == 0U);
+    assert(diagnostics.connects_started == 4U);
+    assert(diagnostics.sessions_online == 4U);
+    assert(diagnostics.session_failures == 3U);
+    assert(output_count > send_count);
+
+    puts("PASS: MQTT lwIP backpressure/output/error/reconnect mock tests");
     return 0;
 }

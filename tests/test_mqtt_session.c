@@ -12,7 +12,7 @@ typedef struct {
     unsigned sends;
     unsigned closes;
     bool allow_connect;
-    bool allow_write;
+    mqtt_session_write_result_t write_result;
     uint8_t last[MQTT_SESSION_TX_BYTES];
     size_t last_len;
 } mock_t;
@@ -23,14 +23,17 @@ static bool mock_connect(void *ptr)
     m->starts++;
     return m->allow_connect;
 }
-static bool mock_write(void *ptr, const uint8_t *packet, size_t length)
+static mqtt_session_write_result_t mock_write(void *ptr,
+                                              const uint8_t *packet,
+                                              size_t length)
 {
     mock_t *m = ptr;
     m->sends++;
-    if (!m->allow_write || length > sizeof m->last) return false;
+    if (m->write_result != MQTT_SESSION_WRITE_ACCEPTED ||
+        length > sizeof m->last) return m->write_result;
     memcpy(m->last, packet, length);
     m->last_len = length;
-    return true;
+    return MQTT_SESSION_WRITE_ACCEPTED;
 }
 static void mock_close(void *ptr)
 {
@@ -47,7 +50,7 @@ static void setup(mqtt_session_t *s, mock_t *m)
     const mqtt_session_transport_t t = ops();
     memset(m, 0, sizeof *m);
     m->allow_connect = true;
-    m->allow_write = true;
+    m->write_result = MQTT_SESSION_WRITE_ACCEPTED;
     assert(mqtt_session_init(s, &t, m, "aai12-picow"));
 }
 static void connected(mqtt_session_t *s)
@@ -150,11 +153,11 @@ static void test_publish_binary_and_failure(void)
     const uint8_t payload[] = {0x00U, 0xffU, 0x17U};
     setup(&s, &m);
     online(&s);
-    m.allow_write = false;
+    m.write_result = MQTT_SESSION_WRITE_RETRY;
     assert(!mqtt_session_publish(&s, "aai12/car/status", payload,
                                  sizeof payload, 250U));
     assert(s.publishes == 0U);
-    m.allow_write = true;
+    m.write_result = MQTT_SESSION_WRITE_ACCEPTED;
     assert(mqtt_session_publish(&s, "aai12/car/status", payload,
                                 sizeof payload, 300U));
     assert(s.publishes == 1U && m.last[0] == 0x30U);
@@ -191,6 +194,73 @@ static void test_ping_timeout(void)
     assert(s.state == MQTT_SESSION_ONLINE);
     mqtt_session_poll(&s, 25120U);
     assert(s.state == MQTT_SESSION_BACKOFF && m.closes == 1U);
+}
+
+static void test_ping_backpressure_recovers(void)
+{
+    mqtt_session_t s;
+    mock_t m;
+
+    setup(&s, &m);
+    online(&s);
+    m.write_result = MQTT_SESSION_WRITE_RETRY;
+    mqtt_session_poll(&s, 20120U);
+    assert(s.state == MQTT_SESSION_ONLINE);
+    assert(s.waiting_pingqueue && !s.waiting_pingresp);
+    assert(s.ping_attempts == 1U && s.pings == 0U);
+
+    m.write_result = MQTT_SESSION_WRITE_ACCEPTED;
+    mqtt_session_poll(&s, 21120U);
+    assert(s.state == MQTT_SESSION_ONLINE);
+    assert(!s.waiting_pingqueue && s.waiting_pingresp);
+    assert(s.ping_attempts == 2U && s.pings == 1U);
+    assert(s.ping_queue_timeouts == 0U && m.closes == 0U);
+}
+
+static void test_ping_backpressure_timeout(void)
+{
+    mqtt_session_t s;
+    mock_t m;
+
+    setup(&s, &m);
+    online(&s);
+    m.write_result = MQTT_SESSION_WRITE_RETRY;
+    mqtt_session_poll(&s, 20120U);
+    mqtt_session_poll(&s, 25119U);
+    assert(s.state == MQTT_SESSION_ONLINE && s.waiting_pingqueue);
+    mqtt_session_poll(&s, 25120U);
+    assert(s.state == MQTT_SESSION_BACKOFF);
+    assert(!s.waiting_pingqueue && !s.waiting_pingresp);
+    assert(s.ping_queue_timeouts == 1U && m.closes == 1U);
+}
+
+static void test_fatal_write_reconnect_keepalive(void)
+{
+    mqtt_session_t s;
+    mock_t m;
+    const uint8_t ack[] = {0x20U, 0x02U, 0x00U, 0x00U};
+
+    setup(&s, &m);
+    online(&s);
+    m.write_result = MQTT_SESSION_WRITE_FATAL;
+    mqtt_session_poll(&s, 20120U);
+    assert(s.state == MQTT_SESSION_BACKOFF && m.closes == 1U);
+    assert(s.pings == 0U && !s.waiting_pingqueue);
+
+    m.write_result = MQTT_SESSION_WRITE_ACCEPTED;
+    mqtt_session_poll(&s, 22119U);
+    assert(s.state == MQTT_SESSION_BACKOFF);
+    mqtt_session_poll(&s, 22120U);
+    assert(s.state == MQTT_SESSION_CONNECTING && s.connects_started == 2U);
+    mqtt_session_tcp_connected(&s, 22130U);
+    mqtt_session_tcp_received(&s, ack, sizeof ack, 22140U);
+    assert(s.state == MQTT_SESSION_ONLINE && s.sessions_online == 2U);
+
+    mqtt_session_poll(&s, 42129U);
+    assert(s.pings == 0U);
+    mqtt_session_poll(&s, 42130U);
+    assert(s.state == MQTT_SESSION_ONLINE && s.waiting_pingresp);
+    assert(s.pings == 1U && m.last[0] == 0xc0U);
 }
 static void test_lost_error_no_double_close(void)
 {
@@ -253,10 +323,13 @@ int main(void)
     test_publish_binary_and_failure();
     test_ping_and_reply();
     test_ping_timeout();
+    test_ping_backpressure_recovers();
+    test_ping_backpressure_timeout();
+    test_fatal_write_reconnect_keepalive();
     test_lost_error_no_double_close();
     test_network_drop_closes();
     test_connect_unavailable();
     test_wraparound();
-    puts("PASS: 13 MQTT session state-machine tests");
+    puts("PASS: 16 MQTT session state-machine tests");
     return 0;
 }

@@ -6,6 +6,7 @@
 static void reset_stream(mqtt_session_t *session)
 {
     mqtt_stream_reset(&session->rx);
+    session->waiting_pingqueue = false;
     session->waiting_pingresp = false;
 }
 
@@ -69,6 +70,7 @@ void mqtt_session_set_network(mqtt_session_t *session, bool up,
 void mqtt_session_poll(mqtt_session_t *session, uint32_t now_ms)
 {
     size_t packet_length;
+    mqtt_session_write_result_t write_result;
 
     if (session == NULL) return;
     session->poll_calls++;
@@ -117,29 +119,44 @@ void mqtt_session_poll(mqtt_session_t *session, uint32_t now_ms)
     if ((uint32_t)(now_ms - session->last_tx_ms) <
         MQTT_SESSION_PING_IDLE_MS) return;
 
+    if (!session->waiting_pingqueue) {
+        session->waiting_pingqueue = true;
+        session->ping_queue_since_ms = now_ms;
+    }
     session->ping_attempts++;
     packet_length = mqtt_wire_pingreq(session->tx, sizeof(session->tx));
-    if (packet_length != 0U &&
-        session->transport.write_tcp(session->context, session->tx,
-                                     packet_length)) {
+    write_result = packet_length == 0U ? MQTT_SESSION_WRITE_FATAL :
+            session->transport.write_tcp(session->context, session->tx,
+                                         packet_length);
+    if (write_result == MQTT_SESSION_WRITE_ACCEPTED) {
         session->last_tx_ms = now_ms;
         session->ping_since_ms = now_ms;
+        session->waiting_pingqueue = false;
         session->waiting_pingresp = true;
         session->pings++;
+    } else if (write_result == MQTT_SESSION_WRITE_FATAL) {
+        enter_backoff(session, now_ms, true);
+    } else if ((uint32_t)(now_ms - session->ping_queue_since_ms) >=
+               MQTT_SESSION_PING_QUEUE_TIMEOUT_MS) {
+        session->ping_queue_timeouts++;
+        enter_backoff(session, now_ms, true);
     }
-    /* If lwIP has no send room, retry the ping next poll. */
+    /* Temporary backpressure is retried, but never beyond keepalive safety. */
 }
 
 void mqtt_session_tcp_connected(mqtt_session_t *session, uint32_t now_ms)
 {
     size_t length;
+    mqtt_session_write_result_t write_result;
 
     if (session == NULL || session->state != MQTT_SESSION_CONNECTING) return;
     length = mqtt_wire_connect(session->tx, sizeof(session->tx),
                                session->client_id,
                                MQTT_SESSION_KEEPALIVE_SEC);
-    if (length == 0U ||
-        !session->transport.write_tcp(session->context, session->tx, length)) {
+    write_result = length == 0U ? MQTT_SESSION_WRITE_FATAL :
+            session->transport.write_tcp(session->context, session->tx,
+                                         length);
+    if (write_result != MQTT_SESSION_WRITE_ACCEPTED) {
         enter_backoff(session, now_ms, true);
         return;
     }
@@ -223,15 +240,22 @@ bool mqtt_session_publish(mqtt_session_t *session, const char *topic,
                           uint32_t now_ms)
 {
     size_t length;
+    mqtt_session_write_result_t write_result;
 
     if (session == NULL || session->state != MQTT_SESSION_ONLINE ||
-        session->waiting_pingresp) return false;
+        session->waiting_pingqueue || session->waiting_pingresp) return false;
     length = mqtt_wire_publish_qos0(session->tx, sizeof(session->tx),
                                     topic, payload, bytes);
-    if (length == 0U ||
-        !session->transport.write_tcp(session->context, session->tx, length)) {
+    if (length == 0U) {
         return false;
     }
+    write_result = session->transport.write_tcp(session->context, session->tx,
+                                                length);
+    if (write_result == MQTT_SESSION_WRITE_FATAL) {
+        enter_backoff(session, now_ms, true);
+        return false;
+    }
+    if (write_result != MQTT_SESSION_WRITE_ACCEPTED) return false;
     session->last_tx_ms = now_ms;
     session->publishes++;
     return true;

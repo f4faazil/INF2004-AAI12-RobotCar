@@ -30,6 +30,7 @@
 #include "mqtt_test_config.h"
 
 #define AAI12_MQTT_RX_CHUNK 64U
+#define AAI12_MQTT_OUTPUT_TIMEOUT_MS 5000U
 
 static const uint8_t qualification_message[] = "AAI12_PICO_W_ONLINE";
 static const char robot_telemetry_topic[] = "aai12/robot/telemetry";
@@ -41,6 +42,8 @@ typedef struct {
     bool initialized;
     bool in_callback;
     bool aborted_in_callback;
+    bool output_pending;
+    uint32_t output_pending_since_ms;
     uint32_t published_online_session;
     /* TCP may have accepted publication while the queue mutex is busy.
      * Complete the pending commit before trying another publish. */
@@ -67,6 +70,7 @@ static void close_tcp(void *context)
     mqtt_lwip_adapter_t *a = (mqtt_lwip_adapter_t *)context;
     struct tcp_pcb *pcb = a->pcb;
 
+    a->output_pending = false;
     if (pcb == NULL) return;
     a->pcb = NULL;
     tcp_detach(pcb);
@@ -74,28 +78,50 @@ static void close_tcp(void *context)
     if (a->in_callback) a->aborted_in_callback = true;
 }
 
-static bool write_tcp(void *context, const uint8_t *bytes, size_t size)
+static bool write_retryable(err_t result)
+{
+    return result == ERR_MEM || result == ERR_BUF ||
+           result == ERR_WOULDBLOCK;
+}
+
+static mqtt_session_write_result_t write_tcp(void *context,
+                                             const uint8_t *bytes,
+                                             size_t size)
 {
     mqtt_lwip_adapter_t *a = (mqtt_lwip_adapter_t *)context;
     err_t result;
 
     diagnostics.tcp_write_calls++;
-    if (a->pcb == NULL || bytes == NULL || size == 0U || size > 65535U) {
+    if (a->pcb == NULL) {
+        diagnostics.last_tcp_write_result = ERR_CONN;
+        diagnostics.tcp_write_failures++;
+        diagnostics.tcp_write_fatal_errors++;
+        return MQTT_SESSION_WRITE_FATAL;
+    }
+    if (bytes == NULL || size == 0U || size > 65535U) {
         diagnostics.last_tcp_write_result = ERR_ARG;
         diagnostics.tcp_write_failures++;
-        return false;
+        diagnostics.tcp_write_fatal_errors++;
+        return MQTT_SESSION_WRITE_FATAL;
+    }
+    if (a->output_pending) {
+        diagnostics.last_tcp_write_result = ERR_WOULDBLOCK;
+        diagnostics.tcp_write_failures++;
+        return MQTT_SESSION_WRITE_RETRY;
     }
     if (size > (size_t)tcp_sndbuf(a->pcb)) {
         diagnostics.last_tcp_write_result = ERR_MEM;
         diagnostics.tcp_write_failures++;
-        return false;
+        return MQTT_SESSION_WRITE_RETRY;
     }
 
     result = tcp_write(a->pcb, bytes, (u16_t)size, TCP_WRITE_FLAG_COPY);
     diagnostics.last_tcp_write_result = result;
     if (result != ERR_OK) {
         diagnostics.tcp_write_failures++;
-        return false;
+        if (write_retryable(result)) return MQTT_SESSION_WRITE_RETRY;
+        diagnostics.tcp_write_fatal_errors++;
+        return MQTT_SESSION_WRITE_FATAL;
     }
 
     /* tcp_write(...COPY) has already queued all bytes. Once queued, even if
@@ -103,8 +129,36 @@ static bool write_tcp(void *context, const uint8_t *bytes, size_t size)
      * cause MQTT to enqueue a duplicate packet next time. lwIP retries. */
     result = tcp_output(a->pcb);
     diagnostics.last_tcp_output_result = result;
-    if (result != ERR_OK) diagnostics.tcp_output_failures++;
-    return true;
+    if (result != ERR_OK) {
+        diagnostics.tcp_output_failures++;
+        a->output_pending = true;
+        a->output_pending_since_ms = sys_now();
+    }
+    return MQTT_SESSION_WRITE_ACCEPTED;
+}
+
+static bool service_pending_output(mqtt_lwip_adapter_t *a, uint32_t now)
+{
+    err_t result;
+
+    if (!a->output_pending || a->pcb == NULL) return true;
+    diagnostics.tcp_output_retries++;
+    result = tcp_output(a->pcb);
+    diagnostics.last_tcp_output_result = result;
+    if (result == ERR_OK) {
+        a->output_pending = false;
+        return true;
+    }
+    diagnostics.tcp_output_failures++;
+    if ((uint32_t)(now - a->output_pending_since_ms) <
+        AAI12_MQTT_OUTPUT_TIMEOUT_MS) {
+        return true;
+    }
+
+    diagnostics.tcp_output_timeouts++;
+    close_tcp(a);
+    mqtt_session_tcp_lost(&a->session, now);
+    return false;
 }
 
 /* On error lwIP ALREADY freed the PCB. Never tcp_close/tcp_abort here. */
@@ -114,14 +168,18 @@ static void on_error(void *context, err_t err)
     diagnostics.tcp_errors++;
     diagnostics.last_tcp_error = err;
     a->pcb = NULL;
+    a->output_pending = false;
     mqtt_session_tcp_lost(&a->session, sys_now());
 }
 
 static err_t on_sent(void *context, struct tcp_pcb *pcb, u16_t len)
 {
-    (void)context;
-    (void)pcb;
-    (void)len;
+    mqtt_lwip_adapter_t *a = (mqtt_lwip_adapter_t *)context;
+
+    if (pcb != a->pcb) return ERR_OK;
+    diagnostics.tcp_sent_callbacks++;
+    diagnostics.tcp_acked_bytes += len;
+    diagnostics.last_tcp_ack_ms = sys_now();
     return ERR_OK;
 }
 
@@ -162,6 +220,7 @@ static err_t on_received(void *context, struct tcp_pcb *pcb,
     if (p == NULL) {             /* Peer sent FIN; lwIP still owns pcb. */
         err_t close_result;
         a->pcb = NULL;
+        a->output_pending = false;
         tcp_detach(pcb);
         close_result = tcp_close(pcb);
         if (close_result != ERR_OK) tcp_abort(pcb);
@@ -254,6 +313,7 @@ void mqtt_lwip_poll(struct netif *netif)
     if (ready != adapter.session.network_up) {
         mqtt_session_set_network(&adapter.session, ready, now);
     }
+    if (!service_pending_output(&adapter, now)) return;
     mqtt_session_poll(&adapter.session, now);
 
     /* Smoke test ONLY: one QoS 0 message after each CONNACK (not real car
@@ -303,12 +363,18 @@ void mqtt_lwip_get_status(T_MQTT_LWIP_STATUS *status)
     diagnostics.initialized = adapter.initialized;
     diagnostics.state = (uint32_t)adapter.session.state;
     diagnostics.tcp_active = adapter.session.tcp_active;
+    diagnostics.connects_started = adapter.session.connects_started;
+    diagnostics.sessions_online = adapter.session.sessions_online;
+    diagnostics.session_failures = adapter.session.failures;
     diagnostics.poll_calls = adapter.session.poll_calls;
     diagnostics.last_poll_ms = adapter.session.last_poll_ms;
     diagnostics.last_tx_ms = adapter.session.last_tx_ms;
     diagnostics.ping_attempts = adapter.session.ping_attempts;
     diagnostics.pings_queued = adapter.session.pings;
     diagnostics.ping_responses = adapter.session.ping_responses;
+    diagnostics.waiting_pingqueue = adapter.session.waiting_pingqueue;
+    diagnostics.ping_queue_timeouts = adapter.session.ping_queue_timeouts;
     diagnostics.waiting_pingresp = adapter.session.waiting_pingresp;
+    diagnostics.tcp_output_pending = adapter.output_pending;
     *status = diagnostics;
 }

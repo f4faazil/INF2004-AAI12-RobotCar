@@ -14,11 +14,12 @@
  * this directly. The transport callbacks must NOT block:
  *
  *   start_tcp: 1 if async TCP connect was started; 0 if it could not start.
- *   write_tcp: 1 only if the entire byte buffer was COPIED/queued; 0 on
- *              temporary backpressure or failure. No partial writes.
+ *   write_tcp: ACCEPTED only if the entire byte buffer was COPIED/queued;
+ *              RETRY for temporary backpressure; FATAL if this TCP session
+ *              can no longer accept data. No partial writes.
  *   close_tcp: close/abort the active connection and release its ownership.
  *
- * The future lwIP adapter must call these callbacks on the radio-owner task.
+ * The lwIP adapter must call these callbacks on the radio-owner task.
  * The adapter must NOT call close_tcp for a PCB already freed by lwIP err_cb.
  */
 #define MQTT_SESSION_TX_BYTES          256U
@@ -28,6 +29,7 @@
 #define MQTT_SESSION_ACK_TIMEOUT_MS   5000U
 #define MQTT_SESSION_KEEPALIVE_SEC      30U
 #define MQTT_SESSION_PING_IDLE_MS    20000U
+#define MQTT_SESSION_PING_QUEUE_TIMEOUT_MS 5000U
 #define MQTT_SESSION_PING_TIMEOUT_MS  5000U
 
 typedef enum {
@@ -38,9 +40,17 @@ typedef enum {
     MQTT_SESSION_BACKOFF
 } mqtt_session_state_t;
 
+typedef enum {
+    MQTT_SESSION_WRITE_RETRY = 0,
+    MQTT_SESSION_WRITE_ACCEPTED,
+    MQTT_SESSION_WRITE_FATAL
+} mqtt_session_write_result_t;
+
 typedef struct {
     bool (*start_tcp)(void *context);
-    bool (*write_tcp)(void *context, const uint8_t *packet, size_t bytes);
+    mqtt_session_write_result_t (*write_tcp)(void *context,
+                                             const uint8_t *packet,
+                                             size_t bytes);
     void (*close_tcp)(void *context);
 } mqtt_session_transport_t;
 
@@ -63,8 +73,11 @@ typedef struct {
     uint32_t ping_attempts;
     uint32_t pings;
     uint32_t ping_responses;
+    uint32_t ping_queue_since_ms;
+    uint32_t ping_queue_timeouts;
     bool network_up;
     bool tcp_active;
+    bool waiting_pingqueue;
     bool waiting_pingresp;
 } mqtt_session_t;
 
