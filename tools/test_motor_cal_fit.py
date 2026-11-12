@@ -64,8 +64,8 @@ class FitTests(unittest.TestCase):
         self.assertIn(".pwm_offset_left = 100", text)
         self.assertIn(".pwm_offset_right = 110", text)
         # slowest stable speed: left 235 / 11.863 = 19.8, right 200 / 11.767 = 17.0
-        # -> 19.8 x 1.5 = 29.7 mm/s
-        self.assertIn(".creep_speed_mm_s = 30", text)
+        # -> 19.8 x 2.0 = 39.6 mm/s
+        self.assertIn(".creep_speed_mm_s = 40", text)
 
     def test_rows_where_the_wheel_stood_still_are_excluded(self):
         # off=300 puts the lowest rows at zero speed: they must not drag the line

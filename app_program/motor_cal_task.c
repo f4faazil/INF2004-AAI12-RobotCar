@@ -29,8 +29,8 @@
 #include "robot_config.h"
 
 #define CAL_BUTTON_SAMPLES      (6U)        /* 6 x 5 ms = 30 ms debounce */
-#define CAL_CLOSED_LEASE_MS     (8000U)
-#define CAL_CLOSED_TIMEOUT_MS   (12000U)
+#define CAL_CLOSED_LEASE_MS     (15000U)    /* 1000 mm at 120 mm/s needs about 9 s */
+#define CAL_CLOSED_TIMEOUT_MS   (16000U)
 #define CAL_CLOSED_REPORT_MS    (250U)
 #define CAL_MOVE_MM             (1000)
 #define CAL_MOVE_SPEED_MM_S     (120)
@@ -211,12 +211,12 @@ static void submit_closed_loop(motion_t *motion, cal_step_t step, uint16_t id, u
     (void)motion_submit(motion, &cmd, now_ms);
 }
 
-static void print_closed_result(cal_step_t step, const motion_status_t *st, bool timed_out,
+static void print_closed_result(cal_step_t step, int32_t dist_mm, bool timed_out,
                                 uint32_t elapsed_ms, int32_t dl, int32_t dr)
 {
     CAL_PRINT((UB *)"[cal] %s t=%dms enc L=%d R=%d dist=%dmm\n",
               timed_out ? (UB *)"CLOSED-TIMEOUT" : (UB *)"CLOSED-DONE",
-              (INT)elapsed_ms, (INT)dl, (INT)dr, (INT)st->distance_mm);
+              (INT)elapsed_ms, (INT)dl, (INT)dr, (INT)dist_mm);
     if (step == CAL_STEP_MOVE) {
         CAL_PRINT((UB *)"[cal] measure the real distance D (mm): new counts_per_rev = %d x %d / D\n",
                   (INT)ROBOT_MOTION_CFG.counts_per_rev, (INT)CAL_MOVE_MM);
@@ -241,6 +241,7 @@ static void motor_cal_task(INT stacd, void *exinf)
     uint32_t closed_start_ms = 0U;
     uint32_t last_report_ms = 0U;
     int32_t closed_base_l = 0;
+    int32_t closed_base_mm = 0;
     int32_t closed_base_r = 0;
 
     (void)stacd;
@@ -286,6 +287,7 @@ static void motor_cal_task(INT stacd, void *exinf)
                     closed_start_ms = now;
                     last_report_ms = now;
                     closed_base_l = left.count;
+                    closed_base_mm = motion_status(&motion)->distance_mm;
                     closed_base_r = right.count;
                     submit_closed_loop(&motion, step, cmd_id, now);
                     mode = CAL_MODE_CLOSED;
@@ -327,7 +329,7 @@ static void motor_cal_task(INT stacd, void *exinf)
                 last_report_ms = now;
                 CAL_PRINT((UB *)"[cal] RUN t=%d v=%d/%d mm/s dist=%dmm pwm=%d/%d\n",
                           (INT)elapsed, (INT)st->left_mm_s, (INT)st->right_mm_s,
-                          (INT)st->distance_mm, (INT)pwm_l, (INT)pwm_r);
+                          (INT)(st->distance_mm - closed_base_mm), (INT)pwm_l, (INT)pwm_r);
             }
             if (stop_edge || done || timed_out) {
                 motion_cmd_t stop;
@@ -346,7 +348,7 @@ static void motor_cal_task(INT stacd, void *exinf)
                 if (stop_edge) {
                     CAL_PRINT((UB *)"[cal] STOPPED by button\n");
                 } else {
-                    print_closed_result(step, st, timed_out, elapsed,
+                    print_closed_result(step, st->distance_mm - closed_base_mm, timed_out, elapsed,
                                         left.count - closed_base_l,
                                         right.count - closed_base_r);
                 }

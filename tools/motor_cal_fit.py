@@ -29,7 +29,7 @@ import sys
 DEFAULT_COUNTS_PER_MM = (11.863, 11.767)    # left, right
 MIN_FIT_SPEED_MM_S = 20.0                   # slower rows are dominated by stiction
 FF_DEN = 100                                # feed-forward is written as num / 100
-CREEP_MARGIN = 1.5                          # creep speed = slowest stable speed x this
+CREEP_MARGIN = 2.0                          # creep speed = slowest stable speed x this
 
 LINE = re.compile(r"\[cal\]\s+(\w+)\s*(.*)")
 FIELD = re.compile(r"(\w+)=(-?\d+)")
@@ -40,6 +40,7 @@ def parse(text):
     dead = {"L": {}, "R": {}}
     speed = []
     wheel = None
+    last_moving = {"L": 0, "R": 0}
     # A log replayed from the car's RAM sits between LOG-BEGIN and LOG-END; if the
     # file also holds a live copy of the same lines, use only the last replay.
     begin = text.rfind("LOG-BEGIN")
@@ -60,9 +61,15 @@ def parse(text):
                 wheel = None
             continue
         f = {k: int(v) for k, v in FIELD.findall(rest)}
-        if kind in ("BREAKAWAY", "SUSTAIN") and wheel and "pwm" in f:
+        key = "l" if wheel == "L" else "r"
+        if kind == "SAMPLE" and wheel and abs(f.get(key, 0)) > 0:
+            last_moving[wheel] = abs(f[key])
+        elif kind in ("BREAKAWAY", "SUSTAIN") and wheel and "pwm" in f:
             dead[wheel][kind.lower()] = f["pwm"]
-            dead[wheel][kind.lower() + "_cps"] = abs(f.get("l" if wheel == "L" else "r", 0))
+            cps = abs(f.get(key, 0))
+            if kind == "SUSTAIN" and cps == 0:
+                cps = last_moving[wheel]    # the line is logged at the stall: use the last turning sample
+            dead[wheel][kind.lower() + "_cps"] = cps
         elif kind == "SPEED" and {"pwm", "l", "r"} <= f.keys():
             speed.append((f["pwm"], f["l"], f["r"]))
     return dead, speed

@@ -54,4 +54,4 @@ When finished, set `ROBOT_MOTOR_CAL` back to `0`.
 | `pwm_offset_left/right` | PWM added in the direction of motion before the feed-forward term: the dead zone of the motor |
 | `ff_num/ff_den`, `ff_right_num/ff_right_den` | PWM per-mille per mm/s, per wheel (`ff_right_den` = 0 shares the left wheel's value) |
 | `pwm_limit` | cap on the PWM of both wheels, per-mille (0 = no cap) |
-| `creep_speed_mm_s` | slowest speed the Motion module uses to finish a move: keep it above the slowest speed the wheels hold (the fit script suggests 1.5 times it) |
+| `creep_speed_mm_s` | slowest speed the Motion module uses to finish a move: keep it above the slowest speed the wheels hold (the fit script suggests 2 times it) |
