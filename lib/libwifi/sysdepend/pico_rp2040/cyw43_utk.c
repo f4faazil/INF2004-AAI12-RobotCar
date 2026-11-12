@@ -82,7 +82,7 @@ static T_CYW43_UTK_STATUS radio_status = {
     .link_status = CYW43_LINK_DOWN,
     .link_rssi = -32768,
     .dhcp_enabled = TM_WIFI_DHCP,
-    .dhcp_result = -5,
+    .dhcp_result = ERR_INPROGRESS,
     .dns_enabled = TM_WIFI_DNS,
     .dns_request_result = -5,
     .dns_result = -3,
@@ -412,46 +412,66 @@ static void update_dhcp_status(void)
     struct netif *netif = &cyw43_state.netif[CYW43_ITF_STA];
     struct dhcp *dhcp = netif_dhcp_data(netif);
     const ip_addr_t *dns = dns_getserver(0);
+    const ip4_addr_t *address = netif_ip4_addr(netif);
+    const ip4_addr_t *netmask = netif_ip4_netmask(netif);
+    const ip4_addr_t *gateway = netif_ip4_gw(netif);
     uint64_t now = time_us_64();
+    uint32_t lease_valid;
 
     radio_status.dhcp_started = (dhcp != NULL);
-    if(dhcp != NULL) radio_status.dhcp_tries = dhcp->tries;
+    radio_status.dhcp_tries = (dhcp != NULL) ? dhcp->tries : 0;
+
+    /* Refresh the mirror even after a lease was obtained so renewals and
+     * option changes cannot leave stale status values. Gateway and DNS are
+     * useful route/service information, but neither is part of lease validity. */
+    copy_ip4(radio_status.dhcp_address, address);
+    copy_ip4(radio_status.dhcp_netmask, netmask);
+    copy_ip4(radio_status.dhcp_gateway, gateway);
+    lease_valid = dhcp != NULL && dhcp_supplied_address(netif)
+               && !ip4_addr_isany_val(*address)
+               && !ip4_addr_isany_val(*netmask);
+    radio_status.dhcp_gateway_available =
+            lease_valid && !ip4_addr_isany_val(*gateway);
+    if(lease_valid && dns != NULL) {
+        copy_ip4(radio_status.dhcp_dns, ip_2_ip4(dns));
+        radio_status.dhcp_dns_available =
+                !ip4_addr_isany_val(*ip_2_ip4(dns));
+    } else {
+        for(unsigned int i = 0; i < sizeof(radio_status.dhcp_dns); i++) {
+            radio_status.dhcp_dns[i] = 0;
+        }
+        radio_status.dhcp_dns_available = 0;
+    }
 
     if(radio_status.netif_link_up && dhcp_started_us == 0) {
         dhcp_started_us = now;
     }
-    if(dhcp_started_us != 0 && !radio_status.dhcp_complete) {
+    if(dhcp_started_us != 0) {
         radio_status.dhcp_elapsed_ms =
                 (uint32_t)((now - dhcp_started_us) / 1000ULL);
     }
 
-    if(!radio_status.dhcp_complete && dhcp_supplied_address(netif)) {
-        copy_ip4(radio_status.dhcp_address, netif_ip4_addr(netif));
-        copy_ip4(radio_status.dhcp_netmask, netif_ip4_netmask(netif));
-        copy_ip4(radio_status.dhcp_gateway, netif_ip4_gw(netif));
-        if(dns != NULL) {
-            copy_ip4(radio_status.dhcp_dns, ip_2_ip4(dns));
-        }
-        if(!ip4_addr_isany_val(*netif_ip4_addr(netif))
-           && !ip4_addr_isany_val(*netif_ip4_netmask(netif))
-           && !ip4_addr_isany_val(*netif_ip4_gw(netif))
-           && dns != NULL && !ip4_addr_isany_val(*ip_2_ip4(dns))) {
-            if(!dhcp_ipv4_adopted) {
-                radio_status.ipv4_config_result =
-                        lwip_utk_ipv4_adopt_netif(netif);
+    if(lease_valid) {
+        /* The optional ping qualification still needs a route. Do not let
+         * that additional requirement hold DHCP success hostage. */
+        if(radio_status.dhcp_gateway_available && !dhcp_ipv4_adopted) {
+            radio_status.ipv4_config_result =
+                    lwip_utk_ipv4_adopt_netif(netif);
+            if(radio_status.ipv4_config_result == ERR_OK) {
                 dhcp_ipv4_adopted = 1;
             }
-            radio_status.dhcp_result = ERR_OK;
-            mp_memory_barrir();
-            radio_status.dhcp_complete = 1;
         }
-    }
-
-    if(!radio_status.dhcp_complete && dhcp_started_us != 0
-       && now - dhcp_started_us >= CYW43_DHCP_TIMEOUT_US) {
-        radio_status.dhcp_result = ERR_TIMEOUT;
+        radio_status.dhcp_result = ERR_OK;
+        radio_status.dhcp_timed_out = 0;
         mp_memory_barrir();
         radio_status.dhcp_complete = 1;
+    } else {
+        radio_status.dhcp_complete = 0;
+        radio_status.dhcp_timed_out =
+                dhcp_started_us != 0
+             && now - dhcp_started_us >= CYW43_DHCP_TIMEOUT_US;
+        radio_status.dhcp_result = radio_status.dhcp_timed_out
+                                 ? ERR_TIMEOUT : ERR_INPROGRESS;
     }
 }
 #endif

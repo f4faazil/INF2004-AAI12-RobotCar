@@ -47,9 +47,12 @@ typedef struct {
     volatile uint32_t dhcp_enabled;
     volatile uint32_t dhcp_started;
     volatile uint32_t dhcp_complete;
+    volatile uint32_t dhcp_timed_out;
     volatile int32_t dhcp_result;
     volatile uint32_t dhcp_elapsed_ms;
     volatile uint32_t dhcp_tries;
+    volatile uint32_t dhcp_gateway_available;
+    volatile uint32_t dhcp_dns_available;
     uint8_t dhcp_address[4];
     uint8_t dhcp_netmask[4];
     uint8_t dhcp_gateway[4];

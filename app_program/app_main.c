@@ -323,11 +323,14 @@ LOCAL void wifi_status_task(INT stacd, void *exinf)
 
 		if(++diag_ticks >= 5U) {
 			diag_ticks = 0;
-			tm_printf((UB *)"[net-diag] polls=%u link=%u netif=%u netlink=%u dhcp=%u started=%u tries=%u ms=%u rc=%d\n",
+			tm_printf((UB *)"[net-diag] polls=%u link=%u netif=%u netlink=%u dhcp_ok=%u timeout=%u started=%u tries=%u ms=%u rc=%d gw=%u dns=%u\n",
 				  st.poll_count, st.link_up, st.netif_up,
 				  st.netif_link_up, st.dhcp_complete,
-				  st.dhcp_started, st.dhcp_tries,
-				  st.dhcp_elapsed_ms, st.dhcp_result);
+				  st.dhcp_timed_out, st.dhcp_started,
+				  st.dhcp_tries,
+				  st.dhcp_elapsed_ms, st.dhcp_result,
+				  st.dhcp_gateway_available,
+				  st.dhcp_dns_available);
 #if TM_WIFI_MQTT
 			tm_printf((UB *)"[mqtt-diag] init=%u polls=%u state=%s tcp=%u last=%u tx=%u ping=%u/%u resp=%u wait=%u wr=%u/%u out=%u rc=%d/%d err=%u:%d\n",
 				  st.mqtt_initialized,
@@ -375,8 +378,9 @@ LOCAL void wifi_status_task(INT stacd, void *exinf)
 				fmt_ipv4(ip, st.dhcp_address);
 				fmt_ipv4(gw, st.dhcp_gateway);
 				fmt_ipv4(dns, st.dhcp_dns);
-				tm_printf((UB *)"[wifi] ip=%s  gw=%s  dns=%s\n",
-					  ip, gw, dns);
+				tm_printf((UB *)"[wifi] ip=%s  gw=%s (%u)  dns=%s (%u)\n",
+					  ip, gw, st.dhcp_gateway_available,
+					  dns, st.dhcp_dns_available);
 			}
 		}
 
