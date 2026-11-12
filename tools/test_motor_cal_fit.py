@@ -76,6 +76,13 @@ class FitTests(unittest.TestCase):
         self.assertAlmostEqual(res[1], 1.7, delta=0.05)
         self.assertTrue(all(p[1] >= 350 for p in pts))
 
+    def test_replayed_ram_log_is_not_counted_twice(self):
+        live = make_log(100, 1.7, 110, 1.9)
+        text = live + "\n[cal] LOG-BEGIN\n" + live + "\n[cal] LOG-END bytes=1\n"
+        dead, speed = fit.parse(text)
+        self.assertEqual(len(speed), 7)
+        self.assertEqual(dead["L"]["breakaway"], 230)
+
     def test_missing_speed_table_is_reported(self):
         path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_cal_test_log2.txt")
         try:

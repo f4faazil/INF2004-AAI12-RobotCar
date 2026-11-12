@@ -40,6 +40,12 @@ def parse(text):
     dead = {"L": {}, "R": {}}
     speed = []
     wheel = None
+    # A log replayed from the car's RAM sits between LOG-BEGIN and LOG-END; if the
+    # file also holds a live copy of the same lines, use only the last replay.
+    begin = text.rfind("LOG-BEGIN")
+    if begin >= 0:
+        end = text.find("LOG-END", begin)
+        text = text[begin:end] if end >= 0 else text[begin:]
     for raw in text.splitlines():
         m = LINE.search(raw)
         if not m:

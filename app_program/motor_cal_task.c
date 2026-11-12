@@ -59,6 +59,74 @@ typedef struct {
 
 static ID g_cal_flag;
 
+/*
+ * Every "[cal]" line is printed on the console AND kept in RAM, so the car can
+ * run untethered.  Plug the USB cable in afterwards and press STOP while the
+ * car is idle: the whole log is replayed between LOG-BEGIN and LOG-END.
+ */
+#define CAL_LOG_BYTES   (16384U)
+#define CAL_LINE_BYTES  (160U)
+#define CAL_DUMP_CHUNK  (48U)
+#define CAL_DUMP_GAP_MS (12U)       /* paces the dump below the 4 KB console ring */
+
+static UB    g_line[CAL_LINE_BYTES];
+static UB    g_log[CAL_LOG_BYTES];
+static UINT  g_log_len;
+static bool  g_log_full;
+
+#define CAL_PRINT(...)                                              \
+    do {                                                            \
+        (void)tm_sprintf(g_line, __VA_ARGS__);                      \
+        cal_emit();                                                 \
+    } while (0)
+
+static void cal_emit(void)
+{
+    UINT n = 0U;
+
+    while ((n < (CAL_LINE_BYTES - 1U)) && (g_line[n] != 0U)) {
+        n++;
+    }
+    (void)tm_putstring(g_line);
+    if ((g_log_len + n) <= (CAL_LOG_BYTES - 1U)) {
+        UINT i;
+
+        for (i = 0U; i < n; i++) {
+            g_log[g_log_len + i] = g_line[i];
+        }
+        g_log_len += n;
+    } else {
+        g_log_full = true;
+    }
+}
+
+/* Replay the stored log on the console, paced so the console ring cannot overflow. */
+static void cal_dump_log(void)
+{
+    UB chunk[CAL_DUMP_CHUNK + 1U];
+    UINT pos = 0U;
+
+    (void)tm_putstring((UB *)"\n[cal] LOG-BEGIN\n");
+    while (pos < g_log_len) {
+        UINT n = g_log_len - pos;
+        UINT i;
+
+        if (n > CAL_DUMP_CHUNK) {
+            n = CAL_DUMP_CHUNK;
+        }
+        for (i = 0U; i < n; i++) {
+            chunk[i] = g_log[pos + i];
+        }
+        chunk[n] = 0U;
+        (void)tm_putstring(chunk);
+        pos += n;
+        (void)tk_dly_tsk(CAL_DUMP_GAP_MS);
+    }
+    (void)tm_sprintf(g_line, (UB *)"[cal] LOG-END bytes=%d%s\n", (INT)g_log_len,
+                     g_log_full ? (UB *)" LOG-FULL-some-lines-lost" : (UB *)"");
+    (void)tm_putstring(g_line);
+}
+
 static const char *const STEP_TEXT[CAL_STEP_COUNT] = {
     "1 dead zone, LEFT wheel (car pivots on the right wheel)",
     "2 dead zone, RIGHT wheel (car pivots on the left wheel)",
@@ -88,33 +156,33 @@ static bool button_pressed(button_t *b, bool raw)
 
 static void print_prompt(cal_step_t step)
 {
-    tm_printf((UB *)"[cal] ready: press START to run test %s\n", (UB *)STEP_TEXT[step]);
+    CAL_PRINT((UB *)"[cal] ready: press START to run test %s\n", (UB *)STEP_TEXT[step]);
 }
 
 static void print_event(const mcal_event_t *ev)
 {
     switch (ev->kind) {
     case MCAL_EV_SAMPLE:
-        tm_printf((UB *)"[cal] SAMPLE pwm=%d l=%d r=%d\n",
+        CAL_PRINT((UB *)"[cal] SAMPLE pwm=%d l=%d r=%d\n",
                   (INT)ev->pwm, (INT)ev->left_cps, (INT)ev->right_cps);
         break;
     case MCAL_EV_BREAKAWAY:
-        tm_printf((UB *)"[cal] BREAKAWAY pwm=%d l=%d r=%d\n",
+        CAL_PRINT((UB *)"[cal] BREAKAWAY pwm=%d l=%d r=%d\n",
                   (INT)ev->pwm, (INT)ev->left_cps, (INT)ev->right_cps);
         break;
     case MCAL_EV_SUSTAIN:
-        tm_printf((UB *)"[cal] SUSTAIN pwm=%d l=%d r=%d\n",
+        CAL_PRINT((UB *)"[cal] SUSTAIN pwm=%d l=%d r=%d\n",
                   (INT)ev->pwm, (INT)ev->left_cps, (INT)ev->right_cps);
         break;
     case MCAL_EV_SPEED:
-        tm_printf((UB *)"[cal] SPEED pwm=%d l=%d r=%d\n",
+        CAL_PRINT((UB *)"[cal] SPEED pwm=%d l=%d r=%d\n",
                   (INT)ev->pwm, (INT)ev->left_cps, (INT)ev->right_cps);
         break;
     case MCAL_EV_DONE:
-        tm_printf((UB *)"[cal] DONE\n");
+        CAL_PRINT((UB *)"[cal] DONE\n");
         break;
     case MCAL_EV_ABORT:
-        tm_printf((UB *)"[cal] ABORT pwm=%d (no breakaway up to the limit, or travelled too far)\n",
+        CAL_PRINT((UB *)"[cal] ABORT pwm=%d (no breakaway up to the limit, or travelled too far)\n",
                   (INT)ev->pwm);
         break;
     default:
@@ -146,14 +214,14 @@ static void submit_closed_loop(motion_t *motion, cal_step_t step, uint16_t id, u
 static void print_closed_result(cal_step_t step, const motion_status_t *st, bool timed_out,
                                 uint32_t elapsed_ms, int32_t dl, int32_t dr)
 {
-    tm_printf((UB *)"[cal] %s t=%dms enc L=%d R=%d dist=%dmm\n",
+    CAL_PRINT((UB *)"[cal] %s t=%dms enc L=%d R=%d dist=%dmm\n",
               timed_out ? (UB *)"CLOSED-TIMEOUT" : (UB *)"CLOSED-DONE",
               (INT)elapsed_ms, (INT)dl, (INT)dr, (INT)st->distance_mm);
     if (step == CAL_STEP_MOVE) {
-        tm_printf((UB *)"[cal] measure the real distance D (mm): new counts_per_rev = %d x %d / D\n",
+        CAL_PRINT((UB *)"[cal] measure the real distance D (mm): new counts_per_rev = %d x %d / D\n",
                   (INT)ROBOT_MOTION_CFG.counts_per_rev, (INT)CAL_MOVE_MM);
     } else {
-        tm_printf((UB *)"[cal] measure the real angle A (deg): new track_width = %d x 360 / A\n",
+        CAL_PRINT((UB *)"[cal] measure the real angle A (deg): new track_width = %d x 360 / A\n",
                   (INT)ROBOT_MOTION_CFG.track_width_mm);
     }
 }
@@ -179,7 +247,8 @@ static void motor_cal_task(INT stacd, void *exinf)
     (void)exinf;
     motion_init(&motion, &ROBOT_MOTION_CFG);
     hal_motor_set(0, 0);
-    tm_printf((UB *)"[cal] motor calibration. START = run next test, STOP = abort the running test.\n");
+    CAL_PRINT((UB *)"[cal] motor calibration. START = run next test, STOP = abort the running test, "
+                    "STOP while idle = replay the stored log.\n");
     print_prompt(step);
 
     for (;;) {
@@ -201,8 +270,10 @@ static void motor_cal_task(INT stacd, void *exinf)
 
         switch (mode) {
         case CAL_MODE_WAIT:
-            if (start_edge) {
-                tm_printf((UB *)"[cal] RUN %s\n", (UB *)STEP_TEXT[step]);
+            if (stop_edge) {
+                cal_dump_log();
+            } else if (start_edge) {
+                CAL_PRINT((UB *)"[cal] RUN %s\n", (UB *)STEP_TEXT[step]);
                 if (step <= CAL_STEP_SPEED) {
                     const mcal_test_t test = (step == CAL_STEP_DZ_LEFT) ? MCAL_DEADZONE_LEFT :
                                              (step == CAL_STEP_DZ_RIGHT) ? MCAL_DEADZONE_RIGHT :
@@ -231,7 +302,7 @@ static void motor_cal_task(INT stacd, void *exinf)
             if (stop_edge) {
                 pwm_l = 0;
                 pwm_r = 0;
-                tm_printf((UB *)"[cal] STOPPED by button\n");
+                CAL_PRINT((UB *)"[cal] STOPPED by button\n");
                 mode = CAL_MODE_WAIT;
                 print_prompt(step);
             } else if (!running) {
@@ -254,7 +325,7 @@ static void motor_cal_task(INT stacd, void *exinf)
             pwm_r = mo.right_pwm;
             if ((now - last_report_ms) >= CAL_CLOSED_REPORT_MS) {
                 last_report_ms = now;
-                tm_printf((UB *)"[cal] RUN t=%d v=%d/%d mm/s dist=%dmm pwm=%d/%d\n",
+                CAL_PRINT((UB *)"[cal] RUN t=%d v=%d/%d mm/s dist=%dmm pwm=%d/%d\n",
                           (INT)elapsed, (INT)st->left_mm_s, (INT)st->right_mm_s,
                           (INT)st->distance_mm, (INT)pwm_l, (INT)pwm_r);
             }
@@ -273,7 +344,7 @@ static void motor_cal_task(INT stacd, void *exinf)
                 pwm_l = 0;
                 pwm_r = 0;
                 if (stop_edge) {
-                    tm_printf((UB *)"[cal] STOPPED by button\n");
+                    CAL_PRINT((UB *)"[cal] STOPPED by button\n");
                 } else {
                     print_closed_result(step, st, timed_out, elapsed,
                                         left.count - closed_base_l,
@@ -283,7 +354,7 @@ static void motor_cal_task(INT stacd, void *exinf)
                 step = (cal_step_t)((uint32_t)step + 1U);
                 if (step >= CAL_STEP_COUNT) {
                     step = CAL_STEP_DZ_LEFT;
-                    tm_printf((UB *)"[cal] all tests done: copy the log into tools/motor_cal_fit.py\n");
+                    CAL_PRINT((UB *)"[cal] all tests done: copy the log into tools/motor_cal_fit.py\n");
                 }
                 print_prompt(step);
             }
