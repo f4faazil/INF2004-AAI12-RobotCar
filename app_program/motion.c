@@ -353,17 +353,20 @@ static bool compute_targets(motion_t *m, int32_t left, int32_t right,
 }
 
 static int32_t wheel_pwm(pid_ctrl_t *pid, int32_t target, int32_t measured,
+                         int32_t ff_num, int32_t ff_den, int32_t offset,
                          const motion_config_t *cfg, uint32_t dt_ms)
 {
+    const int32_t limit = (cfg->pwm_limit > 0) ? (int32_t)cfg->pwm_limit : MOTION_PWM_MAX;
     int32_t pwm;
 
     if (target == 0) {
         pid_reset(pid);
         return 0;
     }
-    pwm = (target * cfg->ff_num) / cfg->ff_den;
+    pwm = (target * ff_num) / ff_den;
+    pwm += (target > 0) ? offset : -offset;
     pwm += pid_update(pid, target, measured, dt_ms);
-    return clamp32(pwm, -MOTION_PWM_MAX, MOTION_PWM_MAX);
+    return clamp32(pwm, -limit, limit);
 }
 
 /* ---- the control step ------------------------------------------------ */
@@ -417,8 +420,15 @@ void motion_step(motion_t *m,
     }
 
     if (m->active && (dt_ms != 0U)) {
-        pwm_left = wheel_pwm(&m->pid_left, target_left, m->speed_left, &m->cfg, dt_ms);
-        pwm_right = wheel_pwm(&m->pid_right, target_right, m->speed_right, &m->cfg, dt_ms);
+        const bool own_ff = (m->cfg.ff_right_den != 0);
+
+        pwm_left = wheel_pwm(&m->pid_left, target_left, m->speed_left,
+                             m->cfg.ff_num, m->cfg.ff_den, m->cfg.pwm_offset_left,
+                             &m->cfg, dt_ms);
+        pwm_right = wheel_pwm(&m->pid_right, target_right, m->speed_right,
+                              own_ff ? m->cfg.ff_right_num : m->cfg.ff_num,
+                              own_ff ? m->cfg.ff_right_den : m->cfg.ff_den,
+                              m->cfg.pwm_offset_right, &m->cfg, dt_ms);
     }
     out->left_pwm = (int16_t)pwm_left;
     out->right_pwm = (int16_t)pwm_right;

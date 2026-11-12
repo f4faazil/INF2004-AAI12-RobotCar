@@ -12,11 +12,16 @@
 
 #if ROBOT_FIRMWARE
 
+#include "motor_cal_task.h"
 #include "robot_tasks.h"
 
 EXPORT INT usermain(void)
 {
+#if ROBOT_MOTOR_CAL
+    ER err = motor_cal_start_task();
+#else
     ER err = robot_start();
+#endif
 
     if (err < E_OK) {
         tm_printf((UB *)"[robot] start-up failed, er=%d\n", err);

@@ -25,6 +25,14 @@
  */
 #define ROBOT_FIRMWARE          (1)
 
+/*
+ * 1 = build the motor calibration application (motor_cal_task.c) instead of the
+ * robot: one task, driven by the START button, that measures the dead zone and
+ * speed curve of each motor and checks distance and turn angle.  Needs
+ * ROBOT_FIRMWARE 1 and the USB console.  Set back to 0 for the mission.
+ */
+#define ROBOT_MOTOR_CAL         (0)
+
 /* Print a one-line status once a second on the console. */
 #define ROBOT_DIAG_PRINT        (1)
 

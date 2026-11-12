@@ -98,6 +98,20 @@ typedef struct {
     uint16_t stopped_confirm_ms;
     uint16_t encoder_fault_ms;      /* PWM applied but no counts for this long */
     uint16_t encoder_fault_pwm;
+
+    /*
+     * Per-wheel drive model, from the motor calibration (tools/motor_cal_fit.py).
+     * Each wheel's open-loop PWM is  offset + speed x ff_num / ff_den  in the
+     * direction of the target; the speed PID trims the rest.  The offset covers
+     * the start-up PWM (dead zone) of the motor.  The right wheel uses ff_num /
+     * ff_den above when ff_right_den is 0.  pwm_limit caps the PWM of both
+     * wheels (per-mille; 0 = MOTION_PWM_MAX).
+     */
+    int32_t  ff_right_num;
+    int32_t  ff_right_den;          /* 0 = same feed-forward as the left wheel */
+    int16_t  pwm_offset_left;       /* per-mille, 0 = none */
+    int16_t  pwm_offset_right;
+    int16_t  pwm_limit;
 } motion_config_t;
 
 typedef struct {

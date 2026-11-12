@@ -40,18 +40,25 @@ const uint8_t ROBOT_BARCODE_MAP_LEN = (uint8_t)(sizeof(ROBOT_BARCODE_MAP) /
  *   Kp 0.0025 duty/RPM = 0.74 per-mille per mm/s -> 188/256
  *   Ki 0.0060 duty/(RPM s) = 1.76 per-mille per (mm/s s) -> 451/256
  *   feed-forward 0.20 (left) and 0.23 (right) of full duty at 119 mm/s:
- *   the mean, 1.8 per-mille per mm/s (9/5), is used for both wheels until
- *   per-wheel feed-forward is added.
+ *   1.68 and 1.93 per-mille per mm/s.  These are interim values: they assume
+ *   the PWM-to-speed line passes through zero.  Run the motor calibration
+ *   (ROBOT_MOTOR_CAL, docs/MOTOR_CALIBRATION.md) and paste in the fitted
+ *   feed-forward and the dead-zone offsets it prints.
  */
 const motion_config_t ROBOT_MOTION_CFG = {
     .counts_per_rev = 2413U,            /* fitted: mean of 2422 (left) and 2403 (right) */
     .wheel_diameter_mm = 65U,           /* nominal: recheck the fitted tyre */
-    .track_width_mm = 150U,             /* PLACEHOLDER: measure tyre contact patch to patch */
+    .track_width_mm = 150U,             /* PLACEHOLDER: measure, then confirm with the turn test */
     .kp = 188,
     .ki = 451,
     .kd = 0,
-    .ff_num = 9,
-    .ff_den = 5,
+    .ff_num = 168,                      /* left: 1.68 per-mille per mm/s */
+    .ff_den = 100,
+    .ff_right_num = 193,                /* right: 1.93 */
+    .ff_right_den = 100,
+    .pwm_offset_left = 0,               /* dead zone: measure (test 1/2), 0 until then */
+    .pwm_offset_right = 0,
+    .pwm_limit = 500,                   /* the standalone test capped PWM at 50 % */
     .balance_mm_s_per_mm = 2,
     .default_lease_ms = 50U,            /* Tribunal: 50 ms command lease */
     .max_speed_mm_s = 300U,
