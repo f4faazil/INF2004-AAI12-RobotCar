@@ -28,19 +28,30 @@ const uint8_t ROBOT_BARCODE_MAP_LEN = (uint8_t)(sizeof(ROBOT_BARCODE_MAP) /
                                                 sizeof(ROBOT_BARCODE_MAP[0]));
 
 /*
- * Motion.  PLACEHOLDER: wheel diameter, track width and counts per revolution
- * must be measured (roll the car 1 m and count; spin a wheel 10 turns and
- * count), and the PID gains tuned from a speed-step response.
+ * Motion.  Calibrated on the car with the standalone motor test (three 100 cm
+ * rolls: left 118.63 counts/cm, right 117.67 counts/cm).  counts_per_rev is
+ * fitted so that counts_per_rev / (pi x 65 mm) matches the mean of the two
+ * wheels (11.77 counts/mm): the per-wheel revolution counts (2583 / 2552) are
+ * older single-turn estimates and do not reconcile with a 65 mm tyre, so they
+ * are NOT used here.  Still to measure: the real tyre diameter (calipers), the
+ * track width, and the PWM dead zone of each wheel.
+ *
+ * Gains converted from the standalone test (35 RPM = 119 mm/s at D = 65 mm):
+ *   Kp 0.0025 duty/RPM = 0.74 per-mille per mm/s -> 188/256
+ *   Ki 0.0060 duty/(RPM s) = 1.76 per-mille per (mm/s s) -> 451/256
+ *   feed-forward 0.20 (left) and 0.23 (right) of full duty at 119 mm/s:
+ *   the mean, 1.8 per-mille per mm/s (9/5), is used for both wheels until
+ *   per-wheel feed-forward is added.
  */
 const motion_config_t ROBOT_MOTION_CFG = {
-    .counts_per_rev = 1440U,            /* PLACEHOLDER: as counted (4x) per wheel turn */
-    .wheel_diameter_mm = 65U,           /* PLACEHOLDER */
-    .track_width_mm = 150U,             /* PLACEHOLDER: wheel contact point to contact point */
-    .kp = PID_GAIN_ONE,                 /* PLACEHOLDER: 1.0 PWM per-mille per mm/s of error */
-    .ki = 2 * PID_GAIN_ONE,
+    .counts_per_rev = 2413U,            /* fitted: mean of 2422 (left) and 2403 (right) */
+    .wheel_diameter_mm = 65U,           /* nominal: recheck the fitted tyre */
+    .track_width_mm = 150U,             /* PLACEHOLDER: measure tyre contact patch to patch */
+    .kp = 188,
+    .ki = 451,
     .kd = 0,
-    .ff_num = 5,                        /* PLACEHOLDER: PWM = speed x 2.5 (about 400 mm/s at full) */
-    .ff_den = 2,
+    .ff_num = 9,
+    .ff_den = 5,
     .balance_mm_s_per_mm = 2,
     .default_lease_ms = 50U,            /* Tribunal: 50 ms command lease */
     .max_speed_mm_s = 300U,
