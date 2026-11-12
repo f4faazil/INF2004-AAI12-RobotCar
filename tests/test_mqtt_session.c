@@ -173,10 +173,12 @@ static void test_ping_and_reply(void)
     assert(!s.waiting_pingresp);
     mqtt_session_poll(&s, 20120U);
     assert(s.waiting_pingresp && m.last_len == 2U && m.last[0] == 0xc0U);
+    assert(s.ping_attempts == 1U && s.pings == 1U);
     mqtt_session_tcp_received(&s, pingresp, 1U, 20121U);
     assert(s.waiting_pingresp);
     mqtt_session_tcp_received(&s, pingresp + 1U, 1U, 20122U);
     assert(!s.waiting_pingresp && s.state == MQTT_SESSION_ONLINE);
+    assert(s.ping_responses == 1U);
 }
 static void test_ping_timeout(void)
 {

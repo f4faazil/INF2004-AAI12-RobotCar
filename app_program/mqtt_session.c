@@ -70,7 +70,10 @@ void mqtt_session_poll(mqtt_session_t *session, uint32_t now_ms)
 {
     size_t packet_length;
 
-    if (session == NULL || !session->network_up) return;
+    if (session == NULL) return;
+    session->poll_calls++;
+    session->last_poll_ms = now_ms;
+    if (!session->network_up) return;
 
     if (session->state == MQTT_SESSION_BACKOFF) {
         if ((uint32_t)(now_ms - session->state_since_ms) <
@@ -114,6 +117,7 @@ void mqtt_session_poll(mqtt_session_t *session, uint32_t now_ms)
     if ((uint32_t)(now_ms - session->last_tx_ms) <
         MQTT_SESSION_PING_IDLE_MS) return;
 
+    session->ping_attempts++;
     packet_length = mqtt_wire_pingreq(session->tx, sizeof(session->tx));
     if (packet_length != 0U &&
         session->transport.write_tcp(session->context, session->tx,
@@ -173,6 +177,7 @@ static bool received_packet(mqtt_session_t *session,
         if (!session->waiting_pingresp ||
             !mqtt_wire_is_pingresp(packet, length)) return false;
         session->waiting_pingresp = false;
+        session->ping_responses++;
         return true;
     }
     return false;

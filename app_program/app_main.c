@@ -281,6 +281,20 @@ LOCAL void fmt_ipv4(UB *dst, const UB *a)
 	tm_sprintf(dst, (UB *)"%u.%u.%u.%u", a[0], a[1], a[2], a[3]);
 }
 
+#if TM_WIFI_MQTT
+LOCAL const UB *mqtt_state_name(UW state)
+{
+	switch(state) {
+	case 0: return (const UB *)"WAIT_NET";
+	case 1: return (const UB *)"TCP_CONNECT";
+	case 2: return (const UB *)"WAIT_ACK";
+	case 3: return (const UB *)"ONLINE";
+	case 4: return (const UB *)"BACKOFF";
+	default: return (const UB *)"UNKNOWN";
+	}
+}
+#endif
+
 LOCAL void wifi_status_task(INT stacd, void *exinf)
 {
 	T_CYW43_UTK_STATUS	st;
@@ -304,17 +318,37 @@ LOCAL void wifi_status_task(INT stacd, void *exinf)
 	}
 	tk_dly_tsk(700);		/* let the monitor print its banner first */
 
+	while(1) {
+		cyw43_utk_get_status(&st);
 
-        while(1) {
-                cyw43_utk_get_status(&st);
-
-                if(++diag_ticks >= 5U) {
-                        diag_ticks = 0;
-                        tm_printf((UB *)"[net-diag] polls=%u link=%u netif=%u netlink=%u dhcp=%u\n",
-                                  st.poll_count, st.link_up, st.netif_up,
-                                  st.netif_link_up, st.dhcp_complete);
-                }
-
+		if(++diag_ticks >= 5U) {
+			diag_ticks = 0;
+			tm_printf((UB *)"[net-diag] polls=%u link=%u netif=%u netlink=%u dhcp=%u started=%u tries=%u ms=%u rc=%d\n",
+				  st.poll_count, st.link_up, st.netif_up,
+				  st.netif_link_up, st.dhcp_complete,
+				  st.dhcp_started, st.dhcp_tries,
+				  st.dhcp_elapsed_ms, st.dhcp_result);
+#if TM_WIFI_MQTT
+			tm_printf((UB *)"[mqtt-diag] init=%u polls=%u state=%s tcp=%u last=%u tx=%u ping=%u/%u resp=%u wait=%u wr=%u/%u out=%u rc=%d/%d err=%u:%d\n",
+				  st.mqtt_initialized,
+				  st.mqtt_poll_calls,
+				  mqtt_state_name(st.mqtt_state),
+				  st.mqtt_tcp_active,
+				  st.mqtt_last_poll_ms,
+				  st.mqtt_last_tx_ms,
+				  st.mqtt_pings_queued,
+				  st.mqtt_ping_attempts,
+				  st.mqtt_ping_responses,
+				  st.mqtt_waiting_pingresp,
+				  st.mqtt_tcp_write_failures,
+				  st.mqtt_tcp_write_calls,
+				  st.mqtt_tcp_output_failures,
+				  st.mqtt_last_tcp_write_result,
+				  st.mqtt_last_tcp_output_result,
+				  st.mqtt_tcp_errors,
+				  st.mqtt_last_tcp_error);
+#endif
+		}
 
 		/* Link transitions, printed once each rather than every tick. */
 		if(st.link_up != last_link) {

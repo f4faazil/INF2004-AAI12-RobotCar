@@ -58,7 +58,11 @@ typedef struct {
     uint32_t sessions_online;
     uint32_t failures;
     uint32_t publishes;
+    uint32_t poll_calls;
+    uint32_t last_poll_ms;
+    uint32_t ping_attempts;
     uint32_t pings;
+    uint32_t ping_responses;
     bool network_up;
     bool tcp_active;
     bool waiting_pingresp;

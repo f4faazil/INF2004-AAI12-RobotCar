@@ -140,6 +140,32 @@ static void update_netif_status(void)
 }
 #endif
 
+#if TM_WIFI_MQTT
+static void update_mqtt_status(void)
+{
+    T_MQTT_LWIP_STATUS status;
+
+    mqtt_lwip_get_status(&status);
+    radio_status.mqtt_initialized = status.initialized;
+    radio_status.mqtt_state = status.state;
+    radio_status.mqtt_tcp_active = status.tcp_active;
+    radio_status.mqtt_poll_calls = status.poll_calls;
+    radio_status.mqtt_last_poll_ms = status.last_poll_ms;
+    radio_status.mqtt_last_tx_ms = status.last_tx_ms;
+    radio_status.mqtt_ping_attempts = status.ping_attempts;
+    radio_status.mqtt_pings_queued = status.pings_queued;
+    radio_status.mqtt_ping_responses = status.ping_responses;
+    radio_status.mqtt_waiting_pingresp = status.waiting_pingresp;
+    radio_status.mqtt_tcp_write_calls = status.tcp_write_calls;
+    radio_status.mqtt_tcp_write_failures = status.tcp_write_failures;
+    radio_status.mqtt_tcp_output_failures = status.tcp_output_failures;
+    radio_status.mqtt_last_tcp_write_result = status.last_tcp_write_result;
+    radio_status.mqtt_last_tcp_output_result = status.last_tcp_output_result;
+    radio_status.mqtt_tcp_errors = status.tcp_errors;
+    radio_status.mqtt_last_tcp_error = status.last_tcp_error;
+}
+#endif
+
 #if TM_WIFI_UDP
 /* The mirror in cyw43_utk.h duplicates the ring geometry, because that header
    is included by code that cannot see the lwIP headers.  Catch any drift here
@@ -521,6 +547,7 @@ void cyw43_utk_task(int32_t stacd, void *exinf)
 #endif
 #if TM_WIFI_MQTT
         mqtt_lwip_poll(&cyw43_state.netif[CYW43_ITF_STA]);
+        update_mqtt_status();
 #endif
 #if TM_WIFI_DNS
         update_dns_status();

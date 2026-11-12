@@ -48,6 +48,7 @@ typedef struct {
 } mqtt_lwip_adapter_t;
 
 static mqtt_lwip_adapter_t adapter;
+static T_MQTT_LWIP_STATUS diagnostics;
 
 static void tcp_detach(struct tcp_pcb *pcb)
 {
@@ -78,16 +79,31 @@ static bool write_tcp(void *context, const uint8_t *bytes, size_t size)
     mqtt_lwip_adapter_t *a = (mqtt_lwip_adapter_t *)context;
     err_t result;
 
-    if (a->pcb == NULL || bytes == NULL || size == 0U || size > 65535U ||
-        size > (size_t)tcp_sndbuf(a->pcb)) return false;
+    diagnostics.tcp_write_calls++;
+    if (a->pcb == NULL || bytes == NULL || size == 0U || size > 65535U) {
+        diagnostics.last_tcp_write_result = ERR_ARG;
+        diagnostics.tcp_write_failures++;
+        return false;
+    }
+    if (size > (size_t)tcp_sndbuf(a->pcb)) {
+        diagnostics.last_tcp_write_result = ERR_MEM;
+        diagnostics.tcp_write_failures++;
+        return false;
+    }
 
     result = tcp_write(a->pcb, bytes, (u16_t)size, TCP_WRITE_FLAG_COPY);
-    if (result != ERR_OK) return false;
+    diagnostics.last_tcp_write_result = result;
+    if (result != ERR_OK) {
+        diagnostics.tcp_write_failures++;
+        return false;
+    }
 
     /* tcp_write(...COPY) has already queued all bytes. Once queued, even if
      * tcp_output is temporarily unable to transmit, returning false would
      * cause MQTT to enqueue a duplicate packet next time. lwIP retries. */
-    (void)tcp_output(a->pcb);
+    result = tcp_output(a->pcb);
+    diagnostics.last_tcp_output_result = result;
+    if (result != ERR_OK) diagnostics.tcp_output_failures++;
     return true;
 }
 
@@ -95,7 +111,8 @@ static bool write_tcp(void *context, const uint8_t *bytes, size_t size)
 static void on_error(void *context, err_t err)
 {
     mqtt_lwip_adapter_t *a = (mqtt_lwip_adapter_t *)context;
-    (void)err;
+    diagnostics.tcp_errors++;
+    diagnostics.last_tcp_error = err;
     a->pcb = NULL;
     mqtt_session_tcp_lost(&a->session, sys_now());
 }
@@ -277,4 +294,21 @@ void mqtt_lwip_poll(struct netif *netif)
             }
         }
     }
+}
+
+void mqtt_lwip_get_status(T_MQTT_LWIP_STATUS *status)
+{
+    if (status == NULL) return;
+
+    diagnostics.initialized = adapter.initialized;
+    diagnostics.state = (uint32_t)adapter.session.state;
+    diagnostics.tcp_active = adapter.session.tcp_active;
+    diagnostics.poll_calls = adapter.session.poll_calls;
+    diagnostics.last_poll_ms = adapter.session.last_poll_ms;
+    diagnostics.last_tx_ms = adapter.session.last_tx_ms;
+    diagnostics.ping_attempts = adapter.session.ping_attempts;
+    diagnostics.pings_queued = adapter.session.pings;
+    diagnostics.ping_responses = adapter.session.ping_responses;
+    diagnostics.waiting_pingresp = adapter.session.waiting_pingresp;
+    *status = diagnostics;
 }
