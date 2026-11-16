@@ -15,7 +15,7 @@ CFLAGS  := -std=c11 -O1 -g -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
 LDLIBS  := -lm
 
 TESTS   := test_barcode test_line_sensor test_pipeline test_fault_mask \
-           test_encoder test_pid test_motion test_imu test_ultrasonic test_obstacle test_line_nav test_telemetry test_mqtt_codec test_mqtt_client test_safety test_vehicle test_follow_sim
+           test_encoder test_pid test_motion test_motor_cal test_imu test_ultrasonic test_obstacle test_line_nav test_telemetry test_mqtt_codec test_mqtt_client test_safety test_vehicle test_follow_sim
 
 SRC_test_barcode      := barcode.c
 SRC_test_line_sensor  := line_sensor.c
@@ -24,6 +24,7 @@ SRC_test_fault_mask   := fault_mask.c
 SRC_test_encoder      := encoder.c
 SRC_test_pid          := pid.c
 SRC_test_motion       := motion.c pid.c encoder.c
+SRC_test_motor_cal    := motor_cal.c
 SRC_test_imu          := imu.c
 SRC_test_ultrasonic   := ultrasonic.c servo.c
 SRC_test_obstacle     := obstacle.c ultrasonic.c servo.c
