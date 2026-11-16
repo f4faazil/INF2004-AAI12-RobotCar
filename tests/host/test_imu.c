@@ -616,11 +616,11 @@ static roll_hump_config_t roll_cfg(void)
     c.enter_permille = 40;
     c.exit_permille = 25;
     c.enter_ms = 60U;
-    c.exit_ms = 100U;
-    c.lever_mm = 97U;
+    c.exit_ms = 200U;
+    c.lever_mm = 76U;
     c.min_length_mm = 60U;
     c.max_length_mm = 400U;
-    c.min_height_mm = 3;
+    c.min_height_mm = 6;
     return c;
 }
 
@@ -678,8 +678,8 @@ static roll_run_t roll_run(roll_hump_t *h, double peak, double length_mm, int si
     return r;
 }
 
-/* The measured hump: roll peak 113 per-mille (left and right averaged from the
- * car) over 190 mm gives 11 mm.  Catches: wrong lever, peak not tracked. */
+/* The measured demo hump: roll peak 262 per-mille (seven runs on the car) over
+ * 190 mm gives 20 mm.  Catches: wrong lever, peak not tracked. */
 static void test_roll_hump_height_matches_the_fitted_lever(void)
 {
     roll_hump_config_t cfg = roll_cfg();
@@ -687,12 +687,12 @@ static void test_roll_hump_height_matches_the_fitted_lever(void)
     roll_run_t r;
 
     roll_hump_init(&h, &cfg);
-    r = roll_run(&h, 113.0, 190.0, 1, 10.0, true, -1.0);
+    r = roll_run(&h, 262.0, 190.0, 1, 10.0, true, -1.0);
     CHECK_INT(1, r.started);
     CHECK_INT(1, r.finished);
-    CHECK(abs((int)roll_hump_last_height_code(&h) - 11) <= 1);
+    CHECK(abs((int)roll_hump_last_height_code(&h) - 20) <= 1);
     CHECK_INT(HUMP_VALID, roll_hump_last_validity(&h));
-    CHECK(abs((int)roll_hump_highest_valid_mm(&h) - 11) <= 1);
+    CHECK(abs((int)roll_hump_highest_valid_mm(&h) - 20) <= 1);
     CHECK_INT(1, h.side);
     CHECK_INT(1, r.saw_rising);
     CHECK_INT(1, r.saw_on_hump);
@@ -708,10 +708,10 @@ static void test_roll_hump_on_the_other_wheel(void)
     roll_run_t r;
 
     roll_hump_init(&h, &cfg);
-    r = roll_run(&h, 106.0, 190.0, -1, 10.0, true, -1.0);
+    r = roll_run(&h, 238.0, 190.0, -1, 10.0, true, -1.0);
     CHECK_INT(1, r.finished);
     CHECK_INT(-1, h.side);
-    CHECK(abs((int)roll_hump_last_height_code(&h) - 10) <= 1);
+    CHECK(abs((int)roll_hump_last_height_code(&h) - 18) <= 1);
 }
 
 /* Flat running with the measured vibration: nothing.  Catches: thresholds
@@ -760,7 +760,7 @@ static void test_roll_missing_distance_is_low_confidence(void)
     roll_run_t r;
 
     roll_hump_init(&h, &cfg);
-    r = roll_run(&h, 113.0, 190.0, 1, 10.0, false, -1.0);
+    r = roll_run(&h, 262.0, 190.0, 1, 10.0, false, -1.0);
     CHECK_INT(1, r.finished);
     CHECK_INT(HUMP_LOW_CONFIDENCE, roll_hump_last_validity(&h));
     CHECK_INT(-1, (int)roll_hump_highest_valid_mm(&h));
@@ -775,7 +775,7 @@ static void test_roll_long_bump_is_low_confidence(void)
     roll_run_t r;
 
     roll_hump_init(&h, &cfg);
-    r = roll_run(&h, 113.0, 700.0, 1, 10.0, true, -1.0);
+    r = roll_run(&h, 262.0, 700.0, 1, 10.0, true, -1.0);
     CHECK_INT(1, r.finished);
     CHECK_INT(HUMP_LOW_CONFIDENCE, roll_hump_last_validity(&h));
     CHECK_INT(-1, (int)roll_hump_highest_valid_mm(&h));
@@ -794,7 +794,7 @@ static void test_roll_imu_fault_is_reported(void)
     bool fault;
 
     roll_hump_init(&h, &cfg);
-    r = roll_run(&h, 113.0, 190.0, 1, 10.0, true, 380.0);
+    r = roll_run(&h, 262.0, 190.0, 1, 10.0, true, 380.0);
     CHECK_INT(1, r.finished);
     CHECK_INT(HUMP_LOW_CONFIDENCE, roll_hump_last_validity(&h));
     hump_event_unpack(h.last_event_packed, &st, &code, &val, &fault);
@@ -810,12 +810,12 @@ static void test_roll_highest_valid_is_retained(void)
     roll_run_t r;
 
     roll_hump_init(&h, &cfg);
-    r = roll_run(&h, 200.0, 190.0, 1, 10.0, true, -1.0);
+    r = roll_run(&h, 400.0, 190.0, 1, 10.0, true, -1.0);
     CHECK_INT(1, r.finished);
-    CHECK(abs((int)roll_hump_highest_valid_mm(&h) - 19) <= 1);
-    r = roll_run(&h, 80.0, 190.0, -1, 10.0, true, -1.0);
+    CHECK(abs((int)roll_hump_highest_valid_mm(&h) - 30) <= 1);
+    r = roll_run(&h, 160.0, 190.0, -1, 10.0, true, -1.0);
     CHECK_INT(1, r.finished);
-    CHECK(abs((int)roll_hump_highest_valid_mm(&h) - 19) <= 1);
+    CHECK(abs((int)roll_hump_highest_valid_mm(&h) - 30) <= 1);
     CHECK_INT(2, (int)h.humps_seen);
 }
 
@@ -833,6 +833,51 @@ static void test_roll_tiny_bump_is_ignored(void)
     CHECK_INT(1, r.started);
     CHECK_INT(0, r.finished);
     CHECK_INT(0, (int)h.humps_seen);
+}
+
+/* The car showed a short dip just before the real ramp (roll 47, then 7, then the
+ * hump).  It must stay one hump, not a bogus 4 mm one followed by the real one.
+ * Catches: an end-of-hump time shorter than the dip. */
+static void test_roll_short_dip_does_not_split_a_hump(void)
+{
+    roll_hump_config_t cfg = roll_cfg();
+    roll_hump_t h;
+    roll_hump_input_t in;
+    uint32_t t;
+    int started = 0;
+    int finished = 0;
+
+    roll_hump_init(&h, &cfg);
+    for (t = 0U; t < 6000U; t += STEP_MS) {
+        double roll = 0.0;
+        hump_event_t ev;
+
+        if ((t >= 300U) && (t < 400U)) {
+            roll = 45.0;
+        } else if ((t >= 400U) && (t < 520U)) {
+            roll = 7.0;
+        } else if ((t >= 520U) && (t < 2420U)) {
+            roll = 260.0 * sin(PI_D * (double)(t - 520U) / 1900.0);
+        } else {
+            roll = 0.0;
+        }
+        in.roll_permille = (int16_t)lround(roll);
+        in.distance_mm = (int32_t)((t * 120U) / 1000U);
+        in.distance_valid = true;
+        in.imu_ok = true;
+        in.now_ms = t;
+        ev = roll_hump_update(&h, &in);
+        if (ev == HUMP_EVENT_STARTED) {
+            started++;
+        }
+        if (ev == HUMP_EVENT_FINISHED) {
+            finished++;
+        }
+    }
+    CHECK_INT(1, started);
+    CHECK_INT(1, finished);
+    CHECK(abs((int)roll_hump_last_height_code(&h) - 20) <= 1);
+    CHECK_INT(HUMP_VALID, roll_hump_last_validity(&h));
 }
 
 int main(void)
@@ -871,5 +916,6 @@ int main(void)
     RUN(test_roll_imu_fault_is_reported);
     RUN(test_roll_highest_valid_is_retained);
     RUN(test_roll_tiny_bump_is_ignored);
+    RUN(test_roll_short_dip_does_not_split_a_hump);
     return TEST_REPORT();
 }

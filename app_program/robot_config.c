@@ -120,20 +120,22 @@ const line_nav_config_t ROBOT_LINE_NAV_CFG = {
 
 /*
  * Hump detection by roll: one wheel on the hump rolls the car, and the filtered
- * roll shows one smooth bump (measured: +114 and -118 by hand, +114 and -106
- * driving, over a 190 mm hump of 11 mm).  The lever 97 mm is fitted so a 113
- * per-mille peak reads 11 mm; the measured track is about 115 mm, the rest is
- * the sensor's uneven scale.  Refit it on the known hump if the board moves.
+ * roll shows one smooth bump.  Measured driving at 120 mm/s over the 20 mm demo
+ * hump (about 190 mm long): peak roll 278, 261, 278 (right wheel) and 238, 269,
+ * 258, 254 (left wheel), mean 262 per-mille.  The lever 76 mm is fitted so that
+ * mean reads 20 mm (the seven runs read 18.1 to 21.1 mm).  It is a fit to this
+ * one hump: an 11 mm hump gave about 113 and would read 8.6 mm, so the roll is
+ * not proportional to height.  Refit it if the board moves or the hump changes.
  */
 const roll_hump_config_t ROBOT_ROLL_HUMP_CFG = {
     .enter_permille = 40,               /* flat running stays within about +-15 */
     .exit_permille = 25,
     .enter_ms = 60U,
-    .exit_ms = 100U,
-    .lever_mm = 97U,
+    .exit_ms = 200U,                    /* a short dip at the foot of the ramp must not end it */
+    .lever_mm = 76U,
     .min_length_mm = 60U,
     .max_length_mm = 400U,
-    .min_height_mm = 3
+    .min_height_mm = 6
 };
 
 /* The older pitch-based detector: pitch is biased by about 100 per-mille while
