@@ -1,0 +1,5 @@
+# Compiled test programs (no extension) and the simulation report.
+sim_report
+test_*
+!test_*.*
+*.dSYM/
