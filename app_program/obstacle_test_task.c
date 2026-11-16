@@ -7,7 +7,7 @@
  * Press START (GP20) to run the step shown; STOP (GP21) in the menu skips to
  * the next step, and STOP during a run ends it.  Lines start with "[obs]".
  *
- *   1  DISTANCE  a flat object at 100, 200, 300 then 400 mm: 5 s of readings,
+ *   1  DISTANCE  a flat object at 100, 200, 300, 400 then 600 mm: 5 s of readings,
  *                then the count, mean, median, min, max and the error against
  *                the distance you set up
  *   2  NO ECHO   point the sensor at open space (nothing within 4 m) or at a soft
@@ -43,7 +43,7 @@
 #define OBS_SCAN_TIMEOUT_MS     (60000U)
 #define OBS_INVALID_LIMIT       (8U)        /* the robot's value: invalid readings in a row */
 #define OBS_CONFIRM             (2U)
-#define OBS_TARGET_COUNT        (4U)
+#define OBS_TARGET_COUNT        (5U)
 #define OBS_LOAD_MS             (10000U)    /* the motors-running test */
 #define OBS_LOAD_PWM            (250)       /* per-mille: 25 %, wheels lifted */
 #define OBS_LOAD_SWEEP_MS       (1000U)
@@ -64,7 +64,7 @@ typedef struct {
 
 static ID g_obs_flag;
 
-static const uint16_t TARGET_MM[OBS_TARGET_COUNT] = { 100U, 200U, 300U, 400U };
+static const uint16_t TARGET_MM[OBS_TARGET_COUNT] = { 100U, 200U, 300U, 400U, 600U };
 
 /* servo test: angles from the car's right, 90 = straight ahead */
 #define OBS_SERVO_STEPS         (5U)
@@ -139,8 +139,8 @@ static void print_prompt(obs_step_t step, uint8_t target_idx)
 {
     switch (step) {
     case STEP_DISTANCE:
-        tm_printf((UB *)"[obs] step 1 DISTANCE: put a flat hard object %d mm in front of the sensor face "
-                        "(use a ruler), keep it still, press START.  STOP skips to step 2\n",
+        tm_printf((UB *)"[obs] step 1 DISTANCE: put a broad flat hard object %d mm from the sensor's FRONT FACE "
+                        "(the two metal cylinders; use a ruler), keep it still, press START.  STOP skips to step 2\n",
                   (INT)TARGET_MM[target_idx]);
         break;
     case STEP_NOECHO:
@@ -155,7 +155,8 @@ static void print_prompt(obs_step_t step, uint8_t target_idx)
                         "press START.  STOP ends it, or skips to step 5\n");
         break;
     default:
-        tm_printf((UB *)"[obs] step 5 SCAN: put one obstacle (a box) 200 to 400 mm ahead, press START.  "
+        tm_printf((UB *)"[obs] step 5 SCAN: put one box, centred, 650 mm from the sensor face (the distance the "
+                        "robot starts a scan from), press START.  Repeat with a 150 mm box and at 500 mm.  "
                         "STOP skips to step 1\n");
         break;
     }

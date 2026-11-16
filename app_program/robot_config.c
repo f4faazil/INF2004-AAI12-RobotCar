@@ -160,6 +160,13 @@ const hump_config_t ROBOT_HUMP_CFG = {
  * software limits 58 to 118 degrees are ever commanded.  PLACEHOLDER: robot size
  * and margins.  The rays are 14 degrees apart (62, 76, 90, 104, 118): the
  * simulation shows a 100 mm object 60 mm off-centre hides between 30-degree rays.
+ *
+ * WHY THE SCAN MUST START FAR AWAY: the car (200 mm) needs 260 mm of CONFIRMED free
+ * space beside the box.  The farthest ray (28 degrees) reaches only 0.53 x the
+ * distance to the side, so from 250 mm the most it can confirm is about 100 mm and
+ * the planner always stops ("no clearance").  The scan has to start at about 650 mm
+ * (ROBOT_OBSTACLE_SCAN_MM), where the same ray reaches 346 mm.  See
+ * tests/host/obstacle_report.c.
  */
 const obstacle_config_t ROBOT_OBSTACLE_CFG = {
     .servo = {
@@ -176,13 +183,13 @@ const obstacle_config_t ROBOT_OBSTACLE_CFG = {
     .coarse_max_deg = 118U,
     .coarse_step_deg = 14U,
     .fine_step_deg = 5U,
-    .detect_range_mm = 600U,
+    .detect_range_mm = 800U,            /* an object nearer than this is an obstacle; see the note above */
     .samples_per_point = 3U,
     .measure_timeout_ms = 120U,
     .no_echo_is_clear = false,          /* Tribunal: no echo is not free space */
     .left_is_high_angle = true,         /* measured: a longer pulse points left */
-    .robot_width_mm = 140U,             /* PLACEHOLDER */
-    .robot_length_mm = 200U,            /* PLACEHOLDER */
+    .robot_width_mm = 200U,             /* measured by Buddy 5, protruding parts included */
+    .robot_length_mm = 250U,            /* measured by Buddy 5 */
     .margin_mm = 30U,
     .assumed_depth_mm = 150U,
     .min_turn_distance_mm = 120U,

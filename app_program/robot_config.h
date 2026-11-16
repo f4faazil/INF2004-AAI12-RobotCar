@@ -178,6 +178,13 @@
 #define ROBOT_HEARTBEAT_MS      (1000U)
 #define ROBOT_US_PERIOD_MS      (70U)       /* HC-SR04 needs >= 60 ms */
 #define ROBOT_US_ECHO_TIMEOUT_US (30000U)
+/* Geometry measured by Buddy 5: the sensor's front face is 80 mm behind the car's front
+ * edge, so a reading of D is only D - 80 mm of clearance for the bumper. */
+#define ROBOT_SENSOR_TO_FRONT_MM (80U)
+/* An obstacle ahead nearer than this stops the car and starts the scan.  The scan
+ * can only confirm a path of the car's width from about 650 mm (the servo sweep is
+ * only 28 degrees each side); see the note on ROBOT_OBSTACLE_CFG. */
+#define ROBOT_OBSTACLE_SCAN_MM  (650U)
 #define ROBOT_IR_RING_FRAMES    (256U)
 
 /*

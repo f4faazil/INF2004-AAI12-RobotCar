@@ -49,7 +49,8 @@
  * distance on the car (Tribunal: physical stopping distance is not PWM-zero). */
 #define ROBOT_STOP_RESPONSE_MS      (120U)
 #define ROBOT_BRAKING_MM            (40U)
-#define ROBOT_OBSTACLE_MARGIN_MM    (60U)
+/* margin: the 80 mm between the sensor and the bumper plus 60 mm of clearance */
+#define ROBOT_OBSTACLE_MARGIN_MM    (ROBOT_SENSOR_TO_FRONT_MM + 60U)
 #define ROBOT_OBSTACLE_HYST_MM      (30U)
 #define ROBOT_OBSTACLE_CONFIRM      (2U)
 #define ROBOT_US_INVALID_LIMIT      (8U)
@@ -658,6 +659,9 @@ static void obstacle_task(INT stacd, void *exinf)
                     motion_share_get(&motion);
                     threshold = us_stop_threshold_mm(centre_speed(&motion), ROBOT_STOP_RESPONSE_MS,
                                                      ROBOT_BRAKING_MM, ROBOT_OBSTACLE_MARGIN_MM);
+                    if (threshold < ROBOT_OBSTACLE_SCAN_MM) {
+                        threshold = ROBOT_OBSTACLE_SCAN_MM;     /* stop early enough for the scan to work */
+                    }
                     (void)us_monitor_update(&mon, &reading, threshold, ROBOT_OBSTACLE_HYST_MM,
                                             (uint16_t)(threshold / 2U));
                     publish_obstacle_state(&mon, now);

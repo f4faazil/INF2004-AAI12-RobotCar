@@ -687,6 +687,75 @@ static void test_scan_time_is_bounded(void)
     CHECK(s.finished_ms < 12000U);
 }
 
+/* ---- the real car and the measured servo ----------------------------- */
+
+/* The car (200 x 250 mm) and the servo sweep measured by Buddy 5 (58 to 118
+ * degrees), as in robot_config.c. */
+static obstacle_config_t car_cfg(void)
+{
+    obstacle_config_t c = make_cfg();
+
+    c.servo.min_pulse_us = 375U;
+    c.servo.max_pulse_us = 2625U;
+    c.servo.min_angle_deg = 58U;
+    c.servo.max_angle_deg = 118U;
+    c.coarse_min_deg = 62U;
+    c.coarse_max_deg = 118U;
+    c.coarse_step_deg = 14U;
+    c.detect_range_mm = 800U;
+    c.robot_width_mm = 200U;
+    c.robot_length_mm = 250U;
+    return c;
+}
+
+/* From the scan distance the robot now uses (650 mm) the farthest ray reaches far
+ * enough to confirm room for the 200 mm car beside the box, so a bypass is
+ * planned.  Catches: a scan distance, detect range or sweep that cannot find a
+ * path. */
+static void test_car_finds_a_path_when_the_scan_starts_far_enough(void)
+{
+    obstacle_config_t cfg = car_cfg();
+    world_t w;
+    sim_t s;
+    obstacle_profile_t p;
+    bypass_plan_t plan;
+
+    w = box_at(0.0, 80.0, 650.0);
+    sim_init(&s, &w, &cfg);
+    CHECK(sim_run(&s));
+    analyse(&s, &p, &plan);
+    CHECK(p.obstacle_found);
+    CHECK((plan.action == PLAN_BYPASS_LEFT) || (plan.action == PLAN_BYPASS_RIGHT));
+    CHECK_INT(PLAN_REASON_OK, plan.reason);
+
+    w = box_at(0.0, 150.0, 700.0);
+    sim_init(&s, &w, &cfg);
+    CHECK(sim_run(&s));
+    analyse(&s, &p, &plan);
+    CHECK((plan.action == PLAN_BYPASS_LEFT) || (plan.action == PLAN_BYPASS_RIGHT));
+}
+
+/* From the old stop distance (250 mm) the same sweep confirms at most about
+ * 100 mm beside the box, so the planner correctly refuses: this is why the scan
+ * must start far away.  Catches: the planner inventing room it has not seen. */
+static void test_car_cannot_confirm_a_path_from_the_stop_distance(void)
+{
+    obstacle_config_t cfg = car_cfg();
+    world_t w = box_at(0.0, 80.0, 250.0);
+    sim_t s;
+    obstacle_profile_t p;
+    bypass_plan_t plan;
+
+    sim_init(&s, &w, &cfg);
+    CHECK(sim_run(&s));
+    analyse(&s, &p, &plan);
+    CHECK(p.obstacle_found);
+    CHECK_INT(PLAN_STOP, plan.action);
+    CHECK_INT(PLAN_REASON_NO_CLEARANCE, plan.reason);
+    CHECK(p.left_clearance_mm < 130U);
+    CHECK(p.right_clearance_mm < 130U);
+}
+
 int main(void)
 {
     RUN(test_trig_tables);
@@ -711,5 +780,7 @@ int main(void)
     RUN(test_servo_mounting_direction_is_configurable);
     RUN(test_servo_mounting_mirror_keeps_the_object_on_the_correct_side);
     RUN(test_scan_time_is_bounded);
+    RUN(test_car_finds_a_path_when_the_scan_starts_far_enough);
+    RUN(test_car_cannot_confirm_a_path_from_the_stop_distance);
     return TEST_REPORT();
 }
