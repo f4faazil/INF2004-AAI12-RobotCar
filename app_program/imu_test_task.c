@@ -32,7 +32,8 @@
 #define TEST_BUTTON_SAMPLES     (6U)        /* 6 x 5 ms = 30 ms debounce */
 #define TEST_AVG_SAMPLES        (50U)       /* 1 s at 50 Hz */
 #define TEST_PRINT_MS           (200U)
-#define TEST_DRIVE_PRINT_MS     (100U)      /* a 19 cm hump takes about 1.6 s at 120 mm/s */
+#define TEST_FILTER_DIV         (8)         /* low-pass: each sample moves the filter 1/8 of the way */
+#define TEST_DRIVE_PRINT_MS     (100U)     /* a 19 cm hump takes about 1.6 s at 120 mm/s */
 #define TEST_REST_MIN_Z_MG      (700)       /* flat: Z carries gravity, up (+) or upside down (-) */
 #define TEST_REST_MAX_XY_MG     (250)       /* about 15 degrees of tilt */
 #define TEST_MAG_LOW_MG         (900)       /* |g| outside 900..1100 is a scale or offset error */
@@ -182,6 +183,8 @@ static void imu_test_task(INT stacd, void *exinf)
     static motion_t motion;
     static imu_cal_t cal;
     static imu_cal_t cal_roll;
+    int32_t filt[3] = { 0, 0, 0 };
+    bool filt_init = false;
     int16_t roll_peak = 0;
     int16_t pitch_peak = 0;
     static hump_detector_t hump;
@@ -411,6 +414,7 @@ static void imu_test_task(INT stacd, void *exinf)
                        ((now - phase_start_ms) >= TEST_SETTLE_MS)) {
                 roll_peak = 0;
                 pitch_peak = 0;
+                filt_init = false;
                 cmd_id++;
                 base_dist_mm = motion_status(&motion)->distance_mm;
                 phase_start_ms = now;
@@ -452,16 +456,37 @@ static void imu_test_task(INT stacd, void *exinf)
             if (have_sample) {
                 hump_input_t hin;
                 hump_event_t ev;
+                imu_vec3_t gf;
+                int16_t pitch_raw;
 
-                hin.pitch_permille = imu_pitch_permille(&cal, &g);
-                hin.disturbance_mg = imu_disturbance_mg(&cal, &g);
+                /*
+                 * Driving shakes the sensor by several times the size of a 1 cm hump, so
+                 * the vector is low-pass filtered (time constant about 8 samples = 160 ms)
+                 * before the tilt is taken.  The raw pitch is printed for comparison.
+                 */
+                if (!filt_init) {
+                    filt[0] = (int32_t)g.x * 16;
+                    filt[1] = (int32_t)g.y * 16;
+                    filt[2] = (int32_t)g.z * 16;
+                    filt_init = true;
+                } else {
+                    filt[0] += (((int32_t)g.x * 16) - filt[0]) / TEST_FILTER_DIV;
+                    filt[1] += (((int32_t)g.y * 16) - filt[1]) / TEST_FILTER_DIV;
+                    filt[2] += (((int32_t)g.z * 16) - filt[2]) / TEST_FILTER_DIV;
+                }
+                gf.x = (int16_t)(filt[0] / 16);
+                gf.y = (int16_t)(filt[1] / 16);
+                gf.z = (int16_t)(filt[2] / 16);
+                pitch_raw = imu_pitch_permille(&cal, &g);
+                hin.pitch_permille = imu_pitch_permille(&cal, &gf);
+                hin.disturbance_mg = imu_disturbance_mg(&cal, &gf);
                 hin.distance_mm = st->distance_mm;
                 hin.distance_valid = true;
                 hin.imu_ok = true;
                 hin.now_ms = now;
                 ev = hump_update(&hump, &hin);
                 {
-                    const int16_t roll = imu_pitch_permille(&cal_roll, &g);
+                    const int16_t roll = imu_pitch_permille(&cal_roll, &gf);
 
                     if (abs32(roll) > abs32(roll_peak)) {
                         roll_peak = roll;
@@ -471,9 +496,9 @@ static void imu_test_task(INT stacd, void *exinf)
                     }
                     if ((now - last_print_ms) >= TEST_DRIVE_PRINT_MS) {
                         last_print_ms = now;
-                        tm_printf((UB *)"[imu] DRIVE d=%dmm pitch=%d roll=%d dist-mg=%d state=%d\n",
+                        tm_printf((UB *)"[imu] DRIVE d=%dmm pitchF=%d rollF=%d (raw pitch %d) dist-mg=%d state=%d\n",
                                   (INT)(st->distance_mm - base_dist_mm), (INT)hin.pitch_permille,
-                                  (INT)roll, (INT)hin.disturbance_mg, (INT)hump.state);
+                                  (INT)roll, (INT)pitch_raw, (INT)hin.disturbance_mg, (INT)hump.state);
                     }
                 }
                 if (ev == HUMP_EVENT_FINISHED) {

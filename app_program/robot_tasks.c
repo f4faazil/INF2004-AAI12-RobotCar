@@ -69,7 +69,8 @@
 #define LSM303DLHC_ACCEL_ADDR       (0x19U)
 #define ACCEL_CTRL1_REG             (0x20U)
 #define ACCEL_CTRL1_100HZ_XYZ       (0x57U)     /* LSM303DLHC: 100 Hz, normal, XYZ */
-#define LSM303D_CTRL1_50HZ_XYZ_BDU  (0x5FU)     /* LSM303D: 50 Hz, XYZ, block data update */
+#define LSM303D_CTRL1_100HZ_XYZ_BDU (0x6FU)     /* LSM303D: 100 Hz, XYZ, block data update */
+#define LSM303D_CTRL2_AAF50_2G      (0xC0U)     /* LSM303D: 50 Hz anti-alias filter (less vibration), +/-2 g */
 #define LSM303D_CTRL2_REG           (0x21U)
 #define LSM303DLHC_CTRL4_REG        (0x23U)
 #define LSM303DLHC_CTRL4_HR_2G      (0x08U)
@@ -725,8 +726,8 @@ bool robot_imu_probe(imu_variant_t *variant, uint8_t *addr)
         *addr = LSM303D_ADDR;
         /* BDU keeps the six output bytes of one sample together, so a read that
          * lands as the chip updates cannot mix two samples into a false tilt. */
-        return hal_i2c_write(LSM303D_ADDR, ACCEL_CTRL1_REG, LSM303D_CTRL1_50HZ_XYZ_BDU) &&
-               hal_i2c_write(LSM303D_ADDR, LSM303D_CTRL2_REG, 0U);
+        return hal_i2c_write(LSM303D_ADDR, ACCEL_CTRL1_REG, LSM303D_CTRL1_100HZ_XYZ_BDU) &&
+               hal_i2c_write(LSM303D_ADDR, LSM303D_CTRL2_REG, LSM303D_CTRL2_AAF50_2G);
     }
     if (hal_i2c_read(LSM303DLHC_ACCEL_ADDR, ACCEL_CTRL1_REG, &id, 1U)) {
         *variant = IMU_VARIANT_LSM303DLHC;
