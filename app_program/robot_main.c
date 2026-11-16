@@ -12,12 +12,15 @@
 
 #if ROBOT_FIRMWARE
 
+#include "imu_test_task.h"
 #include "motor_cal_task.h"
 #include "robot_tasks.h"
 
 EXPORT INT usermain(void)
 {
-#if ROBOT_MOTOR_CAL
+#if ROBOT_IMU_TEST
+    ER err = imu_test_start_task();
+#elif ROBOT_MOTOR_CAL
     ER err = motor_cal_start_task();
 #else
     ER err = robot_start();

@@ -68,7 +68,8 @@
 #define LSM303D_WHO_AM_I_VALUE      (0x49U)
 #define LSM303DLHC_ACCEL_ADDR       (0x19U)
 #define ACCEL_CTRL1_REG             (0x20U)
-#define ACCEL_CTRL1_100HZ_XYZ       (0x57U)
+#define ACCEL_CTRL1_100HZ_XYZ       (0x57U)     /* LSM303DLHC: 100 Hz, normal, XYZ */
+#define LSM303D_CTRL1_50HZ_XYZ_BDU  (0x5FU)     /* LSM303D: 50 Hz, XYZ, block data update */
 #define LSM303D_CTRL2_REG           (0x21U)
 #define LSM303DLHC_CTRL4_REG        (0x23U)
 #define LSM303DLHC_CTRL4_HR_2G      (0x08U)
@@ -714,7 +715,7 @@ static void obstacle_task(INT stacd, void *exinf)
 
 /* ---- IMU task ------------------------------------------------------------------ */
 
-static bool imu_probe(imu_variant_t *variant, uint8_t *addr)
+bool robot_imu_probe(imu_variant_t *variant, uint8_t *addr)
 {
     uint8_t id = 0U;
 
@@ -722,7 +723,9 @@ static bool imu_probe(imu_variant_t *variant, uint8_t *addr)
         (id == LSM303D_WHO_AM_I_VALUE)) {
         *variant = IMU_VARIANT_LSM303D;
         *addr = LSM303D_ADDR;
-        return hal_i2c_write(LSM303D_ADDR, ACCEL_CTRL1_REG, ACCEL_CTRL1_100HZ_XYZ) &&
+        /* BDU keeps the six output bytes of one sample together, so a read that
+         * lands as the chip updates cannot mix two samples into a false tilt. */
+        return hal_i2c_write(LSM303D_ADDR, ACCEL_CTRL1_REG, LSM303D_CTRL1_50HZ_XYZ_BDU) &&
                hal_i2c_write(LSM303D_ADDR, LSM303D_CTRL2_REG, 0U);
     }
     if (hal_i2c_read(LSM303DLHC_ACCEL_ADDR, ACCEL_CTRL1_REG, &id, 1U)) {
@@ -779,7 +782,7 @@ static void imu_task(INT stacd, void *exinf)
         if (!present) {
             if ((now - last_probe_ms) >= ROBOT_IMU_PROBE_MS) {
                 last_probe_ms = now;
-                present = imu_probe(&variant, &addr);
+                present = robot_imu_probe(&variant, &addr);
             }
             publish_imu(&hump, false, true, now);
             continue;

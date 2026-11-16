@@ -33,6 +33,14 @@
  */
 #define ROBOT_MOTOR_CAL         (0)
 
+/*
+ * 1 = build the IMU bring-up application (imu_test_task.c) instead of the robot:
+ * checks the accelerometer, finds the forward axis and its sign, and runs the hump
+ * detector over a 1 m drive.  Needs ROBOT_FIRMWARE 1 and the USB console.  Takes
+ * priority over ROBOT_MOTOR_CAL.  Set back to 0 for the mission.
+ */
+#define ROBOT_IMU_TEST          (0)
+
 /* Print a one-line status once a second on the console. */
 #define ROBOT_DIAG_PRINT        (1)
 
