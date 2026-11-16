@@ -206,7 +206,7 @@ extern const uint8_t             ROBOT_BARCODE_MAP_LEN;
 
 /* Servo trim and IMU mounting live with their structures in robot_config.c. */
 #define ROBOT_IMU_FORWARD_AXIS  (IMU_AXIS_X)
-#define ROBOT_IMU_FORWARD_SIGN  (1)
+#define ROBOT_IMU_FORWARD_SIGN  (-1)         /* measured on the car: X reads +ve with the nose up, so pitch needs -1 */
 #define ROBOT_IMU_CAL_SAMPLES   (50U)
 #define ROBOT_IMU_CAL_SPREAD_MG (80)
 
