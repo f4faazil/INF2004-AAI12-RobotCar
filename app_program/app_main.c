@@ -32,6 +32,11 @@
 #include <tm/tmonitor.h>
 #include <bsp/libbsp.h>
 
+/* The robot application (robot_main.c) replaces this demo unless
+   ROBOT_FIRMWARE is set to 0 in robot_config.h. */
+#include "robot_config.h"
+#if !ROBOT_FIRMWARE
+
 #if TK_SUPPORT_SMP
 #include <tk/smp.h>
 /* Which processor is the caller on?  Numbered from 1, so processor 1 is
@@ -561,3 +566,5 @@ EXPORT INT usermain(void)
 	tk_slp_tsk(TMO_FEVR);
 	return 0;
 }
+
+#endif	/* !ROBOT_FIRMWARE */

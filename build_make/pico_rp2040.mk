@@ -143,6 +143,23 @@ $(error WIFI_TCPBULK=1 requires WIFI_TCP=1)
 endif
 endif
 
+# Robot telemetry: a general raw-TCP client link inside the radio owner task,
+# used by the application's MQTT client (lib/libnet/lwip/lwip_utk_link.c).  It
+# needs an address, so it requires DHCP (or a static address).  The broker
+# endpoint is local configuration, like the Wi-Fi credentials.
+WIFI_MQTT ?= 0
+ifneq ($(filter $(WIFI_MQTT),0 1),$(WIFI_MQTT))
+$(error Unknown WIFI_MQTT '$(WIFI_MQTT)'; use 0 or 1)
+endif
+ifeq ($(WIFI_MQTT),1)
+ifeq ($(filter 1,$(WIFI_STATIC) $(WIFI_DHCP)),)
+$(error WIFI_MQTT=1 requires WIFI_DHCP=1 (or WIFI_STATIC=1))
+endif
+ifeq ($(wildcard ../config/mqtt_config.h),)
+$(error WIFI_MQTT=1 needs config/mqtt_config.h; copy it from config/mqtt_config.example.h and set the broker address)
+endif
+endif
+
 ifeq ($(WIFI_NETIF),1)
 ifneq ($(WIFI_JOIN),1)
 $(error WIFI_NETIF=1 requires WIFI_JOIN=1)
@@ -182,6 +199,9 @@ WIFI_SUFFIX := _wifi_tcp
 endif
 ifeq ($(WIFI_TCPBULK),1)
 WIFI_SUFFIX := _wifi_tcpbulk
+endif
+ifeq ($(WIFI_MQTT),1)
+WIFI_SUFFIX := _wifi_mqtt
 endif
 endif
 
@@ -268,7 +288,7 @@ endif
 # before any recipe executes.
 ################################################################################
 
-PROFILE_ID := smp$(SMP)-$(CONSOLE)-wifi$(WIFI)-join$(WIFI_JOIN)-netif$(WIFI_NETIF)-static$(WIFI_STATIC)-dhcp$(WIFI_DHCP)-dns$(WIFI_DNS)-udp$(WIFI_UDP)-tcp$(WIFI_TCP)-bulk$(WIFI_TCPBULK)
+PROFILE_ID := smp$(SMP)-$(CONSOLE)-wifi$(WIFI)-join$(WIFI_JOIN)-netif$(WIFI_NETIF)-static$(WIFI_STATIC)-dhcp$(WIFI_DHCP)-dns$(WIFI_DNS)-udp$(WIFI_UDP)-tcp$(WIFI_TCP)-bulk$(WIFI_TCPBULK)-mqtt$(WIFI_MQTT)
 PROFILE_FILE := .build_profile
 
 ifneq ($(strip $(shell cat $(PROFILE_FILE) 2>/dev/null)),$(PROFILE_ID))
@@ -406,6 +426,9 @@ endif
 ifeq ($(WIFI_TCPBULK),1)
 LWIP_PORT_OBJS += ./mtkernel_3/lib/libnet/lwip/lwip_utk_tcpbulk.o
 endif
+ifeq ($(WIFI_MQTT),1)
+LWIP_PORT_OBJS += ./mtkernel_3/lib/libnet/lwip/lwip_utk_link.o
+endif
 endif
 
 WIFI_INCLUDES := -I"$(WIFIDIR)" \
@@ -446,6 +469,7 @@ CFLAGS += -DTM_WIFI_CYW43=1 -DTM_WIFI_JOIN=$(WIFI_JOIN) \
           -DTM_WIFI_STATIC=$(WIFI_STATIC) -DTM_WIFI_DHCP=$(WIFI_DHCP) \
           -DTM_WIFI_DNS=$(WIFI_DNS) -DTM_WIFI_UDP=$(WIFI_UDP) \
           -DTM_WIFI_TCP=$(WIFI_TCP) -DTM_WIFI_TCPBULK=$(WIFI_TCPBULK) \
+          -DTM_WIFI_MQTT=$(WIFI_MQTT) \
           -DCYW43_ENABLE_BLUETOOTH=0 \
           -DCYW43_USE_OTP_MAC=1 -DPICO_CYW43_LOGGING_ENABLED=0 \
           -DPICO_RP2040=1 -DPICO_32BIT=1 -DPICO_ON_DEVICE=1 -DPICO_BUILD=1 \
