@@ -141,8 +141,8 @@ static void print_prompt(test_step_t step)
         tm_printf((UB *)"[imu] step 2 NOSE: lift the nose about 20 degrees and hold it, then press START\n");
         break;
     default:
-        tm_printf((UB *)"[imu] LIVE: lift and lower the nose, pitch must be positive when the nose is up. "
-                        "START = run the 1 m hump drive\n");
+        tm_printf((UB *)"[imu] READY: put the car FLAT on the floor, wheels down, hands off, hump about 30 cm ahead. "
+                        "Press START (GP20) to run the 1 m hump drive, STOP (GP21) only aborts a drive.\n");
         break;
     }
 }
@@ -188,7 +188,9 @@ static void imu_test_task(INT stacd, void *exinf)
     motion_output_t mo;
     button_t start_btn = { 0U, false };
     button_t stop_btn = { 0U, false };
-    test_step_t step = STEP_REST;
+    /* ROBOT_IMU_TEST_SKIP_SETUP: start at the hump drive, with the forward axis
+     * and sign from robot_config.h (already measured), so steps 1 and 2 are not needed. */
+    test_step_t step = ROBOT_IMU_TEST_SKIP_SETUP ? STEP_LIVE : STEP_REST;
     test_phase_t phase = PHASE_MENU;
     imu_variant_t variant = IMU_VARIANT_LSM303D;
     uint8_t addr = 0U;

@@ -40,6 +40,7 @@
  * priority over ROBOT_MOTOR_CAL.  Set back to 0 for the mission.
  */
 #define ROBOT_IMU_TEST          (0)
+#define ROBOT_IMU_TEST_SKIP_SETUP (0)   /* 1 = IMU test starts at the hump drive (axis and sign from below) */
 
 /* Print a one-line status once a second on the console. */
 #define ROBOT_DIAG_PRINT        (1)
