@@ -303,24 +303,19 @@ static void imu_test_task(INT stacd, void *exinf)
                         const int32_t mag = isqrt_i32(((int32_t)mean.x * mean.x) + ((int32_t)mean.y * mean.y) +
                                                       ((int32_t)mean.z * mean.z));
 
-                        tm_printf((UB *)"[imu] RESULT |g| = %d mg
-", (INT)mag);
+                        tm_printf((UB *)"[imu] RESULT |g| = %d mg\n", (INT)mag);
                         if ((abs32(mean.z) < TEST_REST_MIN_Z_MG) ||
                             (abs32(mean.x) > TEST_REST_MAX_XY_MG) || (abs32(mean.y) > TEST_REST_MAX_XY_MG)) {
-                            tm_printf((UB *)"[imu] WRONG: gravity is not mostly on Z, so the board or the car is tilted. Level it and try again
-");
+                            tm_printf((UB *)"[imu] WRONG: gravity is not mostly on Z, so the board or the car is tilted. Level it and try again\n");
                         } else {
                             rest_done = true;
                             if (mean.z < 0) {
-                                tm_printf((UB *)"[imu] OK: Z is negative, so the board is mounted upside down. That is fine: the pitch maths allows for it
-");
+                                tm_printf((UB *)"[imu] OK: Z is negative, so the board is mounted upside down. That is fine: the pitch maths allows for it\n");
                             } else {
-                                tm_printf((UB *)"[imu] OK: Z reads +1 g, the board is flat and the right way up
-");
+                                tm_printf((UB *)"[imu] OK: Z reads +1 g, the board is flat and the right way up\n");
                             }
                             if ((mag < TEST_MAG_LOW_MG) || (mag > TEST_MAG_HIGH_MG)) {
-                                tm_printf((UB *)"[imu] NOTE: |g| is %d mg, not about 1000. The scale or offset is off. Pitch and hump height use ratios and the measured |g|, so they are not affected
-",
+                                tm_printf((UB *)"[imu] NOTE: |g| is %d mg, not about 1000. The scale or offset is off. Pitch and hump height use ratios and the measured |g|, so they are not affected\n",
                                           (INT)mag);
                             }
                             step = STEP_NOSE;
