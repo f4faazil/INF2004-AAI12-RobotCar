@@ -413,8 +413,13 @@ static void imu_test_task(INT stacd, void *exinf)
                 phase_start_ms = now;
                 last_print_ms = now;
                 humps_before = (uint8_t)hump.humps_seen;
+#if ROBOT_IMU_TEST_HAND
+                tm_printf((UB *)"[imu] PUSH the car over the hump by hand now, slowly and steadily "
+                                "(about 12 cm per second). Press START when it is past.\n");
+#else
                 submit_move(&motion, cmd_id, now);
                 tm_printf((UB *)"[imu] DRIVE 1000 mm at 120 mm/s\n");
+#endif
                 phase = PHASE_DRIVE;
             } else if ((now - phase_start_ms) >= 6000U) {
                 tm_printf((UB *)"[imu] WRONG: calibration did not finish. Check the IMU reads\n");
@@ -427,11 +432,20 @@ static void imu_test_task(INT stacd, void *exinf)
         case PHASE_DRIVE: {
             const motion_status_t *st = motion_status(&motion);
             const uint32_t elapsed = now - phase_start_ms;
+#if ROBOT_IMU_TEST_HAND
+            const bool done = start_edge;               /* pushed by hand: START ends the run */
+#else
             const bool done = (st->state == MOTION_DONE) && (st->cmd_id == cmd_id);
+#endif
             const bool timed_out = elapsed >= TEST_MOVE_TIMEOUT_MS;
 
+#if ROBOT_IMU_TEST_HAND
+            pwm_l = 0;
+            pwm_r = 0;
+#else
             pwm_l = mo.left_pwm;
             pwm_r = mo.right_pwm;
+#endif
             if (have_sample) {
                 hump_input_t hin;
                 hump_event_t ev;

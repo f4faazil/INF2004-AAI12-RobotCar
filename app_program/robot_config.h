@@ -41,6 +41,7 @@
  */
 #define ROBOT_IMU_TEST          (0)
 #define ROBOT_IMU_TEST_SKIP_SETUP (0)   /* 1 = IMU test starts at the hump drive (axis and sign from below) */
+#define ROBOT_IMU_TEST_HAND     (0)   /* 1 = no motors: push the car over the hump by hand, START ends the run */
 
 /* Print a one-line status once a second on the console. */
 #define ROBOT_DIAG_PRINT        (1)
