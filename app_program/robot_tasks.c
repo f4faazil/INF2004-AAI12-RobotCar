@@ -739,14 +739,14 @@ bool robot_imu_probe(imu_variant_t *variant, uint8_t *addr)
     return false;
 }
 
-static void publish_imu(const hump_detector_t *h, bool in_progress, bool failed, uint32_t now)
+static void publish_imu(const roll_hump_t *h, bool in_progress, bool failed, uint32_t now)
 {
-    int32_t best = hump_highest_valid_mm(h);
+    int32_t best = roll_hump_highest_valid_mm(h);
     robot_irq_state_t state = robot_irq_save();
 
     g_imu_share.in_progress = in_progress;
-    g_imu_share.packed = hump_event_pack(h->state, hump_last_height_code(h),
-                                         hump_last_validity(h), failed);
+    g_imu_share.packed = hump_event_pack(h->state, roll_hump_last_height_code(h),
+                                         roll_hump_last_validity(h), failed);
     g_imu_share.highest_code = (best < 0) ? (uint8_t)TEL_HIGHEST_NONE
                              : ((best > (int32_t)HUMP_HEIGHT_MAX_MM) ? (uint8_t)TEL_HIGHEST_NONE
                                                                      : (uint8_t)best);
@@ -758,7 +758,9 @@ static void publish_imu(const hump_detector_t *h, bool in_progress, bool failed,
 static void imu_task(INT stacd, void *exinf)
 {
     static imu_cal_t cal;
-    static hump_detector_t hump;
+    static roll_hump_t hump;
+    int32_t filt[3] = { 0, 0, 0 };
+    bool filt_init = false;
     imu_variant_t variant = IMU_VARIANT_LSM303D;
     uint8_t addr = LSM303D_ADDR;
     bool present = false;
@@ -768,7 +770,7 @@ static void imu_task(INT stacd, void *exinf)
 
     (void)stacd;
     (void)exinf;
-    hump_init(&hump, &ROBOT_HUMP_CFG);
+    roll_hump_init(&hump, &ROBOT_ROLL_HUMP_CFG);
     imu_cal_init(&cal, ROBOT_IMU_FORWARD_AXIS, ROBOT_IMU_FORWARD_SIGN, ROBOT_IMU_CAL_SAMPLES,
                  ROBOT_IMU_CAL_SPREAD_MG);
 
@@ -809,23 +811,41 @@ static void imu_task(INT stacd, void *exinf)
                     imu_cal_init(&cal, ROBOT_IMU_FORWARD_AXIS, ROBOT_IMU_FORWARD_SIGN,
                                  ROBOT_IMU_CAL_SAMPLES, ROBOT_IMU_CAL_SPREAD_MG);
                 }
+                filt_init = false;
                 publish_imu(&hump, false, false, now);
                 continue;
             }
             motion_share_get(&motion);
             {
-                hump_input_t hin;
+                roll_hump_input_t hin;
                 hump_event_t ev;
+                imu_vec3_t gf;
 
-                hin.pitch_permille = imu_pitch_permille(&cal, &g);
-                hin.disturbance_mg = imu_disturbance_mg(&cal, &g);
+                /*
+                 * Driving shakes the sensor by several times a 1 cm hump, so the vector
+                 * is low-pass filtered (8 samples = 160 ms) before the roll is taken.
+                 */
+                if (!filt_init) {
+                    filt[0] = (int32_t)g.x * 16;
+                    filt[1] = (int32_t)g.y * 16;
+                    filt[2] = (int32_t)g.z * 16;
+                    filt_init = true;
+                } else {
+                    filt[0] += (((int32_t)g.x * 16) - filt[0]) / ROBOT_IMU_FILTER_DIV;
+                    filt[1] += (((int32_t)g.y * 16) - filt[1]) / ROBOT_IMU_FILTER_DIV;
+                    filt[2] += (((int32_t)g.z * 16) - filt[2]) / ROBOT_IMU_FILTER_DIV;
+                }
+                gf.x = (int16_t)(filt[0] / 16);
+                gf.y = (int16_t)(filt[1] / 16);
+                gf.z = (int16_t)(filt[2] / 16);
+                hin.roll_permille = imu_roll_permille(&cal, &gf);
                 hin.distance_mm = motion.status.distance_mm;
                 hin.distance_valid = ((now - motion.status.timestamp_ms) <= ROBOT_MOTION_FRESH_MS) &&
                                      !motion.encoder_fault;
                 hin.imu_ok = true;
                 hin.now_ms = now;
-                ev = hump_update(&hump, &hin);
-                publish_imu(&hump, hump_in_progress(&hump), false, now);
+                ev = roll_hump_update(&hump, &hin);
+                publish_imu(&hump, roll_hump_in_progress(&hump), false, now);
                 if (ev == HUMP_EVENT_FINISHED) {
                     uint8_t buf[TEL_MAX_MESSAGE];
                     tel_hump_t th;

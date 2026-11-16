@@ -200,6 +200,7 @@
 extern const motion_config_t     ROBOT_MOTION_CFG;
 extern const line_nav_config_t   ROBOT_LINE_NAV_CFG;
 extern const hump_config_t       ROBOT_HUMP_CFG;
+extern const roll_hump_config_t  ROBOT_ROLL_HUMP_CFG;
 extern const obstacle_config_t   ROBOT_OBSTACLE_CFG;
 extern const vehicle_config_t    ROBOT_VEHICLE_CFG;
 extern const safety_limits_t     ROBOT_SAFETY_LIMITS;
@@ -210,6 +211,7 @@ extern const uint8_t             ROBOT_BARCODE_MAP_LEN;
 #define ROBOT_IMU_FORWARD_AXIS  (IMU_AXIS_X)
 #define ROBOT_IMU_FORWARD_SIGN  (-1)         /* measured on the car: X reads +ve with the nose up, so pitch needs -1 */
 #define ROBOT_IMU_CAL_SAMPLES   (50U)
-#define ROBOT_IMU_CAL_SPREAD_MG (80)
+#define ROBOT_IMU_CAL_SPREAD_MG (250)       /* floor vibration is about +-50 mg at rest */
+#define ROBOT_IMU_FILTER_DIV    (8)         /* accelerometer low-pass: 1/8 per 20 ms sample */
 
 #endif /* ROBOT_CONFIG_H */

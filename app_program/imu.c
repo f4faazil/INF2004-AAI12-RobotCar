@@ -132,6 +132,8 @@ void imu_cal_init(imu_cal_t *cal, uint8_t forward_axis, int8_t forward_sign,
     cal->vertical_axis = IMU_AXIS_Z;
     cal->vertical_sign = 1;
     cal->base_mag = 0;
+    cal->lateral_axis = IMU_AXIS_Y;
+    cal->base_l = 0;
 }
 
 static void finish_calibration(imu_cal_t *cal)
@@ -163,6 +165,9 @@ static void finish_calibration(imu_cal_t *cal)
     cal->vertical_sign = (mean[cal->vertical_axis] < 0) ? (int8_t)-1 : (int8_t)1;
     cal->base_v = to_i16(abs32(mean[cal->vertical_axis]));
     cal->base_f = to_i16(mean[cal->forward_axis] * cal->forward_sign);
+    /* The axes are 0, 1, 2: the sideways one is what is left over. */
+    cal->lateral_axis = (uint8_t)(3U - cal->forward_axis - cal->vertical_axis);
+    cal->base_l = to_i16(mean[cal->lateral_axis]);
 
     for (i = 0U; i < 3U; i++) {
         mag_sq += (uint32_t)(mean[i] * mean[i]);
@@ -222,6 +227,33 @@ int16_t imu_pitch_permille(const imu_cal_t *cal, const imu_vec3_t *mg)
         return 0;
     }
     /* Nose up pitches the reaction vector toward -forward, hence the sign. */
+    return to_i16((int32_t)((-num * PERMILLE) / den));
+}
+
+int16_t imu_roll_permille(const imu_cal_t *cal, const imu_vec3_t *mg)
+{
+    int64_t g_l;
+    int64_t g_v;
+    int64_t num;
+    int64_t den;
+    uint32_t cur_sq;
+    uint32_t base_sq;
+
+    if (cal->state != IMU_CAL_DONE) {
+        return 0;
+    }
+    g_l = axis_of(mg, cal->lateral_axis);
+    g_v = (int64_t)axis_of(mg, cal->vertical_axis) * cal->vertical_sign;
+
+    /* Same cross product as the pitch, in the sideways/vertical plane. */
+    num = (g_l * cal->base_v) - (g_v * cal->base_l);
+    cur_sq = (uint32_t)((g_l * g_l) + (g_v * g_v));
+    base_sq = (uint32_t)(((int32_t)cal->base_l * cal->base_l) +
+                         ((int32_t)cal->base_v * cal->base_v));
+    den = (int64_t)isqrt32(cur_sq) * (int64_t)isqrt32(base_sq);
+    if (den == 0) {
+        return 0;
+    }
     return to_i16((int32_t)((-num * PERMILLE) / den));
 }
 
@@ -453,6 +485,153 @@ hump_event_t hump_update(hump_detector_t *h, const hump_input_t *in)
 }
 
 /* ---- motion classification ------------------------------------------- */
+
+/* ---- roll-based hump detector ---------------------------------------- */
+
+void roll_hump_init(roll_hump_t *h, const roll_hump_config_t *cfg)
+{
+    h->cfg = *cfg;
+    h->state = HUMP_FLAT;
+    h->peak_permille = 0;
+    h->side = 1;
+    h->start_mm = 0;
+    h->start_distance_ok = false;
+    h->cond_since_ms = 0U;
+    h->cond_active = false;
+    h->inputs_bad = false;
+    h->highest_valid_mm = -1;
+    h->last_event_packed = hump_event_pack(HUMP_FLAT, HUMP_HEIGHT_OUT_OF_RANGE, HUMP_UNAVAILABLE, false);
+    h->humps_seen = 0U;
+}
+
+bool roll_hump_in_progress(const roll_hump_t *h)
+{
+    return h->state != HUMP_FLAT;
+}
+
+int32_t roll_hump_highest_valid_mm(const roll_hump_t *h)
+{
+    return h->highest_valid_mm;
+}
+
+uint8_t roll_hump_last_height_code(const roll_hump_t *h)
+{
+    hump_state_t status;
+    uint8_t code;
+    hump_validity_t validity;
+    bool fault;
+
+    hump_event_unpack(h->last_event_packed, &status, &code, &validity, &fault);
+    return code;
+}
+
+hump_validity_t roll_hump_last_validity(const roll_hump_t *h)
+{
+    hump_state_t status;
+    uint8_t code;
+    hump_validity_t validity;
+    bool fault;
+
+    hump_event_unpack(h->last_event_packed, &status, &code, &validity, &fault);
+    return validity;
+}
+
+/* True once 'ok' has held for 'ms'; restarts the timer whenever it breaks. */
+static bool held_for(roll_hump_t *h, bool ok, uint32_t now_ms, uint16_t ms)
+{
+    if (!ok) {
+        h->cond_active = false;
+        return false;
+    }
+    if (!h->cond_active) {
+        h->cond_active = true;
+        h->cond_since_ms = now_ms;
+    }
+    return (uint32_t)(now_ms - h->cond_since_ms) >= (uint32_t)ms;
+}
+
+static bool roll_hump_finish(roll_hump_t *h, const roll_hump_input_t *in)
+{
+    const int32_t height = ((h->peak_permille * (int32_t)h->cfg.lever_mm) + 500) / 1000;
+    hump_validity_t validity = HUMP_VALID;
+    uint8_t code;
+
+    h->state = HUMP_FLAT;
+    h->cond_active = false;
+    if (height < (int32_t)h->cfg.min_height_mm) {
+        return false;                       /* too small to be a hump: say nothing */
+    }
+    if (h->inputs_bad || !h->start_distance_ok || !in->distance_valid) {
+        validity = HUMP_LOW_CONFIDENCE;
+    } else {
+        const int32_t length = in->distance_mm - h->start_mm;
+        const int32_t abs_len = (length < 0) ? -length : length;
+
+        if ((abs_len < (int32_t)h->cfg.min_length_mm) || (abs_len > (int32_t)h->cfg.max_length_mm)) {
+            validity = HUMP_LOW_CONFIDENCE;
+        }
+    }
+    code = (height > (int32_t)HUMP_HEIGHT_MAX_MM) ? (uint8_t)HUMP_HEIGHT_OUT_OF_RANGE : (uint8_t)height;
+    h->last_event_packed = hump_event_pack(HUMP_FLAT, code, validity, h->inputs_bad);
+    h->humps_seen++;
+    if ((validity == HUMP_VALID) && (height > h->highest_valid_mm) && (code != HUMP_HEIGHT_OUT_OF_RANGE)) {
+        h->highest_valid_mm = height;
+    }
+    return true;
+}
+
+hump_event_t roll_hump_update(roll_hump_t *h, const roll_hump_input_t *in)
+{
+    const int32_t mag = (in->roll_permille < 0) ? -(int32_t)in->roll_permille : (int32_t)in->roll_permille;
+    hump_event_t ev = HUMP_EVENT_NONE;
+
+    if (h->state != HUMP_FLAT) {
+        if (!in->imu_ok || !in->distance_valid) {
+            h->inputs_bad = true;
+        }
+    }
+
+    switch (h->state) {
+    case HUMP_FLAT:
+        if (in->imu_ok && held_for(h, mag >= (int32_t)h->cfg.enter_permille, in->now_ms, h->cfg.enter_ms)) {
+            h->state = HUMP_RISING;
+            h->peak_permille = mag;
+            h->side = (in->roll_permille < 0) ? (int8_t)-1 : (int8_t)1;
+            h->start_mm = in->distance_mm;
+            h->start_distance_ok = in->distance_valid;
+            h->inputs_bad = false;
+            h->cond_active = false;
+            ev = HUMP_EVENT_STARTED;
+        }
+        break;
+
+    case HUMP_RISING:
+    case HUMP_ON_HUMP:
+    case HUMP_DESCENDING:
+        if (mag > h->peak_permille) {
+            h->peak_permille = mag;
+            h->side = (in->roll_permille < 0) ? (int8_t)-1 : (int8_t)1;
+        }
+        if (mag >= (2 * (int32_t)h->cfg.enter_permille)) {
+            h->state = (mag >= ((h->peak_permille * 85) / 100)) ? HUMP_ON_HUMP : HUMP_DESCENDING;
+        } else if (h->state == HUMP_ON_HUMP) {
+            h->state = HUMP_DESCENDING;
+        } else {
+            /* still climbing toward the top, or already on the way down: keep the state */
+        }
+        if (held_for(h, mag < (int32_t)h->cfg.exit_permille, in->now_ms, h->cfg.exit_ms)) {
+            if (roll_hump_finish(h, in)) {
+                ev = HUMP_EVENT_FINISHED;
+            }
+        }
+        break;
+
+    default:
+        h->state = HUMP_FLAT;
+        break;
+    }
+    return ev;
+}
 
 imu_motion_t imu_classify_motion(const imu_motion_input_t *in)
 {

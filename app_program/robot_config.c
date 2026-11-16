@@ -118,6 +118,26 @@ const line_nav_config_t ROBOT_LINE_NAV_CFG = {
     .smooth_shift = 2U                          /* digital sensors: gain 1/4 per 10 ms step, about 35 ms */
 };
 
+/*
+ * Hump detection by roll: one wheel on the hump rolls the car, and the filtered
+ * roll shows one smooth bump (measured: +114 and -118 by hand, +114 and -106
+ * driving, over a 190 mm hump of 11 mm).  The lever 97 mm is fitted so a 113
+ * per-mille peak reads 11 mm; the measured track is about 115 mm, the rest is
+ * the sensor's uneven scale.  Refit it on the known hump if the board moves.
+ */
+const roll_hump_config_t ROBOT_ROLL_HUMP_CFG = {
+    .enter_permille = 40,               /* flat running stays within about +-15 */
+    .exit_permille = 25,
+    .enter_ms = 60U,
+    .exit_ms = 100U,
+    .lever_mm = 97U,
+    .min_length_mm = 60U,
+    .max_length_mm = 400U,
+    .min_height_mm = 3
+};
+
+/* The older pitch-based detector: pitch is biased by about 100 per-mille while
+ * driving, so the robot no longer uses it. */
 const hump_config_t ROBOT_HUMP_CFG = {
     .up_threshold_permille = 50,
     .down_threshold_permille = 50,

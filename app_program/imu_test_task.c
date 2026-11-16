@@ -32,7 +32,6 @@
 #define TEST_BUTTON_SAMPLES     (6U)        /* 6 x 5 ms = 30 ms debounce */
 #define TEST_AVG_SAMPLES        (50U)       /* 1 s at 50 Hz */
 #define TEST_PRINT_MS           (200U)
-#define TEST_FILTER_DIV         (8)         /* low-pass: each sample moves the filter 1/8 of the way */
 #define TEST_DRIVE_PRINT_MS     (100U)     /* a 19 cm hump takes about 1.6 s at 120 mm/s */
 #define TEST_REST_MIN_Z_MG      (700)       /* flat: Z carries gravity, up (+) or upside down (-) */
 #define TEST_REST_MAX_XY_MG     (250)       /* about 15 degrees of tilt */
@@ -101,29 +100,6 @@ static int32_t abs32(int32_t v)
     return (v < 0) ? -v : v;
 }
 
-/* The sideways axis: not the forward axis, and not the one carrying gravity. */
-static uint8_t lateral_axis(uint8_t fwd_axis, const imu_vec3_t *rest)
-{
-    uint8_t vertical = IMU_AXIS_Z;
-    int32_t best = 0;
-    uint8_t axis;
-
-    for (axis = 0U; axis < 3U; axis++) {
-        const int32_t a = abs32(axis_value(rest, axis));
-
-        if ((axis != fwd_axis) && (a > best)) {
-            best = a;
-            vertical = axis;
-        }
-    }
-    for (axis = 0U; axis < 3U; axis++) {
-        if ((axis != fwd_axis) && (axis != vertical)) {
-            return axis;
-        }
-    }
-    return IMU_AXIS_Y;
-}
-
 static int32_t isqrt_i32(int32_t v)
 {
     int32_t r = 0;
@@ -182,12 +158,10 @@ static void imu_test_task(INT stacd, void *exinf)
 {
     static motion_t motion;
     static imu_cal_t cal;
-    static imu_cal_t cal_roll;
     int32_t filt[3] = { 0, 0, 0 };
     bool filt_init = false;
     int16_t roll_peak = 0;
-    int16_t pitch_peak = 0;
-    static hump_detector_t hump;
+    static roll_hump_t hump;
     encoder_snapshot_t left;
     encoder_snapshot_t right;
     motion_output_t mo;
@@ -217,7 +191,7 @@ static void imu_test_task(INT stacd, void *exinf)
     (void)exinf;
     motion_init(&motion, &ROBOT_MOTION_CFG);
     hal_motor_set(0, 0);
-    hump_init(&hump, &ROBOT_HUMP_CFG);
+    roll_hump_init(&hump, &ROBOT_ROLL_HUMP_CFG);
     tm_printf((UB *)"[imu] IMU bring-up. START = next step, STOP = abort the drive.\n");
     print_prompt(step);
 
@@ -284,11 +258,7 @@ static void imu_test_task(INT stacd, void *exinf)
                     /* HUMP run: calibrate at rest with the sign found above. */
                     imu_cal_init(&cal, fwd_axis, fwd_sign, ROBOT_IMU_CAL_SAMPLES,
                                  TEST_CAL_SPREAD_MG);
-                    /* One wheel on the hump tilts the car sideways (roll) more than
-                     * it pitches it, so the sideways tilt is measured as well. */
-                    imu_cal_init(&cal_roll, lateral_axis(fwd_axis, &rest_mean), 1,
-                                 ROBOT_IMU_CAL_SAMPLES, TEST_CAL_SPREAD_MG);
-                    hump_init(&hump, &ROBOT_HUMP_CFG);
+                    roll_hump_init(&hump, &ROBOT_ROLL_HUMP_CFG);
                     phase = PHASE_SETTLE;
                     phase_start_ms = now;
                     tm_printf((UB *)"[imu] RUN hump drive: calibrating at rest (axis %c sign %d). Keep the car still.\n",
@@ -405,15 +375,12 @@ static void imu_test_task(INT stacd, void *exinf)
             /* Pressing START shakes the car, so the first second of readings is thrown away. */
             if (have_sample && ((now - phase_start_ms) >= TEST_IGNORE_MS)) {
                 (void)imu_cal_feed(&cal, &g);
-                (void)imu_cal_feed(&cal_roll, &g);
             }
-            if ((cal.state == IMU_CAL_FAILED_MOVING) || (cal_roll.state == IMU_CAL_FAILED_MOVING)) {
+            if (cal.state == IMU_CAL_FAILED_MOVING) {
                 tm_printf((UB *)"[imu] WRONG: the car moved during calibration. Keep it still and press START again\n");
                 phase = PHASE_MENU;
-            } else if ((cal.state == IMU_CAL_DONE) && (cal_roll.state == IMU_CAL_DONE) &&
-                       ((now - phase_start_ms) >= TEST_SETTLE_MS)) {
+            } else if ((cal.state == IMU_CAL_DONE) && ((now - phase_start_ms) >= TEST_SETTLE_MS)) {
                 roll_peak = 0;
-                pitch_peak = 0;
                 filt_init = false;
                 cmd_id++;
                 base_dist_mm = motion_status(&motion)->distance_mm;
@@ -454,62 +421,43 @@ static void imu_test_task(INT stacd, void *exinf)
             pwm_r = mo.right_pwm;
 #endif
             if (have_sample) {
-                hump_input_t hin;
+                roll_hump_input_t hin;
                 hump_event_t ev;
                 imu_vec3_t gf;
-                int16_t pitch_raw;
 
-                /*
-                 * Driving shakes the sensor by several times the size of a 1 cm hump, so
-                 * the vector is low-pass filtered (time constant about 8 samples = 160 ms)
-                 * before the tilt is taken.  The raw pitch is printed for comparison.
-                 */
+                /* The same low-pass and detector as the robot's IMU task. */
                 if (!filt_init) {
                     filt[0] = (int32_t)g.x * 16;
                     filt[1] = (int32_t)g.y * 16;
                     filt[2] = (int32_t)g.z * 16;
                     filt_init = true;
                 } else {
-                    filt[0] += (((int32_t)g.x * 16) - filt[0]) / TEST_FILTER_DIV;
-                    filt[1] += (((int32_t)g.y * 16) - filt[1]) / TEST_FILTER_DIV;
-                    filt[2] += (((int32_t)g.z * 16) - filt[2]) / TEST_FILTER_DIV;
+                    filt[0] += (((int32_t)g.x * 16) - filt[0]) / ROBOT_IMU_FILTER_DIV;
+                    filt[1] += (((int32_t)g.y * 16) - filt[1]) / ROBOT_IMU_FILTER_DIV;
+                    filt[2] += (((int32_t)g.z * 16) - filt[2]) / ROBOT_IMU_FILTER_DIV;
                 }
                 gf.x = (int16_t)(filt[0] / 16);
                 gf.y = (int16_t)(filt[1] / 16);
                 gf.z = (int16_t)(filt[2] / 16);
-                pitch_raw = imu_pitch_permille(&cal, &g);
-                hin.pitch_permille = imu_pitch_permille(&cal, &gf);
-                hin.disturbance_mg = imu_disturbance_mg(&cal, &gf);
+                hin.roll_permille = imu_roll_permille(&cal, &gf);
                 hin.distance_mm = st->distance_mm;
                 hin.distance_valid = true;
                 hin.imu_ok = true;
                 hin.now_ms = now;
-                ev = hump_update(&hump, &hin);
-                {
-                    const int16_t roll = imu_pitch_permille(&cal_roll, &gf);
-
-                    if (abs32(roll) > abs32(roll_peak)) {
-                        roll_peak = roll;
-                    }
-                    if (abs32(hin.pitch_permille) > abs32(pitch_peak)) {
-                        pitch_peak = hin.pitch_permille;
-                    }
-                    if ((now - last_print_ms) >= TEST_DRIVE_PRINT_MS) {
-                        last_print_ms = now;
-                        tm_printf((UB *)"[imu] DRIVE d=%dmm pitchF=%d rollF=%d (raw pitch %d) dist-mg=%d state=%d\n",
-                                  (INT)(st->distance_mm - base_dist_mm), (INT)hin.pitch_permille,
-                                  (INT)roll, (INT)pitch_raw, (INT)hin.disturbance_mg, (INT)hump.state);
-                    }
+                ev = roll_hump_update(&hump, &hin);
+                if (abs32(hin.roll_permille) > abs32(roll_peak)) {
+                    roll_peak = hin.roll_permille;
+                }
+                if ((now - last_print_ms) >= TEST_DRIVE_PRINT_MS) {
+                    last_print_ms = now;
+                    tm_printf((UB *)"[imu] DRIVE d=%dmm rollF=%d (pitchF %d) state=%d\n",
+                              (INT)(st->distance_mm - base_dist_mm), (INT)hin.roll_permille,
+                              (INT)imu_pitch_permille(&cal, &gf), (INT)hump.state);
                 }
                 if (ev == HUMP_EVENT_FINISHED) {
-                    hump_state_t hs;
-                    uint8_t hcode;
-                    hump_validity_t hv;
-                    bool hfault;
-
-                    hump_event_unpack(hump.last_event_packed, &hs, &hcode, &hv, &hfault);
-                    tm_printf((UB *)"[imu] RESULT hump finished: height=%dmm validity=%d (0=valid 1=n/a 2=low confidence)\n",
-                              (INT)hcode, (INT)hv);
+                    tm_printf((UB *)"[imu] RESULT hump: height=%dmm validity=%d (0=valid 1=n/a 2=low confidence) side=%s peak roll=%d\n",
+                              (INT)roll_hump_last_height_code(&hump), (INT)roll_hump_last_validity(&hump),
+                              (hump.side < 0) ? (UB *)"right wheel" : (UB *)"left wheel", (INT)hump.peak_permille);
                 }
             }
             if (stop_edge || done || timed_out) {
@@ -520,18 +468,9 @@ static void imu_test_task(INT stacd, void *exinf)
                 if (stop_edge) {
                     tm_printf((UB *)"[imu] STOPPED by button\n");
                 }
-                /*
-                 * One wheel on the hump lifts that wheel by h, which rolls the car by
-                 * sin(roll) = h / track.  So the peak roll gives the height directly,
-                 * with no speed or distance in it.
-                 */
-                tm_printf((UB *)"[imu] RESULT peak roll=%d permille, peak pitch=%d permille -> height from roll = %d mm (track %d mm)\n",
-                          (INT)roll_peak, (INT)pitch_peak,
-                          (INT)((abs32(roll_peak) * (int32_t)ROBOT_MOTION_CFG.track_width_mm) / 1000),
-                          (INT)ROBOT_MOTION_CFG.track_width_mm);
-                tm_printf((UB *)"[imu] RESULT drive over: humps seen=%d highest valid=%dmm (-1 = none)\n",
+                tm_printf((UB *)"[imu] RESULT drive over: humps seen=%d highest valid=%dmm (-1 = none), biggest roll %d permille\n",
                           (INT)((uint8_t)hump.humps_seen - humps_before),
-                          (INT)hump_highest_valid_mm(&hump));
+                          (INT)roll_hump_highest_valid_mm(&hump), (INT)roll_peak);
                 phase = PHASE_MENU;
                 print_prompt(step);
             }
