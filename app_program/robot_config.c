@@ -152,30 +152,35 @@ const hump_config_t ROBOT_HUMP_CFG = {
 };
 
 /*
- * Scanning and bypass.  PLACEHOLDER: servo pulse range/trim, robot size and
- * margins.  The coarse step is 15 degrees: the simulation shows a 100 mm
- * object 60 mm off-centre hides between 30-degree rays.
+ * Scanning and bypass.  The servo is MEASURED (Buddy 5, on the car): 1500 us is
+ * straight ahead, 1100 us is 32 degrees to the right, 1850 us is 28 degrees to
+ * the left, so 12.5 us per degree on both sides.  Further left the horn hits the
+ * chassis, so the sweep is about 60 degrees, not 180.  The pulse range below is
+ * that line extended to 0 and 180 degrees (375 us at 0, 2625 us at 180); only the
+ * software limits 58 to 118 degrees are ever commanded.  PLACEHOLDER: robot size
+ * and margins.  The rays are 14 degrees apart (62, 76, 90, 104, 118): the
+ * simulation shows a 100 mm object 60 mm off-centre hides between 30-degree rays.
  */
 const obstacle_config_t ROBOT_OBSTACLE_CFG = {
     .servo = {
-        .min_pulse_us = 500U,
-        .max_pulse_us = 2500U,
-        .trim_deg = 0,                  /* PLACEHOLDER: horn alignment (bench: not aligned) */
+        .min_pulse_us = 375U,           /* 1500 us - 90 deg x 12.5 us/deg */
+        .max_pulse_us = 2625U,          /* 1500 us + 90 deg x 12.5 us/deg */
+        .trim_deg = 0,                  /* measured: 1500 us is straight ahead */
         .invert = false,
-        .min_angle_deg = 20U,
-        .max_angle_deg = 160U,
+        .min_angle_deg = 58U,           /* 1100 us: 32 degrees right of centre */
+        .max_angle_deg = 118U,          /* 1850 us: 28 degrees left, the chassis blocks more */
         .settle_base_ms = 60U,
         .settle_ms_per_deg = 4U
     },
-    .coarse_min_deg = 30U,
-    .coarse_max_deg = 150U,
-    .coarse_step_deg = 15U,
+    .coarse_min_deg = 62U,
+    .coarse_max_deg = 118U,
+    .coarse_step_deg = 14U,
     .fine_step_deg = 5U,
     .detect_range_mm = 600U,
     .samples_per_point = 3U,
     .measure_timeout_ms = 120U,
     .no_echo_is_clear = false,          /* Tribunal: no echo is not free space */
-    .left_is_high_angle = true,         /* PLACEHOLDER: depends on the horn fitting */
+    .left_is_high_angle = true,         /* measured: a longer pulse points left */
     .robot_width_mm = 140U,             /* PLACEHOLDER */
     .robot_length_mm = 200U,            /* PLACEHOLDER */
     .margin_mm = 30U,
