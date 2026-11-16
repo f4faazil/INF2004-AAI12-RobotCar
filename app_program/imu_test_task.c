@@ -32,8 +32,10 @@
 #define TEST_BUTTON_SAMPLES     (6U)        /* 6 x 5 ms = 30 ms debounce */
 #define TEST_AVG_SAMPLES        (50U)       /* 1 s at 50 Hz */
 #define TEST_PRINT_MS           (200U)
-#define TEST_REST_MIN_Z_MG      (900)       /* a flat, upright board reads about +1000 */
-#define TEST_REST_MAX_XY_MG     (150)
+#define TEST_REST_MIN_Z_MG      (700)       /* flat: Z carries gravity, up (+) or upside down (-) */
+#define TEST_REST_MAX_XY_MG     (250)       /* about 15 degrees of tilt */
+#define TEST_MAG_LOW_MG         (900)       /* |g| outside 900..1100 is a scale or offset error */
+#define TEST_MAG_HIGH_MG        (1100)
 #define TEST_NOSE_MIN_MG        (100)       /* at least about 6 degrees of lift */
 #define TEST_MOVE_MM            (1000)
 #define TEST_MOVE_SPEED_MM_S    (120)
@@ -93,6 +95,16 @@ static char axis_name(uint8_t axis)
 static int32_t abs32(int32_t v)
 {
     return (v < 0) ? -v : v;
+}
+
+static int32_t isqrt_i32(int32_t v)
+{
+    int32_t r = 0;
+
+    while (((r + 1) * (r + 1)) <= v) {
+        r++;
+    }
+    return r;
 }
 
 static void print_prompt(test_step_t step)
@@ -287,19 +299,32 @@ static void imu_test_task(INT stacd, void *exinf)
                     rest_mean = mean;
                     tm_printf((UB *)"[imu] RESULT rest x=%d y=%d z=%d mg\n",
                               (INT)mean.x, (INT)mean.y, (INT)mean.z);
-                    if (mean.z >= TEST_REST_MIN_Z_MG) {
-                        rest_done = true;
-                        tm_printf((UB *)"[imu] OK: Z reads +1 g, the board is flat and the right way up\n");
-                        if ((abs32(mean.x) > TEST_REST_MAX_XY_MG) || (abs32(mean.y) > TEST_REST_MAX_XY_MG)) {
-                            tm_printf((UB *)"[imu] NOTE: X or Y is more than 150 mg: the board or the car is tilted\n");
+                    {
+                        const int32_t mag = isqrt_i32(((int32_t)mean.x * mean.x) + ((int32_t)mean.y * mean.y) +
+                                                      ((int32_t)mean.z * mean.z));
+
+                        tm_printf((UB *)"[imu] RESULT |g| = %d mg
+", (INT)mag);
+                        if ((abs32(mean.z) < TEST_REST_MIN_Z_MG) ||
+                            (abs32(mean.x) > TEST_REST_MAX_XY_MG) || (abs32(mean.y) > TEST_REST_MAX_XY_MG)) {
+                            tm_printf((UB *)"[imu] WRONG: gravity is not mostly on Z, so the board or the car is tilted. Level it and try again
+");
+                        } else {
+                            rest_done = true;
+                            if (mean.z < 0) {
+                                tm_printf((UB *)"[imu] OK: Z is negative, so the board is mounted upside down. That is fine: the pitch maths allows for it
+");
+                            } else {
+                                tm_printf((UB *)"[imu] OK: Z reads +1 g, the board is flat and the right way up
+");
+                            }
+                            if ((mag < TEST_MAG_LOW_MG) || (mag > TEST_MAG_HIGH_MG)) {
+                                tm_printf((UB *)"[imu] NOTE: |g| is %d mg, not about 1000. The scale or offset is off. Pitch and hump height use ratios and the measured |g|, so they are not affected
+",
+                                          (INT)mag);
+                            }
+                            step = STEP_NOSE;
                         }
-                        step = STEP_NOSE;
-                    } else if (mean.z <= -TEST_REST_MIN_Z_MG) {
-                        tm_printf((UB *)"[imu] WRONG: Z reads -1 g, the board is upside down. Tell me, the maths allows for it\n");
-                        rest_done = true;
-                        step = STEP_NOSE;
-                    } else {
-                        tm_printf((UB *)"[imu] WRONG: Z is not +/-1 g, the board is not flat (or the car is not level)\n");
                     }
                 } else {
                     /* NOSE: the axis that changed most is the forward axis. */
