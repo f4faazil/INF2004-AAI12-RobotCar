@@ -42,7 +42,9 @@
 #define TEST_MOVE_SPEED_MM_S    (120)
 #define TEST_MOVE_LEASE_MS      (15000U)
 #define TEST_MOVE_TIMEOUT_MS    (16000U)
-#define TEST_SETTLE_MS          (1500U)     /* still time for the rest calibration */
+#define TEST_SETTLE_MS          (3000U)     /* total settle time after START */
+#define TEST_IGNORE_MS          (1200U)     /* the START press shakes the car: ignore this long */
+#define TEST_CAL_SPREAD_MG      (250)       /* floor vibration is about +-50 mg; a hand is far more */
 
 typedef enum {
     STEP_REST = 0,
@@ -278,11 +280,11 @@ static void imu_test_task(INT stacd, void *exinf)
                 if (step == STEP_LIVE) {
                     /* HUMP run: calibrate at rest with the sign found above. */
                     imu_cal_init(&cal, fwd_axis, fwd_sign, ROBOT_IMU_CAL_SAMPLES,
-                                 ROBOT_IMU_CAL_SPREAD_MG);
+                                 TEST_CAL_SPREAD_MG);
                     /* One wheel on the hump tilts the car sideways (roll) more than
                      * it pitches it, so the sideways tilt is measured as well. */
                     imu_cal_init(&cal_roll, lateral_axis(fwd_axis, &rest_mean), 1,
-                                 ROBOT_IMU_CAL_SAMPLES, ROBOT_IMU_CAL_SPREAD_MG);
+                                 ROBOT_IMU_CAL_SAMPLES, TEST_CAL_SPREAD_MG);
                     hump_init(&hump, &ROBOT_HUMP_CFG);
                     phase = PHASE_SETTLE;
                     phase_start_ms = now;
@@ -397,7 +399,8 @@ static void imu_test_task(INT stacd, void *exinf)
             break;
 
         case PHASE_SETTLE:
-            if (have_sample) {
+            /* Pressing START shakes the car, so the first second of readings is thrown away. */
+            if (have_sample && ((now - phase_start_ms) >= TEST_IGNORE_MS)) {
                 (void)imu_cal_feed(&cal, &g);
                 (void)imu_cal_feed(&cal_roll, &g);
             }
