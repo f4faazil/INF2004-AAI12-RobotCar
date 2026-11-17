@@ -658,3 +658,79 @@ void obstacle_plan(const obstacle_config_t *cfg, const obstacle_profile_t *p,
         plan->return_leg_mm = (uint16_t)lateral;
     }
 }
+
+/* How far the outermost rays on one end of the sweep read; a clear or no-echo ray
+ * counts as far.  'from_low_end' picks the low angles. */
+static int32_t end_distance_mm(const scan_point_t *pts, uint8_t n, bool from_low_end)
+{
+    int32_t sum = 0;
+    uint8_t taken = 0U;
+    uint8_t i;
+
+    for (i = 0U; (i < n) && (taken < 2U); i++) {
+        const scan_point_t *q = from_low_end ? &pts[i] : &pts[n - 1U - i];
+
+        sum += (q->kind == SCAN_POINT_OBSTACLE) ? (int32_t)q->distance_mm : (int32_t)US_MAX_RANGE_MM;
+        taken++;
+    }
+    return (taken == 0U) ? 0 : (sum / (int32_t)taken);
+}
+
+bool obstacle_blind_plan(const obstacle_config_t *cfg, const scan_point_t *pts, uint8_t n,
+                         const obstacle_profile_t *p, bypass_plan_t *plan)
+{
+    const int32_t half = (int32_t)cfg->robot_width_mm / HALF;
+    const int32_t corridor = half + (int32_t)cfg->margin_mm;
+    int32_t lateral_left;
+    int32_t lateral_right;
+    int32_t low_end;
+    int32_t high_end;
+    int32_t right_end;
+    int32_t left_end;
+    bool go_right;
+    int32_t lateral;
+    int32_t forward;
+    int32_t sign;
+
+    if (!p->valid || !p->obstacle_found || (n == 0U)) {
+        return false;
+    }
+    if ((p->left_edge_x_mm > corridor) || (p->right_edge_x_mm < -corridor)) {
+        return false;                           /* beside the path, not in it */
+    }
+    if ((int32_t)p->forward_mm < (int32_t)cfg->min_turn_distance_mm) {
+        return false;                           /* too close to turn */
+    }
+
+    lateral_left = corridor - p->left_edge_x_mm;
+    lateral_right = corridor + p->right_edge_x_mm;
+    low_end = end_distance_mm(pts, n, true);
+    high_end = end_distance_mm(pts, n, false);
+    right_end = cfg->left_is_high_angle ? low_end : high_end;
+    left_end = cfg->left_is_high_angle ? high_end : low_end;
+    go_right = (right_end >= left_end);
+
+    if (go_right && (lateral_right > (int32_t)cfg->recovery_limit_mm)) {
+        go_right = false;
+    } else if (!go_right && (lateral_left > (int32_t)cfg->recovery_limit_mm)) {
+        go_right = true;
+    } else {
+        /* the preferred side stays */
+    }
+    lateral = go_right ? lateral_right : lateral_left;
+    if (lateral > (int32_t)cfg->recovery_limit_mm) {
+        return false;                           /* too far round on both sides */
+    }
+    sign = go_right ? -1 : 1;
+    forward = (int32_t)p->forward_mm + (int32_t)cfg->assumed_depth_mm +
+              (int32_t)cfg->robot_length_mm + (int32_t)cfg->margin_mm;
+
+    plan_clear(plan, go_right ? PLAN_BYPASS_RIGHT : PLAN_BYPASS_LEFT, PLAN_REASON_OK);
+    add_step(plan, true, sign * 90);
+    add_step(plan, false, lateral);
+    add_step(plan, true, -sign * 90);
+    add_step(plan, false, forward);
+    add_step(plan, true, -sign * 90);
+    plan->return_leg_mm = (uint16_t)lateral;
+    return true;
+}

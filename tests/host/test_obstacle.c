@@ -864,6 +864,90 @@ static void test_open_side_still_respects_the_recovery_limit(void)
     CHECK_INT(PLAN_STOP, plan.action);
 }
 
+/* ---- the blind bypass (no open side seen) ----------------------------- */
+
+/* The scan from the free-roam run on the car, 17 Nov: the box fills all 13 rays. */
+static const real_point_t REAL_FILLS_SWEEP[] = {
+    { 58U, false, 494U }, { 63U, false, 498U }, { 68U, false, 495U }, { 73U, false, 495U },
+    { 78U, false, 482U }, { 83U, false, 477U }, { 88U, false, 477U }, { 93U, false, 474U },
+    { 98U, false, 470U }, { 103U, false, 474U }, { 108U, false, 483U }, { 113U, false, 479U },
+    { 118U, false, 483U } };
+
+static bool blind_for(const real_point_t *r, uint8_t n, obstacle_profile_t *p, bypass_plan_t *plan)
+{
+    obstacle_config_t cfg = car_cfg();
+    scan_point_t pts[16];
+    uint8_t i;
+
+    cfg.sweep_clear_min_rays = 2U;
+    cfg.margin_mm = 80U;
+    for (i = 0U; i < n; i++) {
+        pts[i].angle_deg = r[i].angle;
+        pts[i].kind = r[i].clear ? SCAN_POINT_FAR : SCAN_POINT_OBSTACLE;
+        pts[i].distance_mm = r[i].clear ? US_MAX_RANGE_MM : r[i].mm;
+    }
+    obstacle_profile_build(&cfg, pts, n, p);
+    obstacle_plan(&cfg, p, plan);
+    if (plan->action != PLAN_STOP) {
+        return false;
+    }
+    return obstacle_blind_plan(&cfg, pts, n, p, plan);
+}
+
+/* The planner stops when the box fills the sweep; the blind plan then goes round the
+ * side whose outer rays read farther (the right here), with a sensible distance.
+ * Catches: a missing fallback, a wrong side, or a silly sideways distance. */
+static void test_blind_plan_goes_round_a_box_that_fills_the_sweep(void)
+{
+    obstacle_profile_t p;
+    bypass_plan_t plan;
+
+    CHECK(blind_for(REAL_FILLS_SWEEP, COUNT_OF(REAL_FILLS_SWEEP), &p, &plan));
+    CHECK_INT(PLAN_BYPASS_RIGHT, plan.action);
+    CHECK_INT(5, plan.step_count);
+    CHECK(plan.steps[0].is_turn && (plan.steps[0].value == -90));    /* turn right first */
+    CHECK(!plan.steps[1].is_turn && (plan.steps[1].value > 300) && (plan.steps[1].value <= 500));
+    CHECK(!plan.steps[3].is_turn && (plan.steps[3].value > 800) && (plan.steps[3].value < 1100));
+}
+
+/* The farther-reading end wins: the same box with the right end closer goes left.
+ * Catches: a fixed side. */
+static void test_blind_plan_takes_the_side_that_reads_farther(void)
+{
+    static const real_point_t FLIPPED[] = {
+        { 58U, false, 470U }, { 63U, false, 470U }, { 68U, false, 480U }, { 73U, false, 480U },
+        { 78U, false, 480U }, { 83U, false, 477U }, { 88U, false, 477U }, { 93U, false, 474U },
+        { 98U, false, 480U }, { 103U, false, 480U }, { 108U, false, 490U }, { 113U, false, 500U },
+        { 118U, false, 505U } };
+    obstacle_profile_t p;
+    bypass_plan_t plan;
+
+    CHECK(blind_for(FLIPPED, COUNT_OF(FLIPPED), &p, &plan));
+    CHECK_INT(PLAN_BYPASS_LEFT, plan.action);
+    CHECK(plan.steps[0].is_turn && (plan.steps[0].value == 90));
+}
+
+/* No obstacle, or one too close to turn, gives no blind plan.  Catches: a bypass
+ * round nothing. */
+static void test_blind_plan_refuses_when_there_is_nothing_to_go_round(void)
+{
+    obstacle_config_t cfg = car_cfg();
+    obstacle_profile_t p;
+    bypass_plan_t plan;
+    scan_point_t pts[3];
+
+    pts[0].angle_deg = 62U; pts[0].kind = SCAN_POINT_FAR; pts[0].distance_mm = 1500U;
+    pts[1].angle_deg = 90U; pts[1].kind = SCAN_POINT_FAR; pts[1].distance_mm = 1500U;
+    pts[2].angle_deg = 118U; pts[2].kind = SCAN_POINT_FAR; pts[2].distance_mm = 1500U;
+    obstacle_profile_build(&cfg, pts, 3U, &p);
+    CHECK(!obstacle_blind_plan(&cfg, pts, 3U, &p, &plan));
+
+    pts[1].kind = SCAN_POINT_OBSTACLE;
+    pts[1].distance_mm = 90U;                       /* nearer than the turn distance */
+    obstacle_profile_build(&cfg, pts, 3U, &p);
+    CHECK(!obstacle_blind_plan(&cfg, pts, 3U, &p, &plan));
+}
+
 int main(void)
 {
     RUN(test_trig_tables);
@@ -893,5 +977,8 @@ int main(void)
     RUN(test_real_scans_are_refused_by_the_confirmed_clearance_rule);
     RUN(test_open_to_the_sweep_limit_picks_the_open_side);
     RUN(test_open_side_still_respects_the_recovery_limit);
+    RUN(test_blind_plan_goes_round_a_box_that_fills_the_sweep);
+    RUN(test_blind_plan_takes_the_side_that_reads_farther);
+    RUN(test_blind_plan_refuses_when_there_is_nothing_to_go_round);
     return TEST_REPORT();
 }

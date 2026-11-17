@@ -48,6 +48,11 @@
 #define FR_MAX_STEPS            (9U)
 #define FR_SENSOR_CONFIRM       (2U)
 #define FR_INVALID_LIMIT        (8U)
+/* 1 = when the scan shows no open side (the box fills the whole sweep), go round
+ * anyway toward the side whose outer rays read farther.  The sonar cannot see the
+ * sides then, so only use it with nothing beside the path; the sonar still aborts a
+ * move if anything comes within FR_EMERGENCY_MM.  0 = stop and wait instead. */
+#define FR_BLIND_FALLBACK       (1)
 
 typedef enum {
     FR_IDLE = 0,
@@ -400,6 +405,13 @@ static void freeroam_task(INT stacd, void *exinf)
                           (INT)profile.closest_mm, (INT)profile.width_mm, (INT)profile.centre_x_mm,
                           (INT)profile.left_clearance_mm, (INT)profile.right_clearance_mm);
                 tm_printf((UB *)"[free] PLAN: %s (%s)\n", (UB *)action_name(plan.action), (UB *)reason_name(plan.reason));
+#if FR_BLIND_FALLBACK
+                if ((plan.action == PLAN_STOP) && (plan.reason == PLAN_REASON_NO_CLEARANCE) &&
+                    obstacle_blind_plan(&cfg, scan.points, scan.point_count, &profile, &plan)) {
+                    tm_printf((UB *)"[free] no open side was seen: going round %s ANYWAY (blind)\n",
+                              (plan.action == PLAN_BYPASS_LEFT) ? (UB *)"LEFT" : (UB *)"RIGHT");
+                }
+#endif
                 if (((plan.action == PLAN_BYPASS_LEFT) || (plan.action == PLAN_BYPASS_RIGHT)) &&
                     (plan.step_count >= 4U)) {
                     step_count = build_bypass(steps, &plan);
