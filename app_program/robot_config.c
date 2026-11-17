@@ -227,6 +227,13 @@ const vehicle_config_t ROBOT_VEHICLE_CFG = {
     .bypass_stop_mm = 100U,             /* during a bypass: something this close ahead stops the car (the front is the sonar face) */
     .bypass_blank_ms = 500U,            /* the sonar's median still holds readings from before the turn */
     .bypass_hold_ms = 4000U,            /* wait this long for the way to clear, then fault */
+    .side_aim_deg = 25,                 /* the servo reaches 28 degrees to the left, 32 to the right */
+    .side_min_mm = 50U,
+    .side_max_mm = 700U,                /* the box's side is about 150 / sin(25) = 350 mm away; a far wall is ignored */
+    .side_loss_ahead_pct = 60U,         /* sin(25) / tan(25 + 10) = 0.60: the beam is about 10 degrees either side (TUNE from the log) */
+    .side_tail_mm = 235U,               /* 80 sonar to axle + 135 axle to rear corner + 20 margin */
+    .side_extend_mm = 100U,
+    .side_extend_max_mm = 300U,
     .max_reverse_attempts = 1U,
     .found_cycles = 3U,
     .cmd_timeout_base_ms = 2000U,

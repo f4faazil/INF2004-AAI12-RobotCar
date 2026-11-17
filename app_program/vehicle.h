@@ -98,6 +98,22 @@ typedef struct {
     uint32_t bypass_blank_ms;           /* ignore the sonar this long after a leg starts: its median still
                                            holds readings from before the turn */
     uint32_t bypass_hold_ms;            /* wait this long for the way to clear, then fault */
+
+    /*
+     * Looking at the box while passing it.  On the straight leg beside the box the sonar is
+     * tilted toward it.  The car keeps going until the box is no longer seen, then drives only
+     * as far more as its rear needs to clear the box's back corner.  The planned leg (from the
+     * assumed depth) is the limit: the sonar only shortens it, unless the box is still in view
+     * at its end, when the car goes on a little at a time.  0 = the sonar is not used this way.
+     */
+    int16_t  side_aim_deg;              /* tilt of the sonar toward the box (the servo reaches about 28) */
+    uint16_t side_min_mm;               /* an echo inside [min, max] is the box's side */
+    uint16_t side_max_mm;
+    uint16_t side_loss_ahead_pct;       /* when the echo is lost, the box's back corner is this % of the last
+                                           range ahead of the sonar: sin(aim) / tan(aim + half the beam) */
+    uint16_t side_tail_mm;              /* from that moment: sonar to axle + axle to rear corner + margin */
+    uint16_t side_extend_mm;            /* box still in view at the end of the leg: go this much further ... */
+    uint16_t side_extend_max_mm;        /* ... up to this much in all */
     uint8_t  max_reverse_attempts;
     uint8_t  found_cycles;              /* consecutive visible cycles = line found */
     uint32_t cmd_timeout_base_ms;       /* finite manoeuvre time allowance */
@@ -122,6 +138,9 @@ typedef struct {
     bool             obstacle_present;  /* forward monitor */
     bool             obstacle_mm_valid; /* a fresh distance from the forward sonar ... */
     uint16_t         obstacle_mm;       /* ... and the distance itself, from the sonar face */
+    uint16_t         side_seq;          /* the latest raw sonar reading: its sequence number ... */
+    bool             side_echo;         /* ... whether it had an echo ... */
+    uint16_t         side_mm;           /* ... and the range */
     bool             scan_done;
     bypass_plan_t    plan;
     bool             hump_in_progress;
@@ -144,6 +163,7 @@ typedef struct {
     fault_bits_t    clear_faults;       /* authorised by the operator */
     vehicle_state_t state;
     uint8_t         activity;           /* VC_ACT_* */
+    int8_t          sonar_aim;          /* +1 tilt the sonar left, -1 right, 0 straight ahead */
     uint8_t         event_count;
     vehicle_event_t events[VC_MAX_EVENTS];
 } vehicle_out_t;
@@ -184,6 +204,18 @@ typedef struct {
     uint32_t         clear_since_ms;    /* when the way last became clear (0 = it is not) */
     int32_t          step_start_mm;     /* odometer at the start of the current straight leg */
     int16_t          leg_mm;            /* the distance that leg was asked to cover */
+
+    /* the straight leg beside the box */
+    int32_t          leg_origin_mm;     /* odometer when the leg began */
+    int16_t          leg_total_mm;      /* what the leg is to cover in all, from there */
+    int16_t          leg_extended_mm;
+    uint16_t         side_seq_seen;
+    uint8_t          side_hits;         /* readings in a row that saw the box's side */
+    uint8_t          side_miss;         /* readings in a row that did not */
+    bool             side_seen;         /* the box has been seen on this leg */
+    bool             side_cut_done;
+    uint16_t         side_last_mm;      /* the last range that saw it */
+    int32_t          side_miss_mm;      /* odometer when the readings stopped seeing it */
 } vehicle_t;
 
 void vehicle_init(vehicle_t *vc, const vehicle_config_t *cfg);

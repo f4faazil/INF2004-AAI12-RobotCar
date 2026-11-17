@@ -880,6 +880,122 @@ static void test_bypass_follows_the_line_if_it_is_seen_on_the_last_straight_leg(
     CHECK(saw_event(&h, TEL_EVT_RECOVERED, 0U));
 }
 
+/* ---- looking at the box while passing it -------------------------------- */
+
+static void side_rig(h_t *h)
+{
+    bypass_rig(h);
+    h->vc.cfg.side_aim_deg = 25;
+    h->vc.cfg.side_min_mm = 50U;
+    h->vc.cfg.side_max_mm = 700U;
+    h->vc.cfg.side_loss_ahead_pct = 60U;
+    h->vc.cfg.side_tail_mm = 235U;
+    h->vc.cfg.side_extend_mm = 100U;
+    h->vc.cfg.side_extend_max_mm = 300U;
+}
+
+/* One raw sonar reading (70 ms apart): an echo at 'mm', or none when mm is 0. */
+static void side_reading(h_t *h, uint16_t mm)
+{
+    h->in.side_seq++;
+    h->in.side_echo = (mm != 0U);
+    h->in.side_mm = mm;
+    h->in.obstacle_mm_valid = (mm != 0U);              /* the median follows the same readings */
+    h->in.obstacle_mm = mm;
+    cycles(h, 7);
+}
+
+/* The sonar looks at the box from the turn before the leg beside it until that leg ends, and
+ * is straight ahead the rest of the time.  A left bypass leaves the box on the right.
+ * Catches: looking at it the wrong way; not looking; staying tilted afterwards. */
+static void test_sonar_tilts_toward_the_box_beside_it_only(void)
+{
+    h_t h;
+
+    side_rig(&h);
+    CHECK_INT(0, h.out.sonar_aim);                          /* turning away: ahead */
+    CHECK(until_move(&h, 140, 800));
+    CHECK_INT(0, h.out.sonar_aim);                          /* sideways leg: ahead */
+    cycles(&h, 400);                                        /* the leg and the next turn start */
+    CHECK_INT(-1, h.out.sonar_aim);                         /* turning back: look at the box (right) */
+    CHECK(until_move(&h, 680, 800));
+    CHECK_INT(-1, h.out.sonar_aim);
+    CHECK(until(&h, VC_RECOVER_LINE, 1500));
+    CHECK_INT(0, h.out.sonar_aim);                          /* going back to the line: ahead */
+}
+
+/* The box is seen along the leg and then not: the leg is cut to what the rear needs.  Here the
+ * last range was 200 mm, lost at 300 mm of travel: 300 + 200 x 60% + 235 = 655 mm in all, so
+ * 355 mm are left from the 300 mm travelled.  Catches: no cut; the planned length kept. */
+static void test_leg_beside_the_box_ends_when_the_box_is_passed(void)
+{
+    h_t h;
+    int i;
+
+    side_rig(&h);
+    CHECK(until_move(&h, 680, 1500));
+    cycles(&h, 55);                                         /* past the blanking */
+    for (i = 0; i < 5; i++) {
+        side_reading(&h, 200U);                             /* the box's side */
+    }
+    h.m_distance_um = 300000;                               /* 300 mm along ... */
+    cycles(&h, 2);
+    for (i = 0; i < 4; i++) {
+        side_reading(&h, 0U);                               /* ... the echo is gone */
+    }
+    CHECK_INT(MOTION_CMD_MOVE, h.log[h.log_n - 1].type);
+    CHECK(abs(h.log[h.log_n - 1].distance_mm - 355) <= 4);
+    CHECK(saw_event(&h, TEL_EVT_OBSTACLE, 2U));
+}
+
+/* A box that was never seen (an echo that does not come back from its side) leaves the planned
+ * leg alone: the sonar may only shorten the leg when it saw the box first.  Catches: cutting
+ * the leg because of a missing echo. */
+static void test_leg_is_not_cut_if_the_box_was_never_seen(void)
+{
+    h_t h;
+    int i;
+    int moves;
+
+    side_rig(&h);
+    CHECK(until_move(&h, 680, 1500));
+    cycles(&h, 55);
+    moves = count_type(&h, MOTION_CMD_MOVE);
+    for (i = 0; i < 8; i++) {
+        side_reading(&h, 0U);
+    }
+    CHECK_INT(moves, count_type(&h, MOTION_CMD_MOVE));
+}
+
+/* A box deeper than assumed is still in view when the planned leg ends: the car goes on a
+ * little at a time, not past the limit, and turns only once the box is no longer seen.
+ * Catches: turning toward a box that is still beside the car; no limit. */
+static void test_leg_goes_on_while_the_box_is_still_beside_the_car(void)
+{
+    h_t h;
+    int i;
+    int extra = 0;
+
+    side_rig(&h);
+    CHECK(until_move(&h, 680, 1500));
+    cycles(&h, 55);
+    for (i = 0; i < 4; i++) {
+        side_reading(&h, 300U);
+    }
+    for (i = 0; i < 400; i++) {                             /* the leg ends, the box is still there */
+        side_reading(&h, 300U);
+        if ((h.log[h.log_n - 1].type == MOTION_CMD_MOVE) && (h.log[h.log_n - 1].distance_mm == 100)) {
+            extra++;
+            h.log[h.log_n - 1].distance_mm = 0;             /* count each new command once */
+        }
+        if (h.out.state != VC_BYPASS) {
+            break;
+        }
+    }
+    CHECK_INT(3, extra);                                    /* 300 mm in 100 mm steps, then on */
+    CHECK(saw_event(&h, TEL_EVT_OBSTACLE, 3U));
+}
+
 /* On the drive back to the line the sonar still watches, and the time spent waiting does not
  * use up the 5 s recovery limit.  Catches: driving on into something; a fault from a pause. */
 static void test_recovery_drive_waits_for_the_way_and_keeps_its_time_limit(void)
@@ -1275,6 +1391,10 @@ int main(void)
     RUN(test_bypass_ignores_the_sonar_while_turning_and_just_after);
     RUN(test_bypass_blocked_too_long_is_a_fault);
     RUN(test_bypass_follows_the_line_if_it_is_seen_on_the_last_straight_leg);
+    RUN(test_sonar_tilts_toward_the_box_beside_it_only);
+    RUN(test_leg_beside_the_box_ends_when_the_box_is_passed);
+    RUN(test_leg_is_not_cut_if_the_box_was_never_seen);
+    RUN(test_leg_goes_on_while_the_box_is_still_beside_the_car);
     RUN(test_recovery_drive_waits_for_the_way_and_keeps_its_time_limit);
     RUN(test_recovery_time_limit);
     RUN(test_recovery_distance_limit);

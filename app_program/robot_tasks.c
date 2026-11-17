@@ -107,6 +107,10 @@ typedef struct {
     bool               distance_valid;
     uint16_t           distance_mm;
     uint32_t           updated_ms;
+    uint16_t           raw_seq;         /* the latest single reading, unfiltered */
+    bool               raw_echo;
+    uint16_t           raw_mm;
+    int8_t             aim;             /* +1 tilt left, -1 tilt right, 0 ahead */
     bool               scan_request;
     bool               scan_done;
     bypass_plan_t      plan;
@@ -504,6 +508,9 @@ static void vehicle_task(INT stacd, void *exinf)
         in.obstacle_present = obs.obstacle;
         in.obstacle_mm_valid = obs.distance_valid && ((now - obs.updated_ms) < ROBOT_OBSTACLE_FRESH_MS);
         in.obstacle_mm = obs.distance_mm;
+        in.side_seq = obs.raw_seq;
+        in.side_echo = obs.raw_echo;
+        in.side_mm = obs.raw_mm;
         in.scan_done = obs.scan_done;
         in.plan = obs.plan;
         in.hump_in_progress = imu.in_progress;
@@ -523,6 +530,12 @@ static void vehicle_task(INT stacd, void *exinf)
                 g_line_req.consume = true;
                 g_line_req.consume_id = out.consume_id;
             }
+            robot_irq_restore(state);
+        }
+        {
+            robot_irq_state_t state = robot_irq_save();
+
+            g_obstacle_share.aim = out.sonar_aim;
             robot_irq_restore(state);
         }
         if (out.request_scan) {
@@ -630,6 +643,7 @@ static void obstacle_task(INT stacd, void *exinf)
     static us_reading_t reading;
     bool measuring = false;
     bool scanning = false;
+    int8_t aim_now = 0;
     uint32_t last_start_ms = 0U;
     motion_share_t motion;
 
@@ -668,7 +682,29 @@ static void obstacle_task(INT stacd, void *exinf)
                     (void)us_monitor_update(&mon, &reading, threshold, ROBOT_OBSTACLE_HYST_MM,
                                             (uint16_t)(threshold / 2U));
                     publish_obstacle_state(&mon, now);
+                    {
+                        robot_irq_state_t state = robot_irq_save();
+
+                        g_obstacle_share.raw_seq = (uint16_t)reading.seq;
+                        g_obstacle_share.raw_echo = (reading.status == US_VALID);
+                        g_obstacle_share.raw_mm = reading.distance_mm;
+                        robot_irq_restore(state);
+                    }
                 }
+            }
+        }
+
+        if (!scanning) {
+            /* point the sonar where the vehicle asks (at the box's side, or ahead) */
+            const int8_t want = g_obstacle_share.aim;
+
+            if (want != aim_now) {
+                const int16_t tilt = ROBOT_OBSTACLE_CFG.left_is_high_angle ? ROBOT_VEHICLE_CFG.side_aim_deg
+                                                                           : (int16_t)-ROBOT_VEHICLE_CFG.side_aim_deg;
+
+                hal_servo_set_pulse_us(servo_pulse_us(&ROBOT_OBSTACLE_CFG.servo,
+                                                      (int16_t)(90 + (want * tilt))));
+                aim_now = want;
             }
         }
 
