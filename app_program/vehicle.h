@@ -73,7 +73,9 @@ typedef struct {
     int16_t  cruise_mm_s;
     int16_t  curve_mm_s;                /* slowest line-following speed */
     int16_t  hump_mm_s;
-    int16_t  creep_mm_s;                /* reacquiring / recovering a line */
+    int16_t  creep_mm_s;                /* reacquiring a line */
+    int16_t  recover_mm_s;              /* returning to the line after a bypass: the whole sideways leg
+                                           (up to 0.5 m) must be covered inside recovery_time_limit_ms */
     int16_t  junction_advance_mm;       /* sensor bar to wheel axle, less the crossing offset */
     int16_t  turn_deg;                  /* a left/right instruction */
     int16_t  uturn_deg;

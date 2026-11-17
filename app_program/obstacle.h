@@ -65,6 +65,18 @@ typedef struct {
      * arena: it weakens the "confirmed free space" rule.
      */
     uint8_t     sweep_clear_min_rays;
+
+    /*
+     * 0 = off.  The sonar makes a box look much wider than it is (the beam is wide: an
+     * 80 to 150 mm box reads 300 to 650 mm), which makes the sideways leg of a bypass
+     * far too long.  The scanned width is clamped to this, about its centre, for the
+     * profile's edges.  Set it to a little more than the widest real obstacle.
+     */
+    uint16_t    max_width_mm;
+
+    /* Added to the forward leg of a bypass, so the car does not turn back close to the
+     * far side of an obstacle deeper than assumed_depth_mm. */
+    uint16_t    forward_extra_mm;
 } obstacle_config_t;
 
 

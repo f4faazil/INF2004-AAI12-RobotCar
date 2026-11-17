@@ -549,6 +549,12 @@ void obstacle_profile_build(const obstacle_config_t *cfg, const scan_point_t *pt
         right_pad = low_is_left ? pad_hi : pad_lo;
         left_edge = x_min - left_pad;
         right_edge = x_max + right_pad;
+        if ((cfg->max_width_mm > 0U) && ((right_edge - left_edge) > (int32_t)cfg->max_width_mm)) {
+            const int32_t mid = (left_edge + right_edge) / HALF;
+
+            left_edge = mid - ((int32_t)cfg->max_width_mm / HALF);
+            right_edge = mid + ((int32_t)cfg->max_width_mm / HALF);
+        }
 
         p->left_edge_x_mm = (int16_t)left_edge;
         p->right_edge_x_mm = (int16_t)right_edge;
@@ -643,7 +649,8 @@ void obstacle_plan(const obstacle_config_t *cfg, const obstacle_profile_t *p,
     go_left = left_ok && (!right_ok || (lateral_left <= lateral_right));
 
     forward = (int32_t)p->forward_mm + (int32_t)cfg->assumed_depth_mm +
-              (int32_t)cfg->robot_length_mm + (int32_t)cfg->margin_mm;
+              (int32_t)cfg->robot_length_mm + (int32_t)cfg->margin_mm +
+              (int32_t)cfg->forward_extra_mm;
 
     plan_clear(plan, go_left ? PLAN_BYPASS_LEFT : PLAN_BYPASS_RIGHT, PLAN_REASON_OK);
     {
@@ -723,7 +730,8 @@ bool obstacle_blind_plan(const obstacle_config_t *cfg, const scan_point_t *pts, 
     }
     sign = go_right ? -1 : 1;
     forward = (int32_t)p->forward_mm + (int32_t)cfg->assumed_depth_mm +
-              (int32_t)cfg->robot_length_mm + (int32_t)cfg->margin_mm;
+              (int32_t)cfg->robot_length_mm + (int32_t)cfg->margin_mm +
+              (int32_t)cfg->forward_extra_mm;
 
     plan_clear(plan, go_right ? PLAN_BYPASS_RIGHT : PLAN_BYPASS_LEFT, PLAN_REASON_OK);
     add_step(plan, true, sign * 90);

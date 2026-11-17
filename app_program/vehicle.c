@@ -270,7 +270,7 @@ static void enter_recover(vehicle_t *vc, vehicle_out_t *out, uint32_t now,
     vc->realign_turn_deg = (vc->plan.step_count > 0U && last->is_turn)
                            ? (int16_t)(-last->value) : 0;
     vc->start_distance_mm = in->motion.distance_mm;
-    start_cmd(vc, out, now, MOTION_CMD_DRIVE, vc->cfg.creep_mm_s, 0, 0, 0);
+    start_cmd(vc, out, now, MOTION_CMD_DRIVE, vc->cfg.recover_mm_s, 0, 0, 0);
     enter(vc, out, VC_RECOVER_LINE, now);
     vc->phase = REC_CREEP;
     vc->phase_since_ms = now;

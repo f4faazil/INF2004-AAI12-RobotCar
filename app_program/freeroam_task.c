@@ -36,7 +36,6 @@
 #define FR_COUNTDOWN_MS         (3000U)
 #define FR_DRIVE_MM             (3000)      /* the straight run */
 #define FR_AFTER_MM             (1500)      /* the run after the bypass: it keeps looking for the next obstacle */
-#define FR_RETURN_EXTRA_MM      (150)       /* extra forward travel before turning back to the path */
 /* 1 = after passing the obstacle, cross back to the original path.  0 = stay in the new
  * lane and carry on straight.  With objects close together the return can put the car
  * right in front of the next one (seen on the car: 116 mm), because the sonar cannot see
@@ -189,9 +188,7 @@ static uint8_t build_bypass(fr_step_t *steps, const bypass_plan_t *plan)
 {
     const int16_t s = (plan->action == PLAN_BYPASS_LEFT) ? 1 : -1;
     const int16_t lateral = plan->steps[1].value;
-    /* The planner's forward distance assumes a 150 mm deep obstacle; the extra keeps the car
-     * off the far side of a deeper one when it turns back toward the path. */
-    const int16_t forward = (int16_t)(plan->steps[3].value + FR_RETURN_EXTRA_MM);
+    const int16_t forward = plan->steps[3].value;      /* includes forward_extra_mm */
 
     steps[0].turn = true;  steps[0].value = (int16_t)(s * 90);   steps[0].watch = false;
     steps[1].turn = false; steps[1].value = lateral;             steps[1].watch = false;
@@ -239,9 +236,6 @@ static void freeroam_task(INT stacd, void *exinf)
 
     (void)stacd;
     (void)exinf;
-    cfg.no_echo_is_clear = true;                /* open arena: nothing beside the box is clear */
-    cfg.sweep_clear_min_rays = 2U;
-    cfg.margin_mm = 80U;                        /* the planner's side margin: turns are only about 3 degrees accurate */
     motion_init(&motion, &ROBOT_MOTION_CFG);
     hal_motor_set(0, 0);
     servo_to(&cfg, 90U);

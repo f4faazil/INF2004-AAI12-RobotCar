@@ -190,10 +190,14 @@
 /* Geometry measured by Buddy 5: the sensor's front face is 80 mm behind the car's front
  * edge, so a reading of D is only D - 80 mm of clearance for the bumper. */
 #define ROBOT_SENSOR_TO_FRONT_MM (80U)
+/* 1 = when the scan shows no open side (the box fills the whole sweep), go round anyway
+ * toward the side whose outer rays read farther.  The sonar cannot see the sides then, so
+ * only use it with nothing beside the track.  0 = stop and fault instead. */
+#define ROBOT_OBSTACLE_BLIND    (1)
 /* An obstacle ahead nearer than this stops the car and starts the scan.  The scan
  * can only confirm a path of the car's width from about 650 mm (the servo sweep is
  * only 28 degrees each side); see the note on ROBOT_OBSTACLE_CFG. */
-#define ROBOT_OBSTACLE_SCAN_MM  (650U)
+#define ROBOT_OBSTACLE_SCAN_MM  (500U)
 #define ROBOT_IR_RING_FRAMES    (256U)
 
 /*

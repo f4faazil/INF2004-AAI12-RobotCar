@@ -143,6 +143,8 @@ static obstacle_config_t make_cfg(void)
     c.min_turn_distance_mm = 120U;
     c.recovery_limit_mm = 500U;
     c.sweep_clear_min_rays = 0U;
+    c.max_width_mm = 0U;
+    c.forward_extra_mm = 0U;
     return c;
 }
 
@@ -948,6 +950,71 @@ static void test_blind_plan_refuses_when_there_is_nothing_to_go_round(void)
     CHECK(!obstacle_blind_plan(&cfg, pts, 3U, &p, &plan));
 }
 
+/* ---- width cap and forward extra (the robot's settings) -------------- */
+
+static bool blind_with(const real_point_t *r, uint8_t n, uint16_t cap, uint16_t extra,
+                       obstacle_profile_t *p, bypass_plan_t *plan)
+{
+    obstacle_config_t cfg = car_cfg();
+    scan_point_t pts[16];
+    uint8_t i;
+
+    cfg.sweep_clear_min_rays = 2U;
+    cfg.margin_mm = 80U;
+    cfg.max_width_mm = cap;
+    cfg.forward_extra_mm = extra;
+    for (i = 0U; i < n; i++) {
+        pts[i].angle_deg = r[i].angle;
+        pts[i].kind = r[i].clear ? SCAN_POINT_FAR : SCAN_POINT_OBSTACLE;
+        pts[i].distance_mm = r[i].clear ? US_MAX_RANGE_MM : r[i].mm;
+    }
+    obstacle_profile_build(&cfg, pts, n, p);
+    obstacle_plan(&cfg, p, plan);
+    if (plan->action != PLAN_STOP) {
+        return true;
+    }
+    return obstacle_blind_plan(&cfg, pts, n, p, plan);
+}
+
+/* The sonar read a small box as about 480 mm wide.  Clamped to 250 mm the sideways leg
+ * falls from about 440 to about 330 mm, well inside the 500 mm recovery limit.
+ * Catches: a cap that does nothing, or one that moves the centre. */
+static void test_width_cap_shortens_the_sideways_leg(void)
+{
+    obstacle_profile_t p0;
+    obstacle_profile_t p1;
+    bypass_plan_t plan0;
+    bypass_plan_t plan1;
+
+    CHECK(blind_with(REAL_FILLS_SWEEP, COUNT_OF(REAL_FILLS_SWEEP), 0U, 0U, &p0, &plan0));
+    CHECK(blind_with(REAL_FILLS_SWEEP, COUNT_OF(REAL_FILLS_SWEEP), 250U, 0U, &p1, &plan1));
+    CHECK(p0.width_mm > 400U);
+    CHECK_INT(250, p1.width_mm);
+    CHECK(abs(p1.centre_x_mm - p0.centre_x_mm) <= 2);
+    CHECK(plan0.steps[1].value > 400);
+    CHECK(plan1.steps[1].value > 280);
+    CHECK(plan1.steps[1].value < 360);
+    CHECK_INT(plan0.steps[3].value, plan1.steps[3].value);       /* only the sideways leg changes */
+}
+
+/* The forward leg grows by exactly forward_extra_mm.  Catches: the extra missing from
+ * one of the two planners. */
+static void test_forward_extra_lengthens_the_forward_leg(void)
+{
+    obstacle_profile_t p;
+    bypass_plan_t a;
+    bypass_plan_t b;
+    bypass_plan_t c;
+    bypass_plan_t d;
+
+    CHECK(blind_with(REAL_FILLS_SWEEP, COUNT_OF(REAL_FILLS_SWEEP), 250U, 0U, &p, &a));
+    CHECK(blind_with(REAL_FILLS_SWEEP, COUNT_OF(REAL_FILLS_SWEEP), 250U, 150U, &p, &b));
+    CHECK_INT(a.steps[3].value + 150, b.steps[3].value);
+    CHECK(blind_with(REAL_80_AT_500, COUNT_OF(REAL_80_AT_500), 250U, 0U, &p, &c));      /* the normal planner */
+    CHECK(blind_with(REAL_80_AT_500, COUNT_OF(REAL_80_AT_500), 250U, 150U, &p, &d));
+    CHECK_INT(c.steps[3].value + 150, d.steps[3].value);
+}
+
 int main(void)
 {
     RUN(test_trig_tables);
@@ -980,5 +1047,7 @@ int main(void)
     RUN(test_blind_plan_goes_round_a_box_that_fills_the_sweep);
     RUN(test_blind_plan_takes_the_side_that_reads_farther);
     RUN(test_blind_plan_refuses_when_there_is_nothing_to_go_round);
+    RUN(test_width_cap_shortens_the_sideways_leg);
+    RUN(test_forward_extra_lengthens_the_forward_leg);
     return TEST_REPORT();
 }

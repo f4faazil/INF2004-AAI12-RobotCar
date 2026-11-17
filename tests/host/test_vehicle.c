@@ -64,6 +64,7 @@ static vehicle_config_t make_cfg(void)
     c.curve_mm_s = 80;
     c.hump_mm_s = 100;
     c.creep_mm_s = 60;
+    c.recover_mm_s = 60;
     c.junction_advance_mm = 70;
     c.turn_deg = 90;
     c.uturn_deg = 180;
@@ -735,7 +736,7 @@ static void test_recovery_distance_limit(void)
     uint32_t t_recover = 0U;
 
     h_init(&h);
-    h.vc.cfg.creep_mm_s = 300;                           /* 3 mm per cycle */
+    h.vc.cfg.recover_mm_s = 300;                         /* 3 mm per cycle */
     to_follow(&h);
     h.in.obstacle_present = true;
     CHECK(until(&h, VC_OBSTACLE_SCAN, 100));

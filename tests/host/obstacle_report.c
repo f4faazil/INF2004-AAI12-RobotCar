@@ -105,6 +105,8 @@ static obstacle_config_t car_config(bool no_echo_is_clear, uint16_t margin, uint
     c.min_turn_distance_mm = 120U;
     c.recovery_limit_mm = 500U;
     c.sweep_clear_min_rays = 0U;
+    c.max_width_mm = 0U;
+    c.forward_extra_mm = 0U;
     return c;
 }
 

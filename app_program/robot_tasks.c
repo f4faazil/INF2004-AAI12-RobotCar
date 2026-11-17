@@ -700,6 +700,12 @@ static void obstacle_task(INT stacd, void *exinf)
 
                 obstacle_profile_build(&ROBOT_OBSTACLE_CFG, scan.points, scan.point_count, &profile);
                 obstacle_plan(&ROBOT_OBSTACLE_CFG, &profile, &plan);
+#if ROBOT_OBSTACLE_BLIND
+                if ((plan.action == PLAN_STOP) && (plan.reason == PLAN_REASON_NO_CLEARANCE)) {
+                    (void)obstacle_blind_plan(&ROBOT_OBSTACLE_CFG, scan.points, scan.point_count,
+                                              &profile, &plan);
+                }
+#endif
                 state = robot_irq_save();
                 g_obstacle_share.profile = profile;
                 g_obstacle_share.plan = plan;
