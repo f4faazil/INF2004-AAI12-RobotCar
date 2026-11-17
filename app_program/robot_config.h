@@ -49,6 +49,15 @@
  * and ROBOT_MOTOR_CAL.  Set back to 0 for the mission.
  */
 #define ROBOT_OBSTACLE_TEST     (0)
+
+/*
+ * 1 = build the open-space obstacle demo (freeroam_task.c) instead of the robot: no
+ * line.  The car drives straight, stops at an obstacle, scans, goes round it on the
+ * open side, returns to its path and carries on.  The motors DRIVE: keep a hand near
+ * the car and 2 m clear ahead.  Needs ROBOT_FIRMWARE 1 and the USB console.  Takes
+ * priority over the other bring-up switches.  Set back to 0 for the mission.
+ */
+#define ROBOT_FREEROAM          (0)
 #define ROBOT_IMU_TEST_SKIP_SETUP (0)   /* 1 = IMU test starts at the hump drive (axis and sign from below) */
 #define ROBOT_IMU_TEST_HAND     (0)   /* 1 = no motors: push the car over the hump by hand, START ends the run */
 

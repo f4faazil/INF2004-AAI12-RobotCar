@@ -53,7 +53,20 @@ typedef struct {
     uint16_t    assumed_depth_mm;       /* the ultrasonic sees only the front face */
     uint16_t    min_turn_distance_mm;   /* nearer than this: reverse first */
     uint16_t    recovery_limit_mm;      /* longest allowed return leg (0.5 m) */
+
+    /*
+     * 0 = off: free space beside the obstacle must be confirmed out to the
+     * clearance the car needs.  The HC-SR04's beam is wide and the servo sweeps only
+     * about 28 degrees each side, so on the real car the sonar can confirm only 40 to
+     * 120 mm beside a box and that rule always stops the car.  N > 0: a side counts as
+     * open when at least N rays in a row beyond the obstacle, out to the end of the
+     * sweep, are clear (a far echo, or with no_echo_is_clear a no echo).  The car then
+     * drives up to a car-width into space the sonar never saw.  Only for a controlled
+     * arena: it weakens the "confirmed free space" rule.
+     */
+    uint8_t     sweep_clear_min_rays;
 } obstacle_config_t;
+
 
 /* ---- scan sequencer --------------------------------------------------- */
 

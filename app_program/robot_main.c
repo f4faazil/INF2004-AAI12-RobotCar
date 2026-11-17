@@ -12,6 +12,7 @@
 
 #if ROBOT_FIRMWARE
 
+#include "freeroam_task.h"
 #include "imu_test_task.h"
 #include "obstacle_test_task.h"
 #include "motor_cal_task.h"
@@ -19,7 +20,9 @@
 
 EXPORT INT usermain(void)
 {
-#if ROBOT_OBSTACLE_TEST
+#if ROBOT_FREEROAM
+    ER err = freeroam_start_task();
+#elif ROBOT_OBSTACLE_TEST
     ER err = obstacle_test_start_task();
 #elif ROBOT_IMU_TEST
     ER err = imu_test_start_task();

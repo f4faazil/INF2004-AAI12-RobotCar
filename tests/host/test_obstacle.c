@@ -142,6 +142,7 @@ static obstacle_config_t make_cfg(void)
     c.assumed_depth_mm = 150U;
     c.min_turn_distance_mm = 120U;
     c.recovery_limit_mm = 500U;
+    c.sweep_clear_min_rays = 0U;
     return c;
 }
 
@@ -756,6 +757,113 @@ static void test_car_cannot_confirm_a_path_from_the_stop_distance(void)
     CHECK(p.right_clearance_mm < 130U);
 }
 
+/* ---- the real scans (felt tubes on the HC-SR04) ---------------------- */
+
+typedef struct { uint8_t angle; bool clear; uint16_t mm; } real_point_t;
+
+static void plan_real_scan(const real_point_t *r, uint8_t n, uint8_t min_rays,
+                           obstacle_profile_t *p, bypass_plan_t *plan)
+{
+    obstacle_config_t cfg = car_cfg();
+    scan_point_t pts[16];
+    uint8_t i;
+
+    cfg.sweep_clear_min_rays = min_rays;
+    for (i = 0U; i < n; i++) {
+        pts[i].angle_deg = r[i].angle;
+        pts[i].kind = r[i].clear ? SCAN_POINT_FAR : SCAN_POINT_OBSTACLE;
+        pts[i].distance_mm = r[i].clear ? US_MAX_RANGE_MM : r[i].mm;
+    }
+    obstacle_profile_build(&cfg, pts, n, p);
+    obstacle_plan(&cfg, p, plan);
+}
+
+/* Scans measured on the car, 14 Nov: the beam is wide, so the box is seen across
+ * most of the sweep and only the end rays can be clear.  A clear point is a no echo
+ * counted as free space (no_echo_is_clear). */
+static const real_point_t REAL_80_AT_500[] = {
+    { 62U, true, 0U }, { 67U, true, 0U }, { 72U, false, 539U }, { 77U, false, 517U },
+    { 82U, false, 513U }, { 87U, false, 513U }, { 92U, false, 504U }, { 97U, false, 513U },
+    { 102U, false, 510U }, { 107U, false, 514U }, { 112U, false, 514U }, { 117U, false, 526U } };
+static const real_point_t REAL_150_AT_500[] = {
+    { 62U, true, 0U }, { 76U, false, 513U }, { 81U, false, 500U }, { 86U, false, 496U },
+    { 91U, false, 496U }, { 96U, false, 509U }, { 101U, false, 509U }, { 106U, true, 0U },
+    { 111U, true, 0U }, { 116U, true, 0U } };
+static const real_point_t REAL_80_AT_650[] = {
+    { 62U, true, 0U }, { 67U, true, 0U }, { 72U, false, 718U }, { 77U, false, 689U },
+    { 82U, false, 671U }, { 87U, false, 663U }, { 92U, false, 663U }, { 97U, false, 664U },
+    { 102U, false, 676U }, { 107U, false, 664U }, { 112U, false, 681U }, { 117U, true, 0U } };
+static const real_point_t REAL_150_AT_650[] = {
+    { 58U, false, 656U }, { 63U, false, 652U }, { 68U, false, 656U }, { 73U, false, 648U },
+    { 78U, false, 647U }, { 83U, false, 647U }, { 88U, false, 639U }, { 93U, false, 634U },
+    { 98U, false, 639U }, { 103U, false, 639U }, { 108U, false, 640U }, { 113U, false, 652U },
+    { 118U, false, 657U } };
+
+#define COUNT_OF(a) ((uint8_t)(sizeof(a) / sizeof((a)[0])))
+
+/* With the rule as the Tribunal wrote it, none of the four real scans can be
+ * planned: the sonar confirms far too little room beside the box.  Catches: the
+ * default silently becoming permissive. */
+static void test_real_scans_are_refused_by_the_confirmed_clearance_rule(void)
+{
+    obstacle_profile_t p;
+    bypass_plan_t plan;
+
+    plan_real_scan(REAL_80_AT_500, COUNT_OF(REAL_80_AT_500), 0U, &p, &plan);
+    CHECK_INT(PLAN_STOP, plan.action);
+    plan_real_scan(REAL_150_AT_500, COUNT_OF(REAL_150_AT_500), 0U, &p, &plan);
+    CHECK_INT(PLAN_STOP, plan.action);
+    plan_real_scan(REAL_80_AT_650, COUNT_OF(REAL_80_AT_650), 0U, &p, &plan);
+    CHECK_INT(PLAN_STOP, plan.action);
+    plan_real_scan(REAL_150_AT_650, COUNT_OF(REAL_150_AT_650), 0U, &p, &plan);
+    CHECK_INT(PLAN_STOP, plan.action);
+}
+
+/* With "two clear rays reaching the end of the sweep" the car goes round the side
+ * that is open, and still stops when no side is.  Catches: a wrong side, or a
+ * bypass with nothing clear. */
+static void test_open_to_the_sweep_limit_picks_the_open_side(void)
+{
+    obstacle_profile_t p;
+    bypass_plan_t plan;
+
+    plan_real_scan(REAL_80_AT_500, COUNT_OF(REAL_80_AT_500), 2U, &p, &plan);
+    CHECK_INT(PLAN_BYPASS_RIGHT, plan.action);        /* only the right side has two clear rays */
+    CHECK_INT(PLAN_REASON_OK, plan.reason);
+    plan_real_scan(REAL_150_AT_500, COUNT_OF(REAL_150_AT_500), 2U, &p, &plan);
+    CHECK_INT(PLAN_BYPASS_LEFT, plan.action);         /* three clear rays on the left, one on the right */
+    plan_real_scan(REAL_80_AT_650, COUNT_OF(REAL_80_AT_650), 2U, &p, &plan);
+    CHECK_INT(PLAN_BYPASS_RIGHT, plan.action);        /* one clear ray on the left is not enough */
+    plan_real_scan(REAL_150_AT_650, COUNT_OF(REAL_150_AT_650), 2U, &p, &plan);
+    CHECK_INT(PLAN_STOP, plan.action);                /* the box fills the whole sweep: nothing clear */
+    CHECK_INT(PLAN_REASON_NO_CLEARANCE, plan.reason);
+}
+
+/* A detour longer than the recovery limit is still refused when the side is only
+ * open to the sweep limit.  Catches: the open-side rule bypassing the other checks. */
+static void test_open_side_still_respects_the_recovery_limit(void)
+{
+    obstacle_profile_t p;
+    bypass_plan_t plan;
+    obstacle_config_t cfg = car_cfg();
+    scan_point_t pts[8];
+    uint8_t i;
+    static const uint8_t ang[8] = { 62U, 67U, 72U, 77U, 82U, 87U, 92U, 97U };
+
+    cfg.sweep_clear_min_rays = 2U;
+    cfg.recovery_limit_mm = 150U;
+    for (i = 0U; i < 8U; i++) {
+        const bool clear = (i < 2U);
+
+        pts[i].angle_deg = ang[i];
+        pts[i].kind = clear ? SCAN_POINT_FAR : SCAN_POINT_OBSTACLE;
+        pts[i].distance_mm = clear ? US_MAX_RANGE_MM : 520U;
+    }
+    obstacle_profile_build(&cfg, pts, 8U, &p);
+    obstacle_plan(&cfg, &p, &plan);
+    CHECK_INT(PLAN_STOP, plan.action);
+}
+
 int main(void)
 {
     RUN(test_trig_tables);
@@ -782,5 +890,8 @@ int main(void)
     RUN(test_scan_time_is_bounded);
     RUN(test_car_finds_a_path_when_the_scan_starts_far_enough);
     RUN(test_car_cannot_confirm_a_path_from_the_stop_distance);
+    RUN(test_real_scans_are_refused_by_the_confirmed_clearance_rule);
+    RUN(test_open_to_the_sweep_limit_picks_the_open_side);
+    RUN(test_open_side_still_respects_the_recovery_limit);
     return TEST_REPORT();
 }

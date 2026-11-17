@@ -394,13 +394,19 @@ static uint16_t side_clearance(const obstacle_config_t *cfg, const scan_point_t 
 {
     int idx = (int)from + step;
     int last_far = -1;
+    uint8_t far_run = 0U;
 
     while ((idx >= 0) && (idx < (int)n) && (pts[idx].kind == SCAN_POINT_FAR)) {
         last_far = idx;
+        far_run++;
         idx += step;
     }
     if (last_far < 0) {
         return 0U;
+    }
+    if ((cfg->sweep_clear_min_rays > 0U) && (far_run >= cfg->sweep_clear_min_rays) &&
+        ((idx < 0) || (idx >= (int)n))) {
+        return US_MAX_RANGE_MM;                 /* clear all the way to the end of the sweep */
     }
     {
         int16_t sin_pm = trig_sin_permille(pts[last_far].angle_deg);
