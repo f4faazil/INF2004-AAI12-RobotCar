@@ -41,7 +41,7 @@
  * lane and carry on straight.  With objects close together the return can put the car
  * right in front of the next one (seen on the car: 116 mm), because the sonar cannot see
  * ahead while the car is beside the box or turning back. */
-#define FR_RETURN_TO_PATH       (0)
+#define FR_RETURN_TO_PATH       (1)
 #define FR_SPEED_MM_S           (120)
 #define FR_SCAN_MM              (500U)      /* stop and scan when the sonar sees this */
 #define FR_HYST_MM              (30U)
