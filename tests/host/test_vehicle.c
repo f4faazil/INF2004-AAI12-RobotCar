@@ -710,6 +710,43 @@ static void test_left_bypass_runs_the_plan_then_recovers_the_line(void)
     CHECK(saw_event(&h, TEL_EVT_RECOVERED, 0U));
 }
 
+/* The IR sensors sit ahead of the wheel axle, so on finding the line the car must drive on
+ * by recover_advance_mm and only then turn back to the line's heading.  Turning at once
+ * swings the line off to the side and the car loses it (seen on the track).  Catches: the
+ * advance missing, or the turn before it. */
+static void test_recovery_drives_on_before_turning_back(void)
+{
+    h_t h;
+    int k;
+    int move_k = -1;
+
+    h_init(&h);
+    h.vc.cfg.recover_advance_mm = 100;
+    to_follow(&h);
+    h.in.obstacle_present = true;
+    CHECK(until(&h, VC_OBSTACLE_SCAN, 100));
+    h.in.obstacle_present = false;
+    line_gone(&h);
+    h.in.scan_done = true;
+    h.in.plan = left_plan();
+    h_cycle(&h);
+    CHECK(until(&h, VC_RECOVER_LINE, 400));
+    cycles(&h, 5);                                       /* creeping */
+    line_ok(&h, 0, 0);
+    CHECK(until(&h, VC_FOLLOW, 300));
+    for (k = h.log_n - 1; k >= 0; k--) {
+        if ((h.log[k].type == MOTION_CMD_MOVE) && (h.log[k].distance_mm == 100)) {
+            move_k = k;
+            break;
+        }
+    }
+    CHECK(move_k >= 0);
+    CHECK((move_k + 1) < h.log_n);
+    CHECK_INT(MOTION_CMD_TURN, h.log[move_k + 1].type);
+    CHECK_INT(90, h.log[move_k + 1].angle_deg);
+    CHECK(saw_event(&h, TEL_EVT_RECOVERED, 0U));
+}
+
 /* The recovery is bounded: no line within 5 s is a fault. */
 static void test_recovery_time_limit(void)
 {
@@ -1073,6 +1110,7 @@ int main(void)
     RUN(test_a_stale_stopped_flag_does_not_confirm_a_new_stop);
     RUN(test_unconfirmed_stop_is_a_motion_fault);
     RUN(test_left_bypass_runs_the_plan_then_recovers_the_line);
+    RUN(test_recovery_drives_on_before_turning_back);
     RUN(test_recovery_time_limit);
     RUN(test_recovery_distance_limit);
     RUN(test_no_safe_path_keeps_the_car_stopped);

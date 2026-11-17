@@ -145,6 +145,7 @@ static obstacle_config_t make_cfg(void)
     c.sweep_clear_min_rays = 0U;
     c.max_width_mm = 0U;
     c.forward_extra_mm = 0U;
+    c.blind_side = 0;
     return c;
 }
 
@@ -1015,6 +1016,41 @@ static void test_forward_extra_lengthens_the_forward_leg(void)
     CHECK_INT(c.steps[3].value + 150, d.steps[3].value);
 }
 
+/* The course says which side is free: the blind bypass takes it whatever the outer rays read,
+ * and gives no plan if that side is too far round.  Catches: an ignored or half-applied
+ * forced side. */
+static void test_blind_side_can_be_forced(void)
+{
+    obstacle_config_t cfg = car_cfg();
+    obstacle_profile_t p;
+    bypass_plan_t plan;
+    scan_point_t pts[16];
+    uint8_t i;
+
+    for (i = 0U; i < COUNT_OF(REAL_FILLS_SWEEP); i++) {
+        pts[i].angle_deg = REAL_FILLS_SWEEP[i].angle;
+        pts[i].kind = SCAN_POINT_OBSTACLE;
+        pts[i].distance_mm = REAL_FILLS_SWEEP[i].mm;
+    }
+    cfg.margin_mm = 60U;
+    cfg.max_width_mm = 220U;
+    obstacle_profile_build(&cfg, pts, COUNT_OF(REAL_FILLS_SWEEP), &p);
+
+    cfg.blind_side = 0;                                  /* auto: the right reads farther */
+    CHECK(obstacle_blind_plan(&cfg, pts, COUNT_OF(REAL_FILLS_SWEEP), &p, &plan));
+    CHECK_INT(PLAN_BYPASS_RIGHT, plan.action);
+    cfg.blind_side = 1;                                  /* forced left */
+    CHECK(obstacle_blind_plan(&cfg, pts, COUNT_OF(REAL_FILLS_SWEEP), &p, &plan));
+    CHECK_INT(PLAN_BYPASS_LEFT, plan.action);
+    CHECK(plan.steps[0].is_turn && (plan.steps[0].value == 90));
+    cfg.blind_side = -1;                                 /* forced right */
+    CHECK(obstacle_blind_plan(&cfg, pts, COUNT_OF(REAL_FILLS_SWEEP), &p, &plan));
+    CHECK_INT(PLAN_BYPASS_RIGHT, plan.action);
+    cfg.blind_side = 1;
+    cfg.recovery_limit_mm = 100U;                        /* too far round on the forced side */
+    CHECK(!obstacle_blind_plan(&cfg, pts, COUNT_OF(REAL_FILLS_SWEEP), &p, &plan));
+}
+
 int main(void)
 {
     RUN(test_trig_tables);
@@ -1049,5 +1085,6 @@ int main(void)
     RUN(test_blind_plan_refuses_when_there_is_nothing_to_go_round);
     RUN(test_width_cap_shortens_the_sideways_leg);
     RUN(test_forward_extra_lengthens_the_forward_leg);
+    RUN(test_blind_side_can_be_forced);
     return TEST_REPORT();
 }

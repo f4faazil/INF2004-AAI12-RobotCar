@@ -18,6 +18,7 @@
 /* RECOVER_LINE phases */
 #define REC_CREEP           (0U)
 #define REC_ALIGN           (1U)
+#define REC_ADVANCE         (2U)
 
 /* SEARCH_LINE phases */
 #define SEARCH_STOPPING     (0U)
@@ -576,7 +577,12 @@ static void run_state(vehicle_t *vc, const vehicle_in_t *in, vehicle_out_t *out,
     case VC_RECOVER_LINE:
         if (vc->phase == REC_CREEP) {
             if (line_found(vc, in)) {
-                if (vc->realign_turn_deg != 0) {
+                if ((vc->realign_turn_deg != 0) && (vc->cfg.recover_advance_mm > 0)) {
+                    /* The sensors are ahead of the axle: turning here would swing the line off to
+                     * the side.  Drive on until the axle is over it, then turn. */
+                    start_cmd(vc, out, now, MOTION_CMD_MOVE, vc->cfg.creep_mm_s, 0, vc->cfg.recover_advance_mm, 0);
+                    vc->phase = REC_ADVANCE;
+                } else if (vc->realign_turn_deg != 0) {
                     start_cmd(vc, out, now, MOTION_CMD_TURN, 0, 0, 0, vc->realign_turn_deg);
                     vc->phase = REC_ALIGN;
                 } else {
@@ -589,6 +595,15 @@ static void run_state(vehicle_t *vc, const vehicle_in_t *in, vehicle_out_t *out,
             } else if (abs32(in->motion.distance_mm - vc->start_distance_mm) >=
                        vc->cfg.recovery_distance_limit_mm) {
                 enter_fault(vc, out, now, FAULT_RECOVERY_LIMIT);
+            } else {
+                refresh_cmd(vc, out);
+            }
+        } else if (vc->phase == REC_ADVANCE) {
+            if (cmd_done(vc, in)) {
+                start_cmd(vc, out, now, MOTION_CMD_TURN, 0, 0, 0, vc->realign_turn_deg);
+                vc->phase = REC_ALIGN;
+            } else if (cmd_timed_out(vc, now)) {
+                enter_fault(vc, out, now, FAULT_MOTION);
             } else {
                 refresh_cmd(vc, out);
             }

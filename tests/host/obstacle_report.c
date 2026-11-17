@@ -107,6 +107,7 @@ static obstacle_config_t car_config(bool no_echo_is_clear, uint16_t margin, uint
     c.sweep_clear_min_rays = 0U;
     c.max_width_mm = 0U;
     c.forward_extra_mm = 0U;
+    c.blind_side = 0;
     return c;
 }
 

@@ -190,13 +190,14 @@ const obstacle_config_t ROBOT_OBSTACLE_CFG = {
     .left_is_high_angle = true,         /* measured: a longer pulse points left */
     .robot_width_mm = 200U,             /* measured by Buddy 5, protruding parts included */
     .robot_length_mm = 250U,            /* measured by Buddy 5 */
-    .margin_mm = 80U,                   /* side margin: turns are only about 3 degrees accurate */
+    .margin_mm = 60U,                   /* side margin: turns are only about 3 degrees accurate */
     .assumed_depth_mm = 150U,
     .min_turn_distance_mm = 120U,
     .recovery_limit_mm = 500U,          /* Tribunal: 0.5 m */
     .sweep_clear_min_rays = 2U,         /* a side is open when 2 rays in a row reach the sweep limit clear */
-    .max_width_mm = 250U,               /* the sonar reads an 80 to 150 mm box as 300 to 650 mm wide */
-    .forward_extra_mm = 150U            /* keeps the car off the far side of a deeper box when it turns back */
+    .max_width_mm = 220U,               /* the sonar reads an 80 to 150 mm box as 300 to 650 mm wide */
+    .forward_extra_mm = 120U,           /* keeps the car off the far side of a deeper box when it turns back */
+    .blind_side = 0                     /* +1 left, -1 right: set it to the side the course leaves free */
 };
 
 const vehicle_config_t ROBOT_VEHICLE_CFG = {
@@ -204,6 +205,7 @@ const vehicle_config_t ROBOT_VEHICLE_CFG = {
     .curve_mm_s = 90,
     .hump_mm_s = 110,
     .creep_mm_s = 60,
+    .recover_advance_mm = 140,          /* ESTIMATE: wheel axle to the IR sensor row less half the line.  Measure it. */
     .recover_mm_s = 100,                /* the sideways return after a bypass is about 330 mm: 3.3 s, inside the 5 s limit */
     .junction_advance_mm = 70,          /* PLACEHOLDER: sensor bar to axle, less crossing offset */
     .turn_deg = 90,

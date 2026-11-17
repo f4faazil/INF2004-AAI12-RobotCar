@@ -717,7 +717,9 @@ bool obstacle_blind_plan(const obstacle_config_t *cfg, const scan_point_t *pts, 
     left_end = cfg->left_is_high_angle ? high_end : low_end;
     go_right = (right_end >= left_end);
 
-    if (go_right && (lateral_right > (int32_t)cfg->recovery_limit_mm)) {
+    if (cfg->blind_side != 0) {
+        go_right = (cfg->blind_side < 0);       /* the course says which side is free */
+    } else if (go_right && (lateral_right > (int32_t)cfg->recovery_limit_mm)) {
         go_right = false;
     } else if (!go_right && (lateral_left > (int32_t)cfg->recovery_limit_mm)) {
         go_right = true;

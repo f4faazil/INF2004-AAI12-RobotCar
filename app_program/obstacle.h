@@ -77,6 +77,12 @@ typedef struct {
     /* Added to the forward leg of a bypass, so the car does not turn back close to the
      * far side of an obstacle deeper than assumed_depth_mm. */
     uint16_t    forward_extra_mm;
+
+    /* The side the blind bypass takes: +1 left, -1 right, 0 = the side whose outer rays read
+     * farther.  When the box fills the sweep that choice is close to noise, so set this to
+     * the side the course leaves free.  A forced side that needs more than recovery_limit_mm
+     * gives no plan. */
+    int8_t      blind_side;
 } obstacle_config_t;
 
 
