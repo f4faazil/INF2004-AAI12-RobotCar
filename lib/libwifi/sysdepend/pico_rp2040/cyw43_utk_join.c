@@ -34,6 +34,7 @@ void cyw43_utk_join_policy_begin(T_CYW43_UTK_JOIN_POLICY *policy,
 {
     if(policy == NULL) return;
     policy->attempt_started_us = now_us;
+    policy->ip_wait_started_us = now_us;
     policy->state = CYW43_UTK_JOIN_JOINING;
     policy->started = 1;
     policy->complete = 0;
@@ -73,6 +74,7 @@ static T_CYW43_UTK_JOIN_ACTION complete_join(
     policy->elapsed_ms = (uint32_t)
             ((now_us - policy->attempt_started_us) / 1000ULL);
     policy->state = CYW43_UTK_JOIN_CONNECTED;
+    policy->ip_wait_started_us = now_us;
     policy->complete = 1;
     policy->result = 0;
     policy->successes++;
@@ -89,6 +91,16 @@ static T_CYW43_UTK_JOIN_ACTION complete_join(
 T_CYW43_UTK_JOIN_ACTION cyw43_utk_join_policy_update(
         T_CYW43_UTK_JOIN_POLICY *policy, uint64_t now_us,
         uint32_t link_up, int32_t link_status, int32_t timeout_result)
+{
+    /* Callers that do not track an IP address never trigger the no-IP rejoin. */
+    return cyw43_utk_join_policy_update_ip(policy, now_us, link_up, 1U,
+                                           link_status, timeout_result);
+}
+
+T_CYW43_UTK_JOIN_ACTION cyw43_utk_join_policy_update_ip(
+        T_CYW43_UTK_JOIN_POLICY *policy, uint64_t now_us,
+        uint32_t link_up, uint32_t have_ip, int32_t link_status,
+        int32_t timeout_result)
 {
     if(policy == NULL) return CYW43_UTK_JOIN_ACTION_NONE;
 
@@ -111,6 +123,18 @@ T_CYW43_UTK_JOIN_ACTION cyw43_utk_join_policy_update(
         if(!link_up) {
             policy->link_down_started_us = now_us;
             policy->state = CYW43_UTK_JOIN_LOSS_GRACE;
+        } else if(have_ip) {
+            policy->ip_wait_started_us = now_us;
+        } else if(now_us - policy->ip_wait_started_us
+                  >= CYW43_UTK_NO_IP_TIMEOUT_US) {
+            /* Associated but never given an address: leave, then wait for
+             * the asynchronous link-down event before starting again. */
+            policy->no_ip_rejoins++;
+            policy->leave_started_us = now_us;
+            policy->state = CYW43_UTK_JOIN_DISCONNECTING;
+            return CYW43_UTK_JOIN_ACTION_LEAVE;
+        } else {
+            /* still waiting for the address */
         }
         break;
 
@@ -137,6 +161,19 @@ T_CYW43_UTK_JOIN_ACTION cyw43_utk_join_policy_update(
         }
         policy->retry_remaining_ms = (uint32_t)
                 ((policy->retry_at_us - now_us + 999ULL) / 1000ULL);
+        break;
+
+    case CYW43_UTK_JOIN_DISCONNECTING:
+        /* wifi_leave() only queues the disassociation.  Require both the
+         * driver's join state and the lwIP link callback to report down so a
+         * stale status cannot race the old disconnect with the new join.
+         * Bound the wait in case an event is lost. */
+        if((!link_up && link_status == 0)
+           || now_us - policy->leave_started_us
+              >= CYW43_UTK_LEAVE_TIMEOUT_US) {
+            cyw43_utk_join_policy_begin(policy, now_us);
+            return CYW43_UTK_JOIN_ACTION_START;
+        }
         break;
 
     default:

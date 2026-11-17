@@ -10,16 +10,23 @@
 #define CYW43_UTK_JOIN_CONNECTED   2U
 #define CYW43_UTK_JOIN_LOSS_GRACE  3U
 #define CYW43_UTK_JOIN_BACKOFF     4U
+#define CYW43_UTK_JOIN_DISCONNECTING 5U
 
 #define CYW43_UTK_JOIN_RETRY_MIN_MS 1000U
 #define CYW43_UTK_JOIN_RETRY_MAX_MS 30000U
 #define CYW43_UTK_JOIN_TIMEOUT_US   30000000ULL
 #define CYW43_UTK_LINK_LOSS_GRACE_US 1000000ULL
+#define CYW43_UTK_LEAVE_TIMEOUT_US   5000000ULL
+/* Joined but still no IP address after this long: leave and join again.  The
+ * link can stay up while DHCP never completes (seen on a phone hotspot after
+ * quick reboots: minutes with no address), and nothing else would restart it. */
+#define CYW43_UTK_NO_IP_TIMEOUT_US  30000000ULL
 
 typedef enum {
     CYW43_UTK_JOIN_ACTION_NONE = 0,
     CYW43_UTK_JOIN_ACTION_START,
     CYW43_UTK_JOIN_ACTION_CONNECTED,
+    CYW43_UTK_JOIN_ACTION_LEAVE,        /* leave the network, then join again */
 } T_CYW43_UTK_JOIN_ACTION;
 
 typedef struct {
@@ -40,6 +47,9 @@ typedef struct {
     uint64_t attempt_started_us;
     uint64_t retry_at_us;
     uint64_t link_down_started_us;
+    uint64_t ip_wait_started_us;        /* when the wait for an IP address began */
+    uint64_t leave_started_us;
+    uint32_t no_ip_rejoins;             /* times the no-IP timeout forced a rejoin */
 } T_CYW43_UTK_JOIN_POLICY;
 
 uint32_t cyw43_utk_join_retry_delay_ms(uint32_t failures);
@@ -53,5 +63,13 @@ void cyw43_utk_join_policy_request_result(
 T_CYW43_UTK_JOIN_ACTION cyw43_utk_join_policy_update(
         T_CYW43_UTK_JOIN_POLICY *policy, uint64_t now_us,
         uint32_t link_up, int32_t link_status, int32_t timeout_result);
+
+/* The same, and also told whether an IP address has been obtained.  Returns
+ * CYW43_UTK_JOIN_ACTION_LEAVE when the link has been up without an address for
+ * CYW43_UTK_NO_IP_TIMEOUT_US. */
+T_CYW43_UTK_JOIN_ACTION cyw43_utk_join_policy_update_ip(
+        T_CYW43_UTK_JOIN_POLICY *policy, uint64_t now_us,
+        uint32_t link_up, uint32_t have_ip, int32_t link_status,
+        int32_t timeout_result);
 
 #endif

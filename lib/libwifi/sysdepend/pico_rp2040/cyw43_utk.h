@@ -41,6 +41,7 @@ typedef struct {
     volatile uint32_t join_successes;
     volatile uint32_t join_recoveries;
     volatile uint32_t link_losses;
+    volatile uint32_t join_no_ip_rejoins;
     volatile uint32_t join_retry_delay_ms;
     volatile uint32_t join_retry_remaining_ms;
     volatile int32_t link_rssi;

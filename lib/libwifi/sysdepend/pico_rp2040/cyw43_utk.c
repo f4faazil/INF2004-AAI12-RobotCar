@@ -576,6 +576,7 @@ static void publish_join_status(const T_CYW43_UTK_JOIN_POLICY *policy)
     radio_status.join_successes = policy->successes;
     radio_status.join_recoveries = policy->recoveries;
     radio_status.link_losses = policy->link_losses;
+    radio_status.join_no_ip_rejoins = policy->no_ip_rejoins;
     radio_status.join_retry_delay_ms = policy->retry_delay_ms;
     radio_status.join_retry_remaining_ms = policy->retry_remaining_ms;
 }
@@ -613,14 +614,26 @@ static void update_join_state(T_CYW43_UTK_JOIN_POLICY *policy)
     uint64_t now = time_us_64();
     int32_t link = cyw43_wifi_link_status(&cyw43_state, CYW43_ITF_STA);
     T_CYW43_UTK_JOIN_ACTION action;
+#if TM_WIFI_DHCP
+    const uint32_t have_ip = radio_status.dhcp_complete;
+#else
+    const uint32_t have_ip = 1U;        /* a static address needs no wait */
+#endif
 
     radio_status.link_status = link;
-    action = cyw43_utk_join_policy_update(
-            policy, now, radio_status.link_up, link, -CYW43_ETIMEDOUT);
+    action = cyw43_utk_join_policy_update_ip(
+            policy, now, radio_status.link_up, have_ip, link,
+            -CYW43_ETIMEDOUT);
     if(action == CYW43_UTK_JOIN_ACTION_START) {
         issue_join_request(policy, now);
     } else if(action == CYW43_UTK_JOIN_ACTION_CONNECTED) {
         refresh_join_link_details();
+    } else if(action == CYW43_UTK_JOIN_ACTION_LEAVE) {
+        /* The policy waits for the asynchronous link-down event before it
+         * permits a new join request. */
+        (void)cyw43_wifi_leave(&cyw43_state, CYW43_ITF_STA);
+    } else {
+        /* nothing to do */
     }
     publish_join_status(policy);
 }

@@ -304,6 +304,7 @@ LOCAL const UB *wifi_join_state_name(UW state)
 	case CYW43_UTK_JOIN_CONNECTED: return (const UB *)"CONNECTED";
 	case CYW43_UTK_JOIN_LOSS_GRACE: return (const UB *)"LOSS_GRACE";
 	case CYW43_UTK_JOIN_BACKOFF: return (const UB *)"BACKOFF";
+	case CYW43_UTK_JOIN_DISCONNECTING: return (const UB *)"DISCONNECTING";
 	default: return (const UB *)"UNKNOWN";
 	}
 }
@@ -338,7 +339,7 @@ LOCAL void wifi_status_task(INT stacd, void *exinf)
 		if(++diag_ticks >= 5U) {
 			diag_ticks = 0;
 #if TM_WIFI_JOIN
-			tm_printf((UB *)"[net-diag] polls=%u wifi=%s attempt=%u fail=%u ok=%u recover=%u loss=%u retry=%u join_rc=%d link=%u netif=%u netlink=%u dhcp_ok=%u timeout=%u started=%u tries=%u ms=%u rc=%d gw=%u dns=%u\n",
+			tm_printf((UB *)"[net-diag] polls=%u wifi=%s attempt=%u fail=%u ok=%u recover=%u loss=%u retry=%u join_rc=%d link=%u netif=%u netlink=%u dhcp_ok=%u timeout=%u started=%u tries=%u ms=%u rc=%d gw=%u dns=%u noip_rejoin=%u\n",
 				  st.poll_count, wifi_join_state_name(st.join_state),
 				  st.join_attempts, st.join_failures,
 				  st.join_successes, st.join_recoveries,
@@ -349,7 +350,8 @@ LOCAL void wifi_status_task(INT stacd, void *exinf)
 				  st.dhcp_tries,
 				  st.dhcp_elapsed_ms, st.dhcp_result,
 				  st.dhcp_gateway_available,
-				  st.dhcp_dns_available);
+				  st.dhcp_dns_available,
+				  st.join_no_ip_rejoins);
 #else
 			tm_printf((UB *)"[net-diag] polls=%u link=%u netif=%u netlink=%u dhcp_ok=%u timeout=%u started=%u tries=%u ms=%u rc=%d gw=%u dns=%u\n",
 				  st.poll_count, st.link_up, st.netif_up,
