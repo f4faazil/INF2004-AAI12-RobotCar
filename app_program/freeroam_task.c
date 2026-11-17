@@ -37,6 +37,11 @@
 #define FR_DRIVE_MM             (3000)      /* the straight run */
 #define FR_AFTER_MM             (1500)      /* the run after the bypass: it keeps looking for the next obstacle */
 #define FR_RETURN_EXTRA_MM      (150)       /* extra forward travel before turning back to the path */
+/* 1 = after passing the obstacle, cross back to the original path.  0 = stay in the new
+ * lane and carry on straight.  With objects close together the return can put the car
+ * right in front of the next one (seen on the car: 116 mm), because the sonar cannot see
+ * ahead while the car is beside the box or turning back. */
+#define FR_RETURN_TO_PATH       (0)
 #define FR_SPEED_MM_S           (120)
 #define FR_SCAN_MM              (500U)      /* stop and scan when the sonar sees this */
 #define FR_HYST_MM              (30U)
@@ -192,11 +197,18 @@ static uint8_t build_bypass(fr_step_t *steps, const bypass_plan_t *plan)
     steps[1].turn = false; steps[1].value = lateral;             steps[1].watch = false;
     steps[2].turn = true;  steps[2].value = (int16_t)(-s * 90);  steps[2].watch = false;
     steps[3].turn = false; steps[3].value = forward;             steps[3].watch = false;
+#if FR_RETURN_TO_PATH
     steps[4].turn = true;  steps[4].value = (int16_t)(-s * 90);  steps[4].watch = false;
     steps[5].turn = false; steps[5].value = lateral;             steps[5].watch = false;
     steps[6].turn = true;  steps[6].value = (int16_t)(s * 90);   steps[6].watch = false;
     steps[7].turn = false; steps[7].value = (int16_t)FR_AFTER_MM; steps[7].watch = true;
     return 8U;
+#else
+    /* Stay in the new lane: the car already faces its original heading, and the next
+     * object is often only half a metre beyond this one, in the old lane. */
+    steps[4].turn = false; steps[4].value = (int16_t)FR_AFTER_MM; steps[4].watch = true;
+    return 5U;
+#endif
 }
 
 static void freeroam_task(INT stacd, void *exinf)
@@ -222,6 +234,7 @@ static void freeroam_task(INT stacd, void *exinf)
     uint32_t step_since_ms = 0U;
     uint32_t last_start_ms = 0U;
     uint32_t blank_until_ms = 0U;
+    int32_t run_start_mm = 0;
     bool measuring = false;
 
     (void)stacd;
@@ -294,6 +307,7 @@ static void freeroam_task(INT stacd, void *exinf)
                 step_count = 1U;
                 step_idx = 0U;
                 blank_until_ms = 0U;
+                run_start_mm = st->distance_mm;
                 us_monitor_init(&mon, (uint8_t)FR_SENSOR_CONFIRM, (uint8_t)FR_INVALID_LIMIT);
                 cmd_id++;
                 submit_step(&motion, cmd_id, &steps[0], now);
@@ -330,7 +344,7 @@ static void freeroam_task(INT stacd, void *exinf)
 
                 if (obstacle && ((int32_t)(now - blank_until_ms) >= 0)) {
                     tm_printf((UB *)"[free] OBSTACLE: sonar reads %d mm, travelled %d mm.  Stopping.\n",
-                              (INT)reading.distance_mm, (INT)st->distance_mm);
+                              (INT)reading.distance_mm, (INT)(st->distance_mm - run_start_mm));
                     cmd_id++;
                     submit_stop(&motion, cmd_id, now);
                     state = FR_STOPPING;
