@@ -53,6 +53,7 @@
 #define ROBOT_OBSTACLE_MARGIN_MM    (ROBOT_SENSOR_TO_FRONT_MM + 60U)
 #define ROBOT_OBSTACLE_HYST_MM      (30U)
 #define ROBOT_OBSTACLE_CONFIRM      (2U)
+#define ROBOT_OBSTACLE_FRESH_MS     (300U)      /* an older sonar distance is not used to steer or stop */
 #define ROBOT_US_INVALID_LIMIT      (8U)
 #define ROBOT_POLL_MS               (10U)
 #define ROBOT_BUTTON_DEBOUNCE       (3U)
@@ -501,6 +502,8 @@ static void vehicle_task(INT stacd, void *exinf)
         in.calibration_ok = line.calibration_ok;
         in.motion = motion.status;
         in.obstacle_present = obs.obstacle;
+        in.obstacle_mm_valid = obs.distance_valid && ((now - obs.updated_ms) < ROBOT_OBSTACLE_FRESH_MS);
+        in.obstacle_mm = obs.distance_mm;
         in.scan_done = obs.scan_done;
         in.plan = obs.plan;
         in.hump_in_progress = imu.in_progress;

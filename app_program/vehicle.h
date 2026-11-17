@@ -93,6 +93,11 @@ typedef struct {
     uint32_t recovery_time_limit_ms;    /* 5 s */
     int16_t  recovery_distance_limit_mm;/* 0.5 m */
     uint32_t obstacle_blank_ms;         /* ignore a cleared obstacle for a while */
+    uint16_t bypass_stop_mm;            /* the sonar reads less than this on a straight leg of a bypass, or
+                                           on the drive back to the line: stop and wait.  0 = not watched */
+    uint32_t bypass_blank_ms;           /* ignore the sonar this long after a leg starts: its median still
+                                           holds readings from before the turn */
+    uint32_t bypass_hold_ms;            /* wait this long for the way to clear, then fault */
     uint8_t  max_reverse_attempts;
     uint8_t  found_cycles;              /* consecutive visible cycles = line found */
     uint32_t cmd_timeout_base_ms;       /* finite manoeuvre time allowance */
@@ -115,6 +120,8 @@ typedef struct {
 
     motion_status_t  motion;
     bool             obstacle_present;  /* forward monitor */
+    bool             obstacle_mm_valid; /* a fresh distance from the forward sonar ... */
+    uint16_t         obstacle_mm;       /* ... and the distance itself, from the sonar face */
     bool             scan_done;
     bypass_plan_t    plan;
     bool             hump_in_progress;
@@ -173,6 +180,10 @@ typedef struct {
     int32_t          start_distance_mm;
     int16_t          realign_turn_deg;
     bool             stop_sent;
+    uint32_t         hold_since_ms;     /* when a bypass leg was stopped for something in the way */
+    uint32_t         clear_since_ms;    /* when the way last became clear (0 = it is not) */
+    int32_t          step_start_mm;     /* odometer at the start of the current straight leg */
+    int16_t          leg_mm;            /* the distance that leg was asked to cover */
 } vehicle_t;
 
 void vehicle_init(vehicle_t *vc, const vehicle_config_t *cfg);

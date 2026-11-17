@@ -9,6 +9,7 @@
  */
 #include <stddef.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "telemetry.h"
@@ -747,6 +748,165 @@ static void test_recovery_drives_on_before_turning_back(void)
     CHECK(saw_event(&h, TEL_EVT_RECOVERED, 0U));
 }
 
+/* ---- awareness during the bypass --------------------------------------- */
+
+/* A bypass test rig: the sonar watch is on, and each finite command takes 3 s so the legs
+ * last longer than the sonar blanking period. */
+static void bypass_rig(h_t *h)
+{
+    h_init(h);
+    h->vc.cfg.bypass_stop_mm = 100U;
+    h->vc.cfg.bypass_blank_ms = 500U;
+    h->vc.cfg.bypass_hold_ms = 4000U;
+    to_follow(h);
+    h->finite_ms = 3000U;                                  /* legs outlast the sonar blanking */
+    h->in.obstacle_present = true;
+    (void)until(h, VC_OBSTACLE_SCAN, 100);
+    h->in.obstacle_present = false;
+    line_gone(h);
+    h->in.scan_done = true;
+    h->in.plan = left_plan();
+    h_cycle(h);
+}
+
+/* Cycle until the car has started a MOVE of 'mm'. */
+static bool until_move(h_t *h, int mm, int max)
+{
+    int i;
+
+    for (i = 0; i < max; i++) {
+        const motion_cmd_t *last = &h->log[h->log_n - 1];
+
+        if ((last->type == MOTION_CMD_MOVE) && (last->distance_mm == mm)) {
+            return true;
+        }
+        h_cycle(h);
+    }
+    return false;
+}
+
+static void sonar(h_t *h, uint16_t mm)
+{
+    h->in.obstacle_mm_valid = true;
+    h->in.obstacle_mm = mm;
+}
+
+/* The sonar used to be ignored once the bypass began: a box (or a hand) in the way of the
+ * sideways leg was driven into.  Now the car stops, waits for the way to clear, and drives
+ * only what is left of the leg.  Catches: no stop; a restart of the whole leg. */
+static void test_bypass_stops_for_something_in_the_way_then_finishes_the_leg(void)
+{
+    h_t h;
+    int stops;
+
+    bypass_rig(&h);
+    CHECK(until_move(&h, 140, 800));
+    cycles(&h, 60);                                         /* the leg is under way ... */
+    h.m_distance_um = 60000;                                /* ... 60 mm along */
+    cycles(&h, 2);
+    stops = count_type(&h, MOTION_CMD_STOP);
+    sonar(&h, 300U);
+    cycles(&h, 5);
+    CHECK_INT(stops, count_type(&h, MOTION_CMD_STOP));      /* clear: it carries on */
+
+    sonar(&h, 80U);
+    cycles(&h, 3);
+    CHECK_INT(stops + 1, count_type(&h, MOTION_CMD_STOP));
+    CHECK_INT(VC_BYPASS, h.out.state);
+    cycles(&h, 100);
+    CHECK_INT(MOTION_CMD_STOP, h.log[h.log_n - 1].type);    /* still held */
+
+    sonar(&h, 300U);
+    cycles(&h, 20);
+    CHECK_INT(MOTION_CMD_STOP, h.log[h.log_n - 1].type);    /* it must stay clear a while */
+    cycles(&h, 40);
+    CHECK_INT(MOTION_CMD_MOVE, h.log[h.log_n - 1].type);
+    CHECK(abs(h.log[h.log_n - 1].distance_mm - 80) <= 3);   /* 140 - 60, to the odometer's rounding */
+    CHECK_INT(VC_BYPASS, h.out.state);
+}
+
+/* The sonar sees the box itself while the car turns, and its median holds old readings just
+ * after: neither may stop the bypass.  Catches: stopping on the first turn. */
+static void test_bypass_ignores_the_sonar_while_turning_and_just_after(void)
+{
+    h_t h;
+    int stops;
+
+    bypass_rig(&h);
+    stops = count_type(&h, MOTION_CMD_STOP);
+    sonar(&h, 60U);                                         /* the box, right in front */
+    CHECK(until_move(&h, 140, 800));
+    cycles(&h, 40);                                         /* 400 ms into the leg: blanked */
+    CHECK_INT(stops, count_type(&h, MOTION_CMD_STOP));
+    cycles(&h, 30);                                         /* past the blanking: now it counts */
+    CHECK_INT(stops + 1, count_type(&h, MOTION_CMD_STOP));
+}
+
+/* A way that never clears is a fault, not a wait forever. */
+static void test_bypass_blocked_too_long_is_a_fault(void)
+{
+    h_t h;
+
+    bypass_rig(&h);
+    CHECK(until_move(&h, 140, 800));
+    cycles(&h, 60);
+    sonar(&h, 50U);
+    CHECK(until(&h, VC_FAULT, 700));
+    CHECK((h.raised & FAULT_NO_SAFE_PATH) != 0U);
+}
+
+/* The last straight leg runs back toward the track's line.  If the sensors see the line
+ * during it, the car follows it at once rather than driving on past.  The first sideways
+ * leg starts on the line, so seeing it there must not end the bypass.  Catches: leaving the
+ * bypass on the first leg; ignoring the line until the leg ends. */
+static void test_bypass_follows_the_line_if_it_is_seen_on_the_last_straight_leg(void)
+{
+    h_t h;
+
+    bypass_rig(&h);
+    CHECK(until_move(&h, 140, 800));
+    cycles(&h, 60);
+    line_ok(&h, 0, 0);                                      /* still on the line's edge: ignore */
+    cycles(&h, 60);
+    CHECK_INT(VC_BYPASS, h.out.state);
+
+    line_gone(&h);
+    CHECK(until_move(&h, 680, 800));
+    cycles(&h, 60);
+    CHECK_INT(VC_BYPASS, h.out.state);
+    line_ok(&h, 0, 0);
+    cycles(&h, 6);
+    CHECK_INT(VC_FOLLOW, h.out.state);
+    CHECK(saw_event(&h, TEL_EVT_RECOVERED, 0U));
+}
+
+/* On the drive back to the line the sonar still watches, and the time spent waiting does not
+ * use up the 5 s recovery limit.  Catches: driving on into something; a fault from a pause. */
+static void test_recovery_drive_waits_for_the_way_and_keeps_its_time_limit(void)
+{
+    h_t h;
+    int stops;
+
+    bypass_rig(&h);
+    h.finite_ms = 100U;                                     /* quick legs: we want the recovery */
+    CHECK(until(&h, VC_RECOVER_LINE, 800));
+    cycles(&h, 60);
+    stops = count_type(&h, MOTION_CMD_STOP);
+    sonar(&h, 70U);
+    cycles(&h, 3);
+    CHECK_INT(stops + 1, count_type(&h, MOTION_CMD_STOP));
+    cycles(&h, 300);                                        /* 3 s waiting: over the 5 s with the drive */
+    CHECK_INT(VC_RECOVER_LINE, h.out.state);
+
+    sonar(&h, 400U);
+    cycles(&h, 60);
+    CHECK_INT(MOTION_CMD_DRIVE, h.log[h.log_n - 1].type);
+    cycles(&h, 250);                                        /* driving again, within its own 5 s */
+    CHECK_INT(VC_RECOVER_LINE, h.out.state);
+    line_ok(&h, 0, 0);
+    CHECK(until(&h, VC_FOLLOW, 300));
+}
+
 /* The recovery is bounded: no line within 5 s is a fault. */
 static void test_recovery_time_limit(void)
 {
@@ -1111,6 +1271,11 @@ int main(void)
     RUN(test_unconfirmed_stop_is_a_motion_fault);
     RUN(test_left_bypass_runs_the_plan_then_recovers_the_line);
     RUN(test_recovery_drives_on_before_turning_back);
+    RUN(test_bypass_stops_for_something_in_the_way_then_finishes_the_leg);
+    RUN(test_bypass_ignores_the_sonar_while_turning_and_just_after);
+    RUN(test_bypass_blocked_too_long_is_a_fault);
+    RUN(test_bypass_follows_the_line_if_it_is_seen_on_the_last_straight_leg);
+    RUN(test_recovery_drive_waits_for_the_way_and_keeps_its_time_limit);
     RUN(test_recovery_time_limit);
     RUN(test_recovery_distance_limit);
     RUN(test_no_safe_path_keeps_the_car_stopped);
