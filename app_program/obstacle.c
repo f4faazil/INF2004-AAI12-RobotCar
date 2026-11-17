@@ -579,6 +579,19 @@ void obstacle_profile_build(const obstacle_config_t *cfg, const scan_point_t *pt
 
 /* ---- bypass plan ------------------------------------------------------- */
 
+/* How far the axle must travel from the stop for the car to be clear of the obstacle. */
+static int32_t bypass_forward_mm(const obstacle_config_t *cfg, int32_t distance_ahead_mm)
+{
+    if (cfg->axle_to_rear_mm > 0U) {
+        return distance_ahead_mm + (int32_t)cfg->sensor_to_axle_mm +
+               (int32_t)cfg->assumed_depth_mm + (int32_t)cfg->axle_to_rear_mm +
+               (int32_t)cfg->forward_margin_mm + (int32_t)cfg->forward_extra_mm;
+    }
+    return distance_ahead_mm + (int32_t)cfg->assumed_depth_mm +
+           (int32_t)cfg->robot_length_mm + (int32_t)cfg->margin_mm +
+           (int32_t)cfg->forward_extra_mm;
+}
+
 static void add_step(bypass_plan_t *plan, bool is_turn, int32_t value)
 {
     if (plan->step_count < PLAN_MAX_STEPS) {
@@ -648,9 +661,7 @@ void obstacle_plan(const obstacle_config_t *cfg, const obstacle_profile_t *p,
     }
     go_left = left_ok && (!right_ok || (lateral_left <= lateral_right));
 
-    forward = (int32_t)p->forward_mm + (int32_t)cfg->assumed_depth_mm +
-              (int32_t)cfg->robot_length_mm + (int32_t)cfg->margin_mm +
-              (int32_t)cfg->forward_extra_mm;
+    forward = bypass_forward_mm(cfg, (int32_t)p->forward_mm);
 
     plan_clear(plan, go_left ? PLAN_BYPASS_LEFT : PLAN_BYPASS_RIGHT, PLAN_REASON_OK);
     {
@@ -705,7 +716,9 @@ bool obstacle_blind_plan(const obstacle_config_t *cfg, const scan_point_t *pts, 
     if ((p->left_edge_x_mm > corridor) || (p->right_edge_x_mm < -corridor)) {
         return false;                           /* beside the path, not in it */
     }
-    if ((int32_t)p->forward_mm < (int32_t)cfg->min_turn_distance_mm) {
+    /* The wide beam makes the outer rays read the box's distance at an angle, so their forward
+     * component (forward_mm) comes out short.  The closest reading is the distance straight ahead. */
+    if ((int32_t)p->closest_mm < (int32_t)cfg->min_turn_distance_mm) {
         return false;                           /* too close to turn */
     }
 
@@ -731,9 +744,7 @@ bool obstacle_blind_plan(const obstacle_config_t *cfg, const scan_point_t *pts, 
         return false;                           /* too far round on both sides */
     }
     sign = go_right ? -1 : 1;
-    forward = (int32_t)p->forward_mm + (int32_t)cfg->assumed_depth_mm +
-              (int32_t)cfg->robot_length_mm + (int32_t)cfg->margin_mm +
-              (int32_t)cfg->forward_extra_mm;
+    forward = bypass_forward_mm(cfg, (int32_t)p->closest_mm);
 
     plan_clear(plan, go_right ? PLAN_BYPASS_RIGHT : PLAN_BYPASS_LEFT, PLAN_REASON_OK);
     add_step(plan, true, sign * 90);

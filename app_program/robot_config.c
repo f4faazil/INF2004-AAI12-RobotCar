@@ -191,12 +191,15 @@ const obstacle_config_t ROBOT_OBSTACLE_CFG = {
     .robot_width_mm = 200U,             /* measured by Buddy 5, protruding parts included */
     .robot_length_mm = 250U,            /* measured by Buddy 5 */
     .margin_mm = 60U,                   /* side margin: turns are only about 3 degrees accurate */
-    .assumed_depth_mm = 150U,
-    .min_turn_distance_mm = 120U,
+    .assumed_depth_mm = 150U,           /* the deepest obstacle on the course: measure it and set it */
+    .min_turn_distance_mm = 140U,       /* the front corner swings 190 mm from the axle: nearer than this, back up first */
     .recovery_limit_mm = 500U,          /* Tribunal: 0.5 m */
     .sweep_clear_min_rays = 2U,         /* a side is open when 2 rays in a row reach the sweep limit clear */
     .max_width_mm = 220U,               /* the sonar reads an 80 to 150 mm box as 300 to 650 mm wide */
-    .forward_extra_mm = 120U,           /* keeps the car off the far side of a deeper box when it turns back */
+    .forward_extra_mm = 0U,
+    .sensor_to_axle_mm = 80U,           /* measured by Buddy 5: the sonar face is 80 mm ahead of the axle */
+    .axle_to_rear_mm = 135U,            /* the rear corner's swing radius: it turns back onto the line right behind the box (the rear edge is 90 mm, the corner 135) */
+    .forward_margin_mm = 20U,           /* the rear clears the obstacle's back edge by 2 cm */
     .blind_side = 0                     /* +1 left, -1 right: set it to the side the course leaves free */
 };
 

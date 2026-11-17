@@ -146,6 +146,9 @@ static obstacle_config_t make_cfg(void)
     c.max_width_mm = 0U;
     c.forward_extra_mm = 0U;
     c.blind_side = 0;
+    c.sensor_to_axle_mm = 0U;
+    c.axle_to_rear_mm = 0U;
+    c.forward_margin_mm = 0U;
     return c;
 }
 
@@ -1051,6 +1054,52 @@ static void test_blind_side_can_be_forced(void)
     CHECK(!obstacle_blind_plan(&cfg, pts, COUNT_OF(REAL_FILLS_SWEEP), &p, &plan));
 }
 
+/* The forward leg from the real geometry: reading + sensor-to-axle + depth + axle-to-rear +
+ * margin.  For a scan reading about 160 mm that is about 450 mm, not the 740 mm the older
+ * estimate gave.  Catches: the car's whole length or a fixed extra creeping back in, and the
+ * two planners disagreeing. */
+static void test_forward_leg_uses_the_cars_real_geometry(void)
+{
+    obstacle_config_t cfg = car_cfg();
+    obstacle_profile_t p;
+    bypass_plan_t plan_blind;
+    bypass_plan_t plan_open;
+    scan_point_t pts[13];
+    scan_point_t open_pts[12];
+    uint8_t i;
+
+    cfg.margin_mm = 60U;
+    cfg.max_width_mm = 220U;
+    cfg.sweep_clear_min_rays = 2U;
+    cfg.assumed_depth_mm = 100U;
+    cfg.sensor_to_axle_mm = 80U;
+    cfg.axle_to_rear_mm = 90U;
+    cfg.forward_margin_mm = 20U;
+    for (i = 0U; i < 13U; i++) {
+        pts[i].angle_deg = (uint8_t)(58U + (5U * i));
+        pts[i].kind = SCAN_POINT_OBSTACLE;
+        pts[i].distance_mm = 160U;
+    }
+    obstacle_profile_build(&cfg, pts, 13U, &p);
+    CHECK(obstacle_blind_plan(&cfg, pts, 13U, &p, &plan_blind));
+    CHECK_INT((int)p.closest_mm + 80 + 100 + 90 + 20, plan_blind.steps[3].value);   /* from the reading straight ahead */
+    CHECK(plan_blind.steps[3].value < 520);
+
+    for (i = 0U; i < 12U; i++) {                         /* an open side: the normal planner */
+        open_pts[i].angle_deg = (uint8_t)(62U + (5U * i));
+        open_pts[i].kind = (i < 2U) ? SCAN_POINT_FAR : SCAN_POINT_OBSTACLE;
+        open_pts[i].distance_mm = (i < 2U) ? US_MAX_RANGE_MM : 170U;
+    }
+    obstacle_profile_build(&cfg, open_pts, 12U, &p);
+    obstacle_plan(&cfg, &p, &plan_open);
+    CHECK_INT(PLAN_BYPASS_RIGHT, plan_open.action);
+    CHECK_INT((int)p.forward_mm + 80 + 100 + 90 + 20, plan_open.steps[3].value);
+
+    cfg.axle_to_rear_mm = 0U;                            /* the older estimate is still there */
+    obstacle_plan(&cfg, &p, &plan_open);
+    CHECK(plan_open.steps[3].value > (int)p.forward_mm + 400);
+}
+
 int main(void)
 {
     RUN(test_trig_tables);
@@ -1086,5 +1135,6 @@ int main(void)
     RUN(test_width_cap_shortens_the_sideways_leg);
     RUN(test_forward_extra_lengthens_the_forward_leg);
     RUN(test_blind_side_can_be_forced);
+    RUN(test_forward_leg_uses_the_cars_real_geometry);
     return TEST_REPORT();
 }

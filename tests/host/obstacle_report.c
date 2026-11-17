@@ -108,6 +108,9 @@ static obstacle_config_t car_config(bool no_echo_is_clear, uint16_t margin, uint
     c.max_width_mm = 0U;
     c.forward_extra_mm = 0U;
     c.blind_side = 0;
+    c.sensor_to_axle_mm = 0U;
+    c.axle_to_rear_mm = 0U;
+    c.forward_margin_mm = 0U;
     return c;
 }
 

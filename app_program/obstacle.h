@@ -83,6 +83,18 @@ typedef struct {
      * the side the course leaves free.  A forced side that needs more than recovery_limit_mm
      * gives no plan. */
     int8_t      blind_side;
+
+    /*
+     * The forward leg of a bypass, from the car's real geometry.  The axle moves from the stop
+     * until the car's REAR is past the obstacle's back edge:
+     *     forward = distance to the obstacle's front (sonar) + sensor_to_axle_mm
+     *             + assumed_depth_mm + axle_to_rear_mm + forward_margin_mm + forward_extra_mm.
+     * Set axle_to_rear_mm to 0 for the older, much longer estimate that adds the car's whole
+     * length (robot_length_mm) and margin_mm instead.
+     */
+    uint16_t    sensor_to_axle_mm;      /* the sonar face is this far ahead of the wheel axle */
+    uint16_t    axle_to_rear_mm;        /* the axle to the car's rear edge */
+    uint16_t    forward_margin_mm;      /* clearance of the car's rear past the obstacle's back edge */
 } obstacle_config_t;
 
 
