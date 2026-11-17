@@ -35,7 +35,8 @@
 #define FR_BUTTON_SAMPLES       (6U)        /* 6 x 5 ms = 30 ms debounce */
 #define FR_COUNTDOWN_MS         (3000U)
 #define FR_DRIVE_MM             (3000)      /* the straight run */
-#define FR_AFTER_MM             (600)       /* the run after the bypass */
+#define FR_AFTER_MM             (1500)      /* the run after the bypass: it keeps looking for the next obstacle */
+#define FR_RETURN_EXTRA_MM      (150)       /* extra forward travel before turning back to the path */
 #define FR_SPEED_MM_S           (120)
 #define FR_SCAN_MM              (500U)      /* stop and scan when the sonar sees this */
 #define FR_HYST_MM              (30U)
@@ -183,7 +184,9 @@ static uint8_t build_bypass(fr_step_t *steps, const bypass_plan_t *plan)
 {
     const int16_t s = (plan->action == PLAN_BYPASS_LEFT) ? 1 : -1;
     const int16_t lateral = plan->steps[1].value;
-    const int16_t forward = plan->steps[3].value;
+    /* The planner's forward distance assumes a 150 mm deep obstacle; the extra keeps the car
+     * off the far side of a deeper one when it turns back toward the path. */
+    const int16_t forward = (int16_t)(plan->steps[3].value + FR_RETURN_EXTRA_MM);
 
     steps[0].turn = true;  steps[0].value = (int16_t)(s * 90);   steps[0].watch = false;
     steps[1].turn = false; steps[1].value = lateral;             steps[1].watch = false;
@@ -192,7 +195,7 @@ static uint8_t build_bypass(fr_step_t *steps, const bypass_plan_t *plan)
     steps[4].turn = true;  steps[4].value = (int16_t)(-s * 90);  steps[4].watch = false;
     steps[5].turn = false; steps[5].value = lateral;             steps[5].watch = false;
     steps[6].turn = true;  steps[6].value = (int16_t)(s * 90);   steps[6].watch = false;
-    steps[7].turn = false; steps[7].value = (int16_t)FR_AFTER_MM; steps[7].watch = false;
+    steps[7].turn = false; steps[7].value = (int16_t)FR_AFTER_MM; steps[7].watch = true;
     return 8U;
 }
 
@@ -341,6 +344,10 @@ static void freeroam_task(INT stacd, void *exinf)
                     tm_printf((UB *)"[free] DONE.  The run is finished.  START to run again.\n");
                     state = FR_IDLE;
                 } else {
+                    if (steps[step_idx].watch) {
+                        /* a fresh monitor: the old one still says "obstacle" from the stop */
+                        us_monitor_init(&mon, (uint8_t)FR_SENSOR_CONFIRM, (uint8_t)FR_INVALID_LIMIT);
+                    }
                     cmd_id++;
                     submit_step(&motion, cmd_id, &steps[step_idx], now);
                     step_since_ms = now;
