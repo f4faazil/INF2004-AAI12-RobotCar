@@ -87,7 +87,7 @@ static const uint16_t TARGET_MM[OBS_TARGET_COUNT] = { 100U, 200U, 300U, 400U, 60
 #define RANGE_LAST_US           (2230U)     /* the left stop is 2250 us */
 #define RANGE_STEP_US           (30U)
 #define RANGE_COUNT             (((RANGE_LAST_US - RANGE_FIRST_US) / RANGE_STEP_US) + 1U)
-#define RANGE_REST_US           (1800U)     /* about straight ahead: where it ends up */
+#define RANGE_REST_US           (1818U)     /* straight ahead (measured): where it ends up */
 #define RANGE_HOLD_MS           (1400U)
 
 /* hold test: fixed pulses to measure the horn's angle at */

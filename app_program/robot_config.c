@@ -169,19 +169,26 @@ const hump_config_t ROBOT_HUMP_CFG = {
  * tests/host/obstacle_report.c.
  */
 const obstacle_config_t ROBOT_OBSTACLE_CFG = {
+    /*
+     * The sonar now sits on a bar in front of the servo.  MEASURED on the car with the phone's
+     * angle app, five pulses held: 1332 us = 43 deg right, 1573 = 25 right, 1815 = straight,
+     * 2023 = 20 left, 2230 = 37 left.  A straight-line fit gives 1818 us straight ahead and
+     * 10.9 us per degree (worst point 2.5 degrees off).  The servo's own stops are at 1312 us
+     * (right) and 2250 us (left): the limits below stay about 30 us inside them.
+     */
     .servo = {
-        .min_pulse_us = 375U,           /* 1500 us - 90 deg x 12.5 us/deg */
-        .max_pulse_us = 2625U,          /* 1500 us + 90 deg x 12.5 us/deg */
-        .trim_deg = 0,                  /* measured: 1500 us is straight ahead */
+        .min_pulse_us = 837U,           /* 1818 us - 90 deg x 10.9 us/deg (the mapping's 0 degrees; never sent) */
+        .max_pulse_us = 2799U,          /* 1818 us + 90 deg x 10.9 us/deg (the mapping's 180 degrees; never sent) */
+        .trim_deg = 0,
         .invert = false,
-        .min_angle_deg = 58U,           /* 1100 us: 32 degrees right of centre */
-        .max_angle_deg = 118U,          /* 1850 us: 28 degrees left, the chassis blocks more */
+        .min_angle_deg = 47U,           /* 1349 us: 43 degrees right of straight (the stop is at 1312) */
+        .max_angle_deg = 127U,          /* 2221 us: 37 degrees left (the stop is at 2250) */
         .settle_base_ms = 60U,
-        .settle_ms_per_deg = 4U
+        .settle_ms_per_deg = 5U
     },
-    .coarse_min_deg = 62U,
-    .coarse_max_deg = 118U,
-    .coarse_step_deg = 14U,
+    .coarse_min_deg = 54U,              /* 36 degrees each side of straight, rays 12 degrees apart */
+    .coarse_max_deg = 126U,
+    .coarse_step_deg = 12U,
     .fine_step_deg = 5U,
     .detect_range_mm = 800U,            /* an object nearer than this is an obstacle; see the note above */
     .samples_per_point = 3U,
@@ -227,10 +234,10 @@ const vehicle_config_t ROBOT_VEHICLE_CFG = {
     .bypass_stop_mm = 100U,             /* during a bypass: something this close ahead stops the car (the front is the sonar face) */
     .bypass_blank_ms = 500U,            /* the sonar's median still holds readings from before the turn */
     .bypass_hold_ms = 4000U,            /* wait this long for the way to clear, then fault */
-    .side_aim_deg = 25,                 /* the servo reaches 28 degrees to the left, 32 to the right */
+    .side_aim_deg = 33,                 /* the servo reaches 37 degrees to the left, 43 to the right */
     .side_min_mm = 50U,
     .side_max_mm = 700U,                /* the box's side is about 150 / sin(25) = 350 mm away; a far wall is ignored */
-    .side_loss_ahead_pct = 60U,         /* sin(25) / tan(25 + 10) = 0.60: the beam is about 10 degrees either side (TUNE from the log) */
+    .side_loss_ahead_pct = 58U,         /* sin(33) / tan(33 + 10) = 0.58: the beam is about 10 degrees either side (TUNE from the log) */
     .side_tail_mm = 255U,               /* 100 sonar to axle + 135 axle to rear corner + 20 margin */
     .side_extend_mm = 100U,
     .side_extend_max_mm = 300U,
