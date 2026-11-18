@@ -152,21 +152,16 @@ const hump_config_t ROBOT_HUMP_CFG = {
 };
 
 /*
- * Scanning and bypass.  The servo is MEASURED (Buddy 5, on the car): 1500 us is
- * straight ahead, 1100 us is 32 degrees to the right, 1850 us is 28 degrees to
- * the left, so 12.5 us per degree on both sides.  Further left the horn hits the
- * chassis, so the sweep is about 60 degrees, not 180.  The pulse range below is
- * that line extended to 0 and 180 degrees (375 us at 0, 2625 us at 180); only the
- * software limits 58 to 118 degrees are ever commanded.  PLACEHOLDER: robot size
- * and margins.  The rays are 14 degrees apart (62, 76, 90, 104, 118): the
- * simulation shows a 100 mm object 60 mm off-centre hides between 30-degree rays.
+ * Scanning and bypass.  The servo mapping is MEASURED on the car with the sonar on its bar (see
+ * the note inside the table): 1818 us is straight ahead and 10.9 us is one degree, so the sweep
+ * is about 43 degrees right and 37 degrees left.  The scan uses 36 degrees each side with rays
+ * 12 degrees apart (54, 66, 78, 90, 102, 114, 126); the earlier simulation showed a 100 mm
+ * object 60 mm off-centre hides between rays 30 degrees apart.  PLACEHOLDER: margins.
  *
- * WHY THE SCAN MUST START FAR AWAY: the car (200 mm) needs 260 mm of CONFIRMED free
- * space beside the box.  The farthest ray (28 degrees) reaches only 0.53 x the
- * distance to the side, so from 250 mm the most it can confirm is about 100 mm and
- * the planner always stops ("no clearance").  The scan has to start at about 650 mm
- * (ROBOT_OBSTACLE_SCAN_MM), where the same ray reaches 346 mm.  See
- * tests/host/obstacle_report.c.
+ * WHY THE SCAN MUST START FAR AWAY: the car (200 mm) needs 260 mm of CONFIRMED free space
+ * beside the box.  The farthest ray (36 degrees) reaches only 0.73 x the distance to the side, so
+ * the nearer the car stops the less it can confirm, and a close stop usually ends in the blind
+ * plan (ROBOT_OBSTACLE_BLIND).  See tests/host/obstacle_report.c.
  */
 const obstacle_config_t ROBOT_OBSTACLE_CFG = {
     /*
