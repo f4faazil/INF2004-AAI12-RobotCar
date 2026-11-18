@@ -197,7 +197,7 @@ const obstacle_config_t ROBOT_OBSTACLE_CFG = {
     .sweep_clear_min_rays = 2U,         /* a side is open when 2 rays in a row reach the sweep limit clear */
     .max_width_mm = 220U,               /* the sonar reads an 80 to 150 mm box as 300 to 650 mm wide */
     .forward_extra_mm = 0U,
-    .sensor_to_axle_mm = 80U,           /* measured by Buddy 5: the sonar face is 80 mm ahead of the axle */
+    .sensor_to_axle_mm = 100U,          /* the sonar on its new bar: about 100 mm ahead of the axle (was 80) */
     .axle_to_rear_mm = 135U,            /* the rear corner's swing radius: it turns back onto the line right behind the box (the rear edge is 90 mm, the corner 135) */
     .forward_margin_mm = 20U,           /* the rear clears the obstacle's back edge by 2 cm */
     .blind_side = 0                     /* +1 left, -1 right: set it to the side the course leaves free */
@@ -231,7 +231,7 @@ const vehicle_config_t ROBOT_VEHICLE_CFG = {
     .side_min_mm = 50U,
     .side_max_mm = 700U,                /* the box's side is about 150 / sin(25) = 350 mm away; a far wall is ignored */
     .side_loss_ahead_pct = 60U,         /* sin(25) / tan(25 + 10) = 0.60: the beam is about 10 degrees either side (TUNE from the log) */
-    .side_tail_mm = 235U,               /* 80 sonar to axle + 135 axle to rear corner + 20 margin */
+    .side_tail_mm = 255U,               /* 100 sonar to axle + 135 axle to rear corner + 20 margin */
     .side_extend_mm = 100U,
     .side_extend_max_mm = 300U,
     .max_reverse_attempts = 1U,

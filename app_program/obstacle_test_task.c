@@ -7,6 +7,13 @@
  * Press START (GP20) to run the step shown; STOP (GP21) in the menu skips to
  * the next step, and STOP during a run ends it.  Lines start with "[obs]".
  *
+ *   0  RANGE     the servo's whole usable sweep, with the software limits lifted: from
+ *                centre it steps outward to the right then to the left, 5 degrees at a time,
+ *                1.4 s each.  At every angle the sonar measures a flat wall in front and the
+ *                line prints the angle, the echo count, the median range and that range times
+ *                cos(angle), which stays at the wall's distance while the beam still sees it.
+ *                Read the real angle off a protractor; press STOP the moment the servo hums,
+ *                stalls or the sonar hits the chassis.  The motors are not driven.
  *   1  DISTANCE  a flat object at 100, 200, 300, 400 then 600 mm: 5 s of readings,
  *                then the count, mean, median, min, max and the error against
  *                the distance you set up
@@ -49,7 +56,8 @@
 #define OBS_LOAD_SWEEP_MS       (1000U)
 
 typedef enum {
-    STEP_DISTANCE = 0,
+    STEP_RANGE = 0,
+    STEP_DISTANCE,
     STEP_NOECHO,
     STEP_SERVO,
     STEP_LOAD,
@@ -68,6 +76,45 @@ static const uint16_t TARGET_MM[OBS_TARGET_COUNT] = { 100U, 200U, 300U, 400U, 60
 
 /* servo test: angles from the car's right, 90 = straight ahead */
 #define OBS_SERVO_STEPS         (5U)
+
+/* range test: outward from 90 in RANGE_STEP_DEG steps to RANGE_MIN_DEG (right) and RANGE_MAX_DEG (left) */
+#define RANGE_MIN_DEG           (20)
+#define RANGE_MAX_DEG           (160)
+#define RANGE_STEP_DEG          (5)
+#define RANGE_HOLD_MS           (1400U)
+#define RANGE_SETTLE_MS         (700U)      /* the readings in the rest of the hold count */
+#define RANGE_STEPS_EACH_SIDE   ((90 - RANGE_MIN_DEG) / RANGE_STEP_DEG)
+
+/* cos in per-mille every 5 degrees from 0 to 90 */
+static const uint16_t COS_PERMILLE[19] = {
+    1000U, 996U, 985U, 966U, 940U, 906U, 866U, 819U, 766U, 707U, 643U, 574U, 500U, 423U, 342U, 259U,
+    174U, 87U, 0U
+};
+
+/* The angle the range test holds at step 'idx', or -1 when it has finished.
+ * 0 = centre, 1..N = right, N+1 = centre, N+2..2N+1 = left, 2N+2 = centre. */
+static int16_t range_angle(uint8_t idx)
+{
+    const int16_t n = (int16_t)RANGE_STEPS_EACH_SIDE;
+    const int16_t i = (int16_t)idx;
+
+    if (i == 0) {
+        return 90;
+    }
+    if (i <= n) {
+        return (int16_t)(90 - (i * RANGE_STEP_DEG));
+    }
+    if (i == (n + 1)) {
+        return 90;
+    }
+    if (i <= ((2 * n) + 1)) {
+        return (int16_t)(90 + ((i - (n + 1)) * RANGE_STEP_DEG));
+    }
+    if (i == ((2 * n) + 2)) {
+        return 90;
+    }
+    return -1;
+}
 
 static bool button_pressed(button_t *b, bool raw)
 {
@@ -89,6 +136,26 @@ static bool button_pressed(button_t *b, bool raw)
 static void servo_to(uint8_t angle_deg)
 {
     hal_servo_set_pulse_us(servo_pulse_us(&ROBOT_OBSTACLE_CFG.servo, angle_deg));
+}
+
+/* The pulse the range test sends for an angle, for the printout. */
+static uint16_t range_pulse_us(int16_t angle_deg)
+{
+    servo_cfg_t wide = ROBOT_OBSTACLE_CFG.servo;
+
+    wide.min_angle_deg = 5U;
+    wide.max_angle_deg = 175U;
+    return servo_pulse_us(&wide, angle_deg);
+}
+
+/* The range test commands angles outside the robot's software limits: use a copy with them lifted. */
+static void servo_to_wide(int16_t angle_deg)
+{
+    servo_cfg_t wide = ROBOT_OBSTACLE_CFG.servo;
+
+    wide.min_angle_deg = 5U;
+    wide.max_angle_deg = 175U;
+    hal_servo_set_pulse_us(servo_pulse_us(&wide, angle_deg));
 }
 
 static const char *status_name(us_status_t s)
@@ -138,6 +205,11 @@ static const char *reason_name(plan_reason_t r)
 static void print_prompt(obs_step_t step, uint8_t target_idx)
 {
     switch (step) {
+    case STEP_RANGE:
+        tm_printf((UB *)"[obs] step 0 RANGE: put a broad flat wall (or a big box face) 400 mm straight in front of "
+                        "the sensor, keep the servo's horn and the sensor clear of cables, keep a hand ready to press "
+                        "STOP when the servo hums or stalls.  Press START.  STOP skips to step 1\n");
+        break;
     case STEP_DISTANCE:
         tm_printf((UB *)"[obs] step 1 DISTANCE: put a broad flat hard object %d mm from the sensor's FRONT FACE "
                         "(the two metal cylinders; use a ruler), keep it still, press START.  STOP skips to step 2\n",
@@ -157,7 +229,7 @@ static void print_prompt(obs_step_t step, uint8_t target_idx)
     default:
         tm_printf((UB *)"[obs] step 5 SCAN: put one box, centred, 650 mm from the sensor face (the distance the "
                         "robot starts a scan from), press START.  Repeat with a 150 mm box and at 500 mm.  "
-                        "STOP skips to step 1\n");
+                        "STOP skips to step 0\n");
         break;
     }
 }
@@ -188,8 +260,10 @@ static void obstacle_test_task(INT stacd, void *exinf)
     static bypass_plan_t plan;
     button_t start_btn = { 0U, false };
     button_t stop_btn = { 0U, false };
-    obs_step_t step = STEP_DISTANCE;
+    obs_step_t step = STEP_RANGE;
     uint8_t target_idx = 0U;
+    uint8_t range_idx = 0U;
+    uint32_t range_since_ms = 0U;
     bool running = false;
     bool measuring = false;
     uint32_t last_start_ms = 0U;
@@ -264,7 +338,14 @@ static void obstacle_test_task(INT stacd, void *exinf)
                 n_other = 0U;
                 n_ok = 0U;
                 us_monitor_init(&mon, (uint8_t)OBS_CONFIRM, (uint8_t)OBS_INVALID_LIMIT);
-                if (step == STEP_LOAD) {
+                if (step == STEP_RANGE) {
+                    range_idx = 0U;
+                    range_since_ms = now;
+                    servo_to_wide(90);
+                    tm_printf((UB *)"[obs] RANGE start: centre, then right to %d deg, then left to %d deg, "
+                                    "%d deg at a time.  STOP ends it\n",
+                              (INT)RANGE_MIN_DEG, (INT)RANGE_MAX_DEG, (INT)RANGE_STEP_DEG);
+                } else if (step == STEP_LOAD) {
                     servo_idx = 0U;
                     servo_since_ms = now;
                     servo_to(ROBOT_OBSTACLE_CFG.servo.min_angle_deg);
@@ -288,6 +369,65 @@ static void obstacle_test_task(INT stacd, void *exinf)
                 }
             } else {
                 /* idle */
+            }
+        } else if (step == STEP_RANGE) {
+            const int16_t angle = range_angle(range_idx);
+
+            if (fresh && ((now - range_since_ms) >= RANGE_SETTLE_MS)) {
+                n_total++;
+                if ((reading.status == US_VALID) && (n_valid < OBS_MAX_SAMPLES)) {
+                    samples[n_valid] = reading.distance_mm;
+                    n_valid++;
+                } else if (reading.status == US_NO_ECHO) {
+                    n_noecho++;
+                } else {
+                    n_other++;
+                }
+            }
+            if (!measuring && ((now - last_start_ms) >= ROBOT_US_PERIOD_MS)) {
+                hal_us_trigger();
+                measuring = true;
+                last_start_ms = now;
+            }
+            if (stop_edge || (angle < 0)) {
+                servo_to_wide(90);
+                tm_printf((UB *)"[obs] RESULT RANGE %s at step %d.  Read the largest angle the servo reached on each side "
+                                "off the protractor, and the largest angle that still gave a forward distance equal "
+                                "to the wall's\n",
+                          stop_edge ? (UB *)"stopped" : (UB *)"finished", (INT)range_idx);
+                running = false;
+                measuring = false;
+                step = STEP_DISTANCE;
+                print_prompt(step, target_idx);
+            } else if ((now - range_since_ms) >= RANGE_HOLD_MS) {
+                /* the result for the angle just held */
+                if (range_idx > 0U) {
+                    const int16_t off = (angle >= 90) ? (int16_t)(angle - 90) : (int16_t)(90 - angle);
+                    uint16_t median = 0U;
+                    uint32_t fwd;
+
+                    if (n_valid > 0U) {
+                        sort_u16(samples, n_valid);
+                        median = samples[n_valid / 2U];
+                    }
+                    fwd = ((uint32_t)median * (uint32_t)COS_PERMILLE[off / 5]) / 1000U;
+                    tm_printf((UB *)"[obs] RANGE angle=%d deg (%d %s of centre)  pulse=%d us  readings=%d valid=%d "
+                                    "no-echo=%d  median=%d mm  forward=%d mm\n",
+                              (INT)angle, (INT)off, (angle >= 90) ? (UB *)"left" : (UB *)"right",
+                              (INT)range_pulse_us(angle), (INT)n_total, (INT)n_valid, (INT)n_noecho,
+                              (INT)median, (INT)fwd);
+                }
+                range_idx++;
+                range_since_ms = now;
+                n_valid = 0U;
+                n_total = 0U;
+                n_noecho = 0U;
+                n_other = 0U;
+                if (range_angle(range_idx) >= 0) {
+                    servo_to_wide(range_angle(range_idx));
+                }
+            } else {
+                /* holding */
             }
         } else if ((step == STEP_DISTANCE) || (step == STEP_NOECHO)) {
             if (fresh) {
