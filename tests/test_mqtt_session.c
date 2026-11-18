@@ -312,6 +312,40 @@ static void test_wraparound(void)
     assert(s.state == MQTT_SESSION_BACKOFF);
 }
 
+/* The observed headless reconnect cadence was 131.072 seconds.  That value
+ * resembles a 17-bit millisecond wrap, so prove it has no special meaning to
+ * the 32-bit, subtraction-based keepalive state machine. */
+static void test_131_second_timestamp_still_pings(void)
+{
+    mqtt_session_t s;
+    mock_t m;
+
+    setup(&s, &m);
+    online(&s);
+    mqtt_session_poll(&s, 131072U);
+    assert(s.state == MQTT_SESSION_ONLINE);
+    assert(s.waiting_pingresp && s.pings == 1U);
+    assert(m.last_len == 2U && m.last[0] == 0xc0U);
+}
+
+static void test_keepalive_across_clock_wrap(void)
+{
+    mqtt_session_t s;
+    mock_t m;
+    const uint8_t payload[] = {0x01U};
+    const uint32_t sent = UINT32_MAX - 10000U;
+
+    setup(&s, &m);
+    online(&s);
+    assert(mqtt_session_publish(&s, "aai12/test", payload,
+                                sizeof payload, sent));
+    mqtt_session_poll(&s, 9998U); /* 19,999 ms after the publish */
+    assert(!s.waiting_pingresp);
+    mqtt_session_poll(&s, 9999U); /* 20,000 ms after the publish */
+    assert(s.waiting_pingresp && s.pings == 1U);
+    assert(m.last_len == 2U && m.last[0] == 0xc0U);
+}
+
 int main(void)
 {
     test_validation();
@@ -330,6 +364,8 @@ int main(void)
     test_network_drop_closes();
     test_connect_unavailable();
     test_wraparound();
-    puts("PASS: 16 MQTT session state-machine tests");
+    test_131_second_timestamp_still_pings();
+    test_keepalive_across_clock_wrap();
+    puts("PASS: 18 MQTT session state-machine tests");
     return 0;
 }

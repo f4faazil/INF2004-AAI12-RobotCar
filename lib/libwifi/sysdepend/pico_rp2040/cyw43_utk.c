@@ -64,6 +64,19 @@ extern volatile uint32_t cyw43_utk_poll_requested;
 extern int32_t tk_dly_tsk(uint32_t delay);
 extern void mp_memory_barrir(void);
 extern uint64_t time_us_64(void);
+#if TM_WIFI_MQTT
+#if TM_CONSOLE_USB_CDC
+extern volatile uint32_t tm_usb_irq_count;
+extern volatile uint32_t tm_usb_service_count;
+extern volatile uint32_t tm_usb_event_count;
+extern uint32_t tm_usb_state(void);
+#else
+#define tm_usb_irq_count 0U
+#define tm_usb_service_count 0U
+#define tm_usb_event_count 0U
+static uint32_t tm_usb_state(void) { return 0U; }
+#endif
+#endif
 
 /* Seqlock guarding radio_status.  The radio-owner task publishes field by
  * field on processor 1 while the qualification harness reads the whole
@@ -153,6 +166,10 @@ static void update_mqtt_status(void)
     radio_status.mqtt_session_failures = status.session_failures;
     radio_status.mqtt_poll_calls = status.poll_calls;
     radio_status.mqtt_last_poll_ms = status.last_poll_ms;
+    radio_status.mqtt_max_poll_gap_ms = status.max_poll_gap_ms;
+    radio_status.mqtt_owner_calls = status.owner_calls;
+    radio_status.mqtt_owner_last_ms = status.owner_last_ms;
+    radio_status.mqtt_owner_max_gap_ms = status.owner_max_gap_ms;
     radio_status.mqtt_last_tx_ms = status.last_tx_ms;
     radio_status.mqtt_ping_attempts = status.ping_attempts;
     radio_status.mqtt_pings_queued = status.pings_queued;
@@ -174,6 +191,21 @@ static void update_mqtt_status(void)
     radio_status.mqtt_last_tcp_output_result = status.last_tcp_output_result;
     radio_status.mqtt_tcp_errors = status.tcp_errors;
     radio_status.mqtt_last_tcp_error = status.last_tcp_error;
+    radio_status.mqtt_disconnect_callbacks = status.disconnect_callbacks;
+    radio_status.mqtt_diagnostic_publishes = status.diagnostic_publishes;
+    radio_status.mqtt_diagnostic_publish_failures =
+            status.diagnostic_publish_failures;
+    radio_status.mqtt_boot_nonce = status.boot_nonce;
+    radio_status.mqtt_reset_reason = status.reset_reason;
+    radio_status.mqtt_timer_tick_config = status.timer_tick_config;
+    radio_status.mqtt_usb_irq_count = status.usb_irq_count;
+    radio_status.mqtt_usb_service_count = status.usb_service_count;
+    radio_status.mqtt_usb_event_count = status.usb_event_count;
+    radio_status.mqtt_usb_link_state = status.usb_link_state;
+    radio_status.mqtt_wifi_link_changes = status.wifi_link_changes;
+    radio_status.mqtt_dhcp_changes = status.dhcp_changes;
+    radio_status.mqtt_last_wifi_change_ms = status.last_wifi_change_ms;
+    radio_status.mqtt_last_dhcp_change_ms = status.last_dhcp_change_ms;
 }
 #endif
 
@@ -723,6 +755,14 @@ void cyw43_utk_task(int32_t stacd, void *exinf)
         update_dhcp_status();
 #endif
 #if TM_WIFI_MQTT
+        mqtt_lwip_observe_owner(radio_status.link_up,
+                                radio_status.dhcp_complete,
+                                radio_status.join_attempts,
+                                radio_status.join_recoveries,
+                                tm_usb_irq_count,
+                                tm_usb_service_count,
+                                tm_usb_event_count,
+                                tm_usb_state());
         mqtt_lwip_poll(&cyw43_state.netif[CYW43_ITF_STA]);
         update_mqtt_status();
 #endif

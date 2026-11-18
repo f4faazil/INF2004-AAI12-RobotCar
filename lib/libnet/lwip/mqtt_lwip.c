@@ -29,11 +29,61 @@
 #include "telemetry_rtos.h"
 #include "mqtt_test_config.h"
 
+#if PICO_RP2040
+#include "hardware/structs/rosc.h"
+#include "hardware/structs/watchdog.h"
+#endif
+
 #define AAI12_MQTT_RX_CHUNK 64U
 #define AAI12_MQTT_OUTPUT_TIMEOUT_MS 5000U
+#define AAI12_MQTT_DIAG_PAYLOAD_BYTES 220U
 
 static const uint8_t qualification_message[] = "AAI12_PICO_W_ONLINE";
 static const char robot_telemetry_topic[] = "aai12/robot/telemetry";
+static const char diagnostic_topic[] = "aai12/diagnostic";
+
+enum {
+    MQTT_DIAG_NONE = 0,
+    MQTT_DIAG_NETWORK_DOWN = 1,
+    MQTT_DIAG_REMOTE_FIN = 2,
+    MQTT_DIAG_TCP_ERROR = 3,
+    MQTT_DIAG_RX_ERROR = 4,
+    MQTT_DIAG_OUTPUT_TIMEOUT = 5,
+    MQTT_DIAG_SESSION_TIMEOUT = 6,
+    MQTT_DIAG_TRANSPORT_FAILURE = 7
+};
+
+typedef struct {
+    uint32_t valid;
+    uint32_t reason;
+    uint32_t at_ms;
+    uint32_t state;
+    uint32_t connects_started;
+    uint32_t sessions_online;
+    uint32_t owner_calls;
+    uint32_t owner_max_gap_ms;
+    uint32_t mqtt_polls;
+    uint32_t mqtt_max_gap_ms;
+    uint32_t last_poll_ms;
+    uint32_t last_tx_ms;
+    uint32_t ping_attempts;
+    uint32_t pings;
+    uint32_t ping_responses;
+    uint32_t tcp_write_failures;
+    uint32_t tcp_output_failures;
+    uint32_t tcp_errors;
+    int32_t last_tcp_error;
+    uint32_t usb_irq_count;
+    uint32_t usb_service_count;
+    uint32_t usb_event_count;
+    uint32_t usb_link_state;
+    uint32_t wifi_link_changes;
+    uint32_t dhcp_changes;
+    uint32_t last_wifi_change_ms;
+    uint32_t last_dhcp_change_ms;
+    uint32_t join_attempts;
+    uint32_t join_recoveries;
+} mqtt_failure_snapshot_t;
 
 typedef struct {
     struct tcp_pcb *pcb;
@@ -48,10 +98,143 @@ typedef struct {
     /* TCP may have accepted publication while the queue mutex is busy.
      * Complete the pending commit before trying another publish. */
     bool pending_commit;
+    uint32_t observed_failures;
+    uint32_t diagnostic_session;
+    uint32_t diagnostic_part;
+    uint32_t poll_last_ms;
+    uint32_t owner_last_ms;
+    bool poll_seen;
+    bool owner_seen;
+    uint32_t wifi_link_up;
+    uint32_t dhcp_complete;
+    uint32_t join_attempts;
+    uint32_t join_recoveries;
+    mqtt_failure_snapshot_t previous;
 } mqtt_lwip_adapter_t;
 
 static mqtt_lwip_adapter_t adapter;
 static T_MQTT_LWIP_STATUS diagnostics;
+
+typedef struct {
+    char *bytes;
+    size_t capacity;
+    size_t length;
+    bool valid;
+} mqtt_diag_builder_t;
+
+static void diag_text(mqtt_diag_builder_t *d, const char *text)
+{
+    while (*text != '\0') {
+        if (d->length >= d->capacity) {
+            d->valid = false;
+            return;
+        }
+        d->bytes[d->length++] = *text++;
+    }
+}
+
+static void diag_u32(mqtt_diag_builder_t *d, const char *key,
+                     uint32_t value)
+{
+    char reversed[10];
+    size_t count = 0U;
+
+    diag_text(d, key);
+    do {
+        reversed[count++] = (char)('0' + value % 10U);
+        value /= 10U;
+    } while (value != 0U);
+    while (count > 0U) {
+        char digit[2] = { reversed[--count], '\0' };
+        diag_text(d, digit);
+    }
+}
+
+static void diag_i32(mqtt_diag_builder_t *d, const char *key, int32_t value)
+{
+    uint32_t magnitude;
+
+    diag_text(d, key);
+    if (value < 0) {
+        diag_text(d, "-");
+        magnitude = 0U - (uint32_t)value;
+    } else {
+        magnitude = (uint32_t)value;
+    }
+    diag_u32(d, "", magnitude);
+}
+
+static void diag_hex32(mqtt_diag_builder_t *d, const char *key,
+                       uint32_t value)
+{
+    static const char digits[] = "0123456789abcdef";
+
+    diag_text(d, key);
+    for (unsigned int shift = 32U; shift != 0U; shift -= 4U) {
+        char digit[2] = {
+            digits[(value >> (shift - 4U)) & 0x0fU], '\0'
+        };
+        diag_text(d, digit);
+    }
+}
+
+static uint32_t make_boot_nonce(uint32_t now)
+{
+    uint32_t nonce = now ^ diagnostics.owner_calls ^ 0x4d515454U;
+#if PICO_RP2040
+    for (unsigned int i = 0; i < 32U; i++) {
+        nonce = (nonce << 1) ^ (rosc_hw->randombit & 1U);
+    }
+    diagnostics.reset_reason = watchdog_hw->reason;
+    /* Report only ENABLE and CYCLES; RUNNING/COUNT change while sampled. */
+    diagnostics.timer_tick_config = watchdog_hw->tick & 0x3ffU;
+#endif
+    return nonce;
+}
+
+static void capture_failure(mqtt_lwip_adapter_t *a, uint32_t reason,
+                            uint32_t now)
+{
+    mqtt_failure_snapshot_t *s = &a->previous;
+
+    s->valid = 1U;
+    s->reason = reason;
+    s->at_ms = now;
+    s->state = (uint32_t)a->session.state;
+    s->connects_started = a->session.connects_started;
+    s->sessions_online = a->session.sessions_online;
+    s->owner_calls = diagnostics.owner_calls;
+    s->owner_max_gap_ms = diagnostics.owner_max_gap_ms;
+    s->mqtt_polls = a->session.poll_calls;
+    s->mqtt_max_gap_ms = diagnostics.max_poll_gap_ms;
+    s->last_poll_ms = a->session.last_poll_ms;
+    s->last_tx_ms = a->session.last_tx_ms;
+    s->ping_attempts = a->session.ping_attempts;
+    s->pings = a->session.pings;
+    s->ping_responses = a->session.ping_responses;
+    s->tcp_write_failures = diagnostics.tcp_write_failures;
+    s->tcp_output_failures = diagnostics.tcp_output_failures;
+    s->tcp_errors = diagnostics.tcp_errors;
+    s->last_tcp_error = diagnostics.last_tcp_error;
+    s->usb_irq_count = diagnostics.usb_irq_count;
+    s->usb_service_count = diagnostics.usb_service_count;
+    s->usb_event_count = diagnostics.usb_event_count;
+    s->usb_link_state = diagnostics.usb_link_state;
+    s->wifi_link_changes = diagnostics.wifi_link_changes;
+    s->dhcp_changes = diagnostics.dhcp_changes;
+    s->last_wifi_change_ms = diagnostics.last_wifi_change_ms;
+    s->last_dhcp_change_ms = diagnostics.last_dhcp_change_ms;
+    s->join_attempts = a->join_attempts;
+    s->join_recoveries = a->join_recoveries;
+}
+
+static void capture_if_new_failure(mqtt_lwip_adapter_t *a, uint32_t now,
+                                   uint32_t reason)
+{
+    if (a->session.failures == a->observed_failures) return;
+    a->observed_failures = a->session.failures;
+    capture_failure(a, reason, now);
+}
 
 static void tcp_detach(struct tcp_pcb *pcb)
 {
@@ -156,8 +339,10 @@ static bool service_pending_output(mqtt_lwip_adapter_t *a, uint32_t now)
     }
 
     diagnostics.tcp_output_timeouts++;
+    capture_failure(a, MQTT_DIAG_OUTPUT_TIMEOUT, now);
     close_tcp(a);
     mqtt_session_tcp_lost(&a->session, now);
+    a->observed_failures = a->session.failures;
     return false;
 }
 
@@ -169,7 +354,10 @@ static void on_error(void *context, err_t err)
     diagnostics.last_tcp_error = err;
     a->pcb = NULL;
     a->output_pending = false;
+    diagnostics.disconnect_callbacks++;
+    capture_failure(a, MQTT_DIAG_TCP_ERROR, sys_now());
     mqtt_session_tcp_lost(&a->session, sys_now());
+    a->observed_failures = a->session.failures;
 }
 
 static err_t on_sent(void *context, struct tcp_pcb *pcb, u16_t len)
@@ -189,7 +377,11 @@ static err_t on_connected(void *context, struct tcp_pcb *pcb, err_t err)
 
     if (pcb != a->pcb) return ERR_OK;
     if (err != ERR_OK) {
+        diagnostics.disconnect_callbacks++;
+        diagnostics.last_tcp_error = err;
+        capture_failure(a, MQTT_DIAG_TCP_ERROR, sys_now());
         mqtt_session_tcp_lost(&a->session, sys_now());
+        a->observed_failures = a->session.failures;
         close_tcp(a);
         return ERR_ABRT;
     }
@@ -224,13 +416,19 @@ static err_t on_received(void *context, struct tcp_pcb *pcb,
         tcp_detach(pcb);
         close_result = tcp_close(pcb);
         if (close_result != ERR_OK) tcp_abort(pcb);
+        diagnostics.disconnect_callbacks++;
+        capture_failure(a, MQTT_DIAG_REMOTE_FIN, sys_now());
         mqtt_session_tcp_lost(&a->session, sys_now());
+        a->observed_failures = a->session.failures;
         return (close_result == ERR_OK) ? ERR_OK : ERR_ABRT;
     }
     if (err != ERR_OK) {
         pbuf_free(p);
+        diagnostics.disconnect_callbacks++;
+        capture_failure(a, MQTT_DIAG_RX_ERROR, sys_now());
         close_tcp(a);
         mqtt_session_tcp_lost(&a->session, sys_now());
+        a->observed_failures = a->session.failures;
         return ERR_ABRT;
     }
 
@@ -241,14 +439,22 @@ static err_t on_received(void *context, struct tcp_pcb *pcb,
     a->aborted_in_callback = false;
     a->in_callback = true;
     while (offset < total) {
+        uint32_t failures_before;
         u16_t count = (u16_t)(total - offset);
         if (count > AAI12_MQTT_RX_CHUNK) count = AAI12_MQTT_RX_CHUNK;
         if (pbuf_copy_partial(p, scratch, count, offset) != count) {
+            diagnostics.disconnect_callbacks++;
+            capture_failure(a, MQTT_DIAG_RX_ERROR, sys_now());
             close_tcp(a);
             mqtt_session_tcp_lost(&a->session, sys_now());
+            a->observed_failures = a->session.failures;
             break;
         }
+        failures_before = a->session.failures;
         mqtt_session_tcp_received(&a->session, scratch, count, sys_now());
+        if (a->session.failures != failures_before) {
+            capture_if_new_failure(a, sys_now(), MQTT_DIAG_RX_ERROR);
+        }
         offset = (u16_t)(offset + count);
         if (a->aborted_in_callback) break;
     }
@@ -259,6 +465,119 @@ static err_t on_received(void *context, struct tcp_pcb *pcb,
         return ERR_ABRT;
     }
     return ERR_OK;
+}
+
+static bool publish_with_diagnostics(mqtt_lwip_adapter_t *a,
+                                     const char *topic,
+                                     const uint8_t *payload, size_t length,
+                                     uint32_t now)
+{
+    uint32_t failures_before = a->session.failures;
+    bool accepted = mqtt_session_publish(&a->session, topic, payload,
+                                         length, now);
+
+    if (a->session.failures != failures_before) {
+        capture_if_new_failure(a, now, MQTT_DIAG_TRANSPORT_FAILURE);
+    }
+    return accepted;
+}
+
+void mqtt_lwip_observe_owner(uint32_t wifi_link_up, uint32_t dhcp_complete,
+                             uint32_t join_attempts,
+                             uint32_t join_recoveries,
+                             uint32_t usb_irq_count,
+                             uint32_t usb_service_count,
+                             uint32_t usb_event_count,
+                             uint32_t usb_link_state)
+{
+    const uint32_t now = sys_now();
+    uint32_t gap;
+
+    diagnostics.owner_calls++;
+    if (adapter.owner_seen) {
+        gap = now - adapter.owner_last_ms;
+        if (gap > diagnostics.owner_max_gap_ms) {
+            diagnostics.owner_max_gap_ms = gap;
+        }
+    }
+    adapter.owner_last_ms = now;
+    adapter.owner_seen = true;
+    diagnostics.owner_last_ms = now;
+    diagnostics.usb_irq_count = usb_irq_count;
+    diagnostics.usb_service_count = usb_service_count;
+    diagnostics.usb_event_count = usb_event_count;
+    diagnostics.usb_link_state = usb_link_state;
+    if (wifi_link_up != adapter.wifi_link_up) {
+        adapter.wifi_link_up = wifi_link_up;
+        diagnostics.wifi_link_changes++;
+        diagnostics.last_wifi_change_ms = now;
+    }
+    if (dhcp_complete != adapter.dhcp_complete) {
+        adapter.dhcp_complete = dhcp_complete;
+        diagnostics.dhcp_changes++;
+        diagnostics.last_dhcp_change_ms = now;
+    }
+    adapter.join_attempts = join_attempts;
+    adapter.join_recoveries = join_recoveries;
+}
+
+static bool publish_diagnostic(mqtt_lwip_adapter_t *a, uint32_t now)
+{
+    char payload[AAI12_MQTT_DIAG_PAYLOAD_BYTES];
+    const mqtt_failure_snapshot_t *s = &a->previous;
+    mqtt_diag_builder_t d = { payload, sizeof payload, 0U, true };
+
+    if (!s->valid) {
+        capture_failure(a, MQTT_DIAG_NONE, now);
+    }
+    if (a->diagnostic_part == 0U) {
+        diag_text(&d, "v=1");
+        diag_hex32(&d, ",b=", diagnostics.boot_nonce);
+        diag_u32(&d, ",rr=", diagnostics.reset_reason);
+        diag_u32(&d, ",tk=", diagnostics.timer_tick_config);
+        diag_u32(&d, ",r=", s->reason);
+        diag_u32(&d, ",t=", s->at_ms);
+        diag_u32(&d, ",s=", s->state);
+        diag_u32(&d, ",oc=", s->owner_calls);
+        diag_u32(&d, ",og=", s->owner_max_gap_ms);
+        diag_u32(&d, ",mp=", s->mqtt_polls);
+        diag_u32(&d, ",mg=", s->mqtt_max_gap_ms);
+        diag_u32(&d, ",lp=", s->last_poll_ms);
+        diag_u32(&d, ",lt=", s->last_tx_ms);
+        diag_u32(&d, ",pa=", s->ping_attempts);
+        diag_u32(&d, ",pq=", s->pings);
+        diag_u32(&d, ",pr=", s->ping_responses);
+    } else {
+        diag_text(&d, "v=1");
+        diag_hex32(&d, ",b=", diagnostics.boot_nonce);
+        diag_u32(&d, ",wf=", s->tcp_write_failures);
+        diag_u32(&d, ",of=", s->tcp_output_failures);
+        diag_u32(&d, ",te=", s->tcp_errors);
+        diag_i32(&d, ",le=", s->last_tcp_error);
+        diag_u32(&d, ",ui=", s->usb_irq_count);
+        diag_u32(&d, ",us=", s->usb_service_count);
+        diag_u32(&d, ",ue=", s->usb_event_count);
+        diag_u32(&d, ",ul=", s->usb_link_state);
+        diag_u32(&d, ",wc=", s->wifi_link_changes);
+        diag_u32(&d, ",wt=", s->last_wifi_change_ms);
+        diag_u32(&d, ",dc=", s->dhcp_changes);
+        diag_u32(&d, ",dt=", s->last_dhcp_change_ms);
+        diag_u32(&d, ",ja=", s->join_attempts);
+        diag_u32(&d, ",jr=", s->join_recoveries);
+    }
+    if (!d.valid ||
+        !publish_with_diagnostics(a, diagnostic_topic,
+                                  (const uint8_t *)payload, d.length, now)) {
+        diagnostics.diagnostic_publish_failures++;
+        return false;
+    }
+    diagnostics.diagnostic_publishes++;
+    a->diagnostic_part++;
+    if (a->diagnostic_part == 2U) {
+        a->diagnostic_session = a->session.sessions_online;
+        a->diagnostic_part = 0U;
+    }
+    return true;
 }
 
 static bool start_tcp(void *context)
@@ -290,6 +609,10 @@ void mqtt_lwip_poll(struct netif *netif)
         start_tcp, write_tcp, close_tcp
     };
     const uint32_t now = sys_now();
+    uint32_t failures_before;
+    uint32_t write_failures_before;
+    uint32_t poll_gap;
+    mqtt_session_state_t state_before;
     bool ready;
 
     if (!adapter.initialized) {
@@ -305,27 +628,59 @@ void mqtt_lwip_poll(struct netif *netif)
          * Do not reset a live queue or lazily create cross-core resources. */
         if (!telemetry_rtos_ready()) return;
         adapter.initialized = true;
+        diagnostics.boot_nonce = make_boot_nonce(now);
     }
+
+    if (adapter.poll_seen) {
+        poll_gap = now - adapter.poll_last_ms;
+        if (poll_gap > diagnostics.max_poll_gap_ms) {
+            diagnostics.max_poll_gap_ms = poll_gap;
+        }
+    }
+    adapter.poll_last_ms = now;
+    adapter.poll_seen = true;
 
     ready = netif != NULL && netif_is_up(netif) &&
             netif_is_link_up(netif) &&
             !ip4_addr_isany_val(*netif_ip4_addr(netif));
     if (ready != adapter.session.network_up) {
+        if (!ready && adapter.session.network_up) {
+            capture_failure(&adapter, MQTT_DIAG_NETWORK_DOWN, now);
+        }
         mqtt_session_set_network(&adapter.session, ready, now);
     }
     if (!service_pending_output(&adapter, now)) return;
+    failures_before = adapter.session.failures;
+    write_failures_before = diagnostics.tcp_write_failures;
+    state_before = adapter.session.state;
     mqtt_session_poll(&adapter.session, now);
+    if (adapter.session.failures != failures_before) {
+        capture_if_new_failure(&adapter, now,
+            diagnostics.tcp_write_failures != write_failures_before
+                ? MQTT_DIAG_TRANSPORT_FAILURE : MQTT_DIAG_SESSION_TIMEOUT);
+        adapter.previous.state = (uint32_t)state_before;
+    }
 
     /* Smoke test ONLY: one QoS 0 message after each CONNACK (not real car
      * telemetry, no delivery acknowledgement). Retried if TX is full. */
     if (adapter.session.state == MQTT_SESSION_ONLINE &&
         adapter.session.sessions_online != adapter.published_online_session) {
-        if (mqtt_session_publish(&adapter.session, AAI12_MQTT_TEST_TOPIC,
-                                 qualification_message,
-                                 sizeof(qualification_message) - 1U, now)) {
+        if (publish_with_diagnostics(&adapter, AAI12_MQTT_TEST_TOPIC,
+                                     qualification_message,
+                                     sizeof(qualification_message) - 1U,
+                                     now)) {
             adapter.published_online_session = adapter.session.sessions_online;
         }
         /* Send the binary frame in a later poll, not the same tick. */
+        return;
+    }
+
+    /* Preserve the established first online marker, then send two compact
+     * failure records before ordinary telemetry.  At most one packet is
+     * attempted per owner iteration. */
+    if (adapter.session.state == MQTT_SESSION_ONLINE &&
+        adapter.diagnostic_session != adapter.session.sessions_online) {
+        (void)publish_diagnostic(&adapter, now);
         return;
     }
 
@@ -345,8 +700,8 @@ void mqtt_lwip_poll(struct netif *netif)
         size_t length = 0U;
         if (telemetry_rtos_peek(now, frame, sizeof frame, &length) ==
             TELEMETRY_INBOX_OK &&
-            mqtt_session_publish(&adapter.session, robot_telemetry_topic,
-                                 frame, length, now)) {
+            publish_with_diagnostics(&adapter, robot_telemetry_topic,
+                                     frame, length, now)) {
             /* TCP accepted the QoS 0 packet locally, not broker-ACKed.
              * Contended commit is retried without republishing. */
             if (telemetry_rtos_commit() != TELEMETRY_INBOX_OK) {
