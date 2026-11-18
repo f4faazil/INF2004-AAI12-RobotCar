@@ -7,6 +7,10 @@
  * Press START (GP20) to run the step shown; STOP (GP21) in the menu skips to
  * the next step, and STOP during a run ends it.  Lines start with "[obs]".
  *
+ *   H  HOLD      five fixed pulses, 12 s each (1332, 1573, 1815, 2023, 2230 us): measure the
+ *                horn's real angle at each from the car's centreline, from directly above (a
+ *                protractor, or a phone angle app on a photo).  The five points give the pulse
+ *                for straight ahead and the microseconds per degree.  No sonar, no motors.
  *   0  RANGE     the servo's usable sweep BY PULSE, between the two stops measured on the
  *                car (about 1312 us right and 2250 us left): from the right stop to the left
  *                stop in 30 us steps, 1.4 s each.  The sonar measures a flat wall in front at
@@ -56,7 +60,8 @@
 #define OBS_LOAD_SWEEP_MS       (1000U)
 
 typedef enum {
-    STEP_RANGE = 0,
+    STEP_HOLD = 0,
+    STEP_RANGE,
     STEP_DISTANCE,
     STEP_NOECHO,
     STEP_SERVO,
@@ -84,6 +89,11 @@ static const uint16_t TARGET_MM[OBS_TARGET_COUNT] = { 100U, 200U, 300U, 400U, 60
 #define RANGE_COUNT             (((RANGE_LAST_US - RANGE_FIRST_US) / RANGE_STEP_US) + 1U)
 #define RANGE_REST_US           (1800U)     /* about straight ahead: where it ends up */
 #define RANGE_HOLD_MS           (1400U)
+
+/* hold test: fixed pulses to measure the horn's angle at */
+#define HOLD_COUNT              (5U)
+#define HOLD_MS                 (12000U)
+static const uint16_t HOLD_PULSE_US[HOLD_COUNT] = { 1332U, 1573U, 1815U, 2023U, 2230U };
 #define RANGE_SETTLE_MS         (700U)      /* the readings in the rest of the hold count */
 
 static bool button_pressed(button_t *b, bool raw)
@@ -155,6 +165,12 @@ static const char *reason_name(plan_reason_t r)
 static void print_prompt(obs_step_t step, uint8_t target_idx)
 {
     switch (step) {
+    case STEP_HOLD:
+        tm_printf((UB *)"[obs] step H HOLD: the servo will stop at 5 pulses for %d s each.  Measure the angle of the "
+                        "sonar bar from the car's centreline at each, from directly above, and note which side "
+                        "(left/right).  Keep the horn and cables clear; press STOP at once if it hums.  "
+                        "Press START.  STOP skips to step 0\n", (INT)(HOLD_MS / 1000U));
+        break;
     case STEP_RANGE:
         tm_printf((UB *)"[obs] step 0 RANGE: put a broad flat wall (or a big box face) 400 mm straight in front of "
                         "the sensor, square to the car, keep the horn and cables clear.  Press START: the servo "
@@ -212,7 +228,9 @@ static void obstacle_test_task(INT stacd, void *exinf)
     static bypass_plan_t plan;
     button_t start_btn = { 0U, false };
     button_t stop_btn = { 0U, false };
-    obs_step_t step = STEP_RANGE;
+    obs_step_t step = STEP_HOLD;
+    uint8_t hold_idx = 0U;
+    uint32_t hold_since_ms = 0U;
     uint8_t target_idx = 0U;
     uint8_t range_idx = 0U;
     uint32_t range_since_ms = 0U;
@@ -291,7 +309,13 @@ static void obstacle_test_task(INT stacd, void *exinf)
                 n_other = 0U;
                 n_ok = 0U;
                 us_monitor_init(&mon, (uint8_t)OBS_CONFIRM, (uint8_t)OBS_INVALID_LIMIT);
-                if (step == STEP_RANGE) {
+                if (step == STEP_HOLD) {
+                    hold_idx = 0U;
+                    hold_since_ms = now;
+                    hal_servo_set_pulse_us(HOLD_PULSE_US[0]);
+                    tm_printf((UB *)"[obs] HOLD pulse=%d us for %d s: measure the angle now\n", (INT)HOLD_PULSE_US[0],
+                              (INT)(HOLD_MS / 1000U));
+                } else if (step == STEP_RANGE) {
                     range_idx = 0U;
                     range_since_ms = now;
                     hal_servo_set_pulse_us(RANGE_FIRST_US);
@@ -321,6 +345,29 @@ static void obstacle_test_task(INT stacd, void *exinf)
                 }
             } else {
                 /* idle */
+            }
+        } else if (step == STEP_HOLD) {
+            if (stop_edge) {
+                hal_servo_set_pulse_us(RANGE_REST_US);
+                running = false;
+                step = STEP_RANGE;
+                print_prompt(step, target_idx);
+            } else if ((now - hold_since_ms) >= HOLD_MS) {
+                hold_idx++;
+                if (hold_idx >= HOLD_COUNT) {
+                    hal_servo_set_pulse_us(RANGE_REST_US);
+                    tm_printf((UB *)"[obs] RESULT HOLD done: send the five angles with their pulses and sides\n");
+                    running = false;
+                    step = STEP_RANGE;
+                    print_prompt(step, target_idx);
+                } else {
+                    hold_since_ms = now;
+                    hal_servo_set_pulse_us(HOLD_PULSE_US[hold_idx]);
+                    tm_printf((UB *)"[obs] HOLD pulse=%d us for %d s: measure the angle now\n",
+                              (INT)HOLD_PULSE_US[hold_idx], (INT)(HOLD_MS / 1000U));
+                }
+            } else {
+                /* holding */
             }
         } else if (step == STEP_RANGE) {
             if (fresh && ((now - range_since_ms) >= RANGE_SETTLE_MS)) {
