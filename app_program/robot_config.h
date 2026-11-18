@@ -197,7 +197,7 @@
 /* An obstacle ahead nearer than this stops the car and starts the scan.  The scan
  * can only confirm a path of the car's width from about 650 mm (the servo sweep is
  * only 28 degrees each side); see the note on ROBOT_OBSTACLE_CFG. */
-#define ROBOT_OBSTACLE_SCAN_MM  (230U)
+#define ROBOT_OBSTACLE_SCAN_MM  (330U)
 #define ROBOT_IR_RING_FRAMES    (256U)
 
 /*
