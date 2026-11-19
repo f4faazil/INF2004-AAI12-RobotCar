@@ -244,7 +244,11 @@ int main(void)
     assert(diagnostics.waiting_pingresp == 1U);
     simulate_recv(pingresp, sizeof pingresp);
     mqtt_lwip_poll(&interface);
-    assert(send_count == 7);         /* Ping response accepted */
+    assert(send_count == 8 && last_send[0] == 0x30U);
+    assert(contains_bytes(last_send, last_send_len, "aai12/robot/heartbeat",
+                          sizeof("aai12/robot/heartbeat") - 1U));
+    assert(contains_bytes(last_send, last_send_len, "seq=0", 5U));
+    assert(contains_bytes(last_send, last_send_len, "up=20250", 8U));
     mqtt_lwip_get_status(&diagnostics);
     assert(diagnostics.ping_responses == 1U);
     assert(diagnostics.waiting_pingresp == 0U);
@@ -295,39 +299,39 @@ int main(void)
     mqtt_lwip_poll(&interface);
     assert(connection_attempts == 2); /* Can reconnect */
     assert(connected_handler(callback_arg, &pcb, ERR_OK) == ERR_OK);
-    assert(send_count == 9 && last_send[0] == 0x10U); /* CONNECT */
+    assert(send_count == 10 && last_send[0] == 0x10U); /* CONNECT */
     simulate_recv(connack_part1, sizeof connack_part1);
     simulate_recv(connack_part2, sizeof connack_part2);
     mqtt_lwip_poll(&interface);
-    assert(send_count == 10);           /* Online marker on session 2 */
+    assert(send_count == 11);           /* Online marker on session 2 */
     mock_tx_room = 0U;
     mqtt_lwip_poll(&interface);
-    assert(send_count == 10);           /* Diagnostic blocked by sndbuf */
+    assert(send_count == 11);           /* Diagnostic blocked by sndbuf */
     clock_ms = 41301U;                 /* Head now 1001ms old: stale */
     mock_tx_room = 1024U;
     mqtt_lwip_poll(&interface);
-    assert(send_count == 11);           /* Previous-session diagnostic part 1 */
+    assert(send_count == 12);           /* Previous-session diagnostic part 1 */
     assert(contains_bytes(last_send, last_send_len, "r=1", 3U));
     assert(contains_bytes(last_send, last_send_len, "og=250", 6U));
     mqtt_lwip_poll(&interface);
-    assert(send_count == 12);           /* Previous-session diagnostic part 2 */
+    assert(send_count == 13);           /* Previous-session diagnostic part 2 */
     assert(contains_bytes(last_send, last_send_len, "ui=3", 4U));
     mqtt_lwip_poll(&interface);
-    assert(send_count == 12);           /* Stale item NOT published */
+    assert(send_count == 13);           /* Stale item NOT published */
     mqtt_lwip_poll(&interface);
-    assert(send_count == 12);           /* No accidental requeue */
+    assert(send_count == 13);           /* No accidental requeue */
 
     /* The recovered session must independently schedule its keepalive. */
     clock_ms = 61301U;
     mqtt_lwip_poll(&interface);
-    assert(send_count == 13 && last_send[0] == 0xc0U);
+    assert(send_count == 14 && last_send[0] == 0xc0U);
     simulate_recv(pingresp, sizeof pingresp);
 
     /* A fatal tcp_write result closes the unusable PCB immediately. */
     mock_write_result = ERR_CONN;
     clock_ms = 81301U;
     mqtt_lwip_poll(&interface);
-    assert(send_count == 13 && abort_count == 2);
+    assert(send_count == 14 && abort_count == 2);
     mqtt_lwip_get_status(&diagnostics);
     assert(diagnostics.state == MQTT_SESSION_BACKOFF);
     assert(diagnostics.last_tcp_write_result == ERR_CONN);
@@ -342,7 +346,7 @@ int main(void)
     simulate_recv(connack_part1, sizeof connack_part1);
     simulate_recv(connack_part2, sizeof connack_part2);
     mqtt_lwip_poll(&interface);
-    assert(send_count == 15); /* CONNECT plus session-3 online marker. */
+    assert(send_count == 16); /* CONNECT plus session-3 online marker. */
     saved_error_handler = error_handler;
     saved_callback_arg = callback_arg;
     assert(saved_error_handler != NULL);
@@ -359,12 +363,12 @@ int main(void)
     simulate_recv(connack_part1, sizeof connack_part1);
     simulate_recv(connack_part2, sizeof connack_part2);
     mqtt_lwip_poll(&interface);
-    assert(send_count == 17); /* CONNECT plus session-4 online marker. */
+    assert(send_count == 18); /* CONNECT plus session-4 online marker. */
     mqtt_lwip_poll(&interface);
-    assert(send_count == 18); /* Failed-session diagnostic part 1. */
+    assert(send_count == 19); /* Failed-session diagnostic part 1. */
     assert(contains_bytes(last_send, last_send_len, "r=3", 3U));
     mqtt_lwip_poll(&interface);
-    assert(send_count == 19); /* Failed-session diagnostic part 2. */
+    assert(send_count == 20); /* Failed-session diagnostic part 2. */
     assert(contains_bytes(last_send, last_send_len, "te=1", 4U));
 
     /* A persistently failed tcp_output retries the queued bytes, never calls
@@ -372,7 +376,7 @@ int main(void)
     mock_output_result = ERR_MEM;
     clock_ms = 105301U;
     mqtt_lwip_poll(&interface);
-    assert(send_count == 20 && last_send[0] == 0xc0U);
+    assert(send_count == 21 && last_send[0] == 0xc0U);
     sends_before_output_retry = send_count;
     clock_ms = 110300U;
     mqtt_lwip_poll(&interface);

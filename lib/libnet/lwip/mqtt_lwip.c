@@ -26,6 +26,7 @@
 
 #include "mqtt_lwip.h"
 #include "mqtt_session.h"
+#include "mqtt_heartbeat.h"
 #include "telemetry_rtos.h"
 #include "mqtt_test_config.h"
 
@@ -41,6 +42,7 @@
 static const uint8_t qualification_message[] = "AAI12_PICO_W_ONLINE";
 static const char robot_telemetry_topic[] = "aai12/robot/telemetry";
 static const char diagnostic_topic[] = "aai12/diagnostic";
+static const char heartbeat_topic[] = "aai12/robot/heartbeat";
 
 enum {
     MQTT_DIAG_NONE = 0,
@@ -110,6 +112,7 @@ typedef struct {
     uint32_t join_attempts;
     uint32_t join_recoveries;
     mqtt_failure_snapshot_t previous;
+    mqtt_heartbeat_t heartbeat;
 } mqtt_lwip_adapter_t;
 
 static mqtt_lwip_adapter_t adapter;
@@ -611,6 +614,7 @@ void mqtt_lwip_poll(struct netif *netif)
     const uint32_t now = sys_now();
     uint32_t failures_before;
     uint32_t write_failures_before;
+    uint32_t ping_attempts_before;
     uint32_t poll_gap;
     mqtt_session_state_t state_before;
     bool ready;
@@ -629,6 +633,7 @@ void mqtt_lwip_poll(struct netif *netif)
         if (!telemetry_rtos_ready()) return;
         adapter.initialized = true;
         diagnostics.boot_nonce = make_boot_nonce(now);
+        mqtt_heartbeat_init(&adapter.heartbeat, diagnostics.boot_nonce);
     }
 
     if (adapter.poll_seen) {
@@ -652,6 +657,7 @@ void mqtt_lwip_poll(struct netif *netif)
     if (!service_pending_output(&adapter, now)) return;
     failures_before = adapter.session.failures;
     write_failures_before = diagnostics.tcp_write_failures;
+    ping_attempts_before = adapter.session.ping_attempts;
     state_before = adapter.session.state;
     mqtt_session_poll(&adapter.session, now);
     if (adapter.session.failures != failures_before) {
@@ -660,6 +666,12 @@ void mqtt_lwip_poll(struct netif *netif)
                 ? MQTT_DIAG_TRANSPORT_FAILURE : MQTT_DIAG_SESSION_TIMEOUT);
         adapter.previous.state = (uint32_t)state_before;
     }
+    mqtt_heartbeat_set_session(&adapter.heartbeat,
+        adapter.session.state == MQTT_SESSION_ONLINE,
+        adapter.session.sessions_online, now);
+    /* Keep one MQTT control-packet attempt per owner iteration. A heartbeat
+     * remains due and will be retried on the next pass after keepalive work. */
+    if (adapter.session.ping_attempts != ping_attempts_before) return;
 
     /* Smoke test ONLY: one QoS 0 message after each CONNACK (not real car
      * telemetry, no delivery acknowledgement). Retried if TX is full. */
@@ -681,6 +693,21 @@ void mqtt_lwip_poll(struct netif *netif)
     if (adapter.session.state == MQTT_SESSION_ONLINE &&
         adapter.diagnostic_session != adapter.session.sessions_online) {
         (void)publish_diagnostic(&adapter, now);
+        return;
+    }
+
+    /* Independent, fixed-size liveness publication. It runs on the existing
+     * owner and before the robot queue, so queued sensor traffic cannot starve
+     * it. A failed local TX is retried with the same sequence next iteration. */
+    if (adapter.session.state == MQTT_SESSION_ONLINE &&
+        mqtt_heartbeat_due(&adapter.heartbeat, now)) {
+        char payload[MQTT_HEARTBEAT_PAYLOAD_BYTES];
+        size_t length = mqtt_heartbeat_prepare(&adapter.heartbeat, now,
+                                                payload, sizeof payload);
+        if (length != 0U && publish_with_diagnostics(&adapter,
+                heartbeat_topic, (const uint8_t *)payload, length, now)) {
+            mqtt_heartbeat_published(&adapter.heartbeat, now);
+        }
         return;
     }
 
