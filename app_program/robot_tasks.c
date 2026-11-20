@@ -175,6 +175,36 @@ static void tel_submit(const uint8_t *data, uint16_t len)
     }
 }
 
+#if ROBOT_DIAG_PRINT
+/* Events and scan results for the console: a line each, printed by the diagnostics task, so a run
+ * can be followed state by state.  Written from any task, read only by the diagnostics task. */
+#define DIAG_EV_RING        (32U)
+typedef struct {
+    uint32_t ms;
+    int32_t  odo_mm;
+    uint16_t arg;
+    uint8_t  code;
+} diag_ev_t;
+static diag_ev_t g_diag_ev[DIAG_EV_RING];
+static volatile uint8_t g_diag_ev_head;
+static uint8_t g_diag_ev_tail;
+
+typedef struct {
+    volatile bool fresh;
+    int16_t closest_mm;
+    int16_t forward_mm;
+    int16_t width_mm;
+    int16_t centre_mm;
+    int16_t left_clear_mm;
+    int16_t right_clear_mm;
+    uint8_t action;
+    uint8_t reason;
+    uint8_t step_count;
+    int16_t steps[PLAN_MAX_STEPS];
+} diag_scan_t;
+static diag_scan_t g_diag_scan;
+#endif
+
 static void tel_push_event(uint8_t code, uint16_t arg)
 {
     uint8_t buf[TEL_MAX_MESSAGE];
@@ -183,6 +213,17 @@ static void tel_push_event(uint8_t code, uint16_t arg)
 
     e.seq = g_event_seq;
     g_event_seq++;
+#if ROBOT_DIAG_PRINT
+    {
+        diag_ev_t *slot = &g_diag_ev[g_diag_ev_head % DIAG_EV_RING];
+
+        slot->ms = hal_time_ms();
+        slot->odo_mm = g_motion_share.status.distance_mm;
+        slot->arg = arg;
+        slot->code = code;
+        g_diag_ev_head++;
+    }
+#endif
     robot_irq_restore(state);
     e.ts10 = ts10_now();
     e.code = code;
@@ -751,6 +792,25 @@ static void obstacle_task(INT stacd, void *exinf)
                 g_obstacle_share.scan_done = true;
                 robot_irq_restore(state);
                 push_obstacle_message(&profile, &plan);
+#if ROBOT_DIAG_PRINT
+                {
+                    uint8_t k;
+
+                    g_diag_scan.closest_mm = (int16_t)profile.closest_mm;
+                    g_diag_scan.forward_mm = (int16_t)profile.forward_mm;
+                    g_diag_scan.width_mm = (int16_t)profile.width_mm;
+                    g_diag_scan.centre_mm = profile.centre_x_mm;
+                    g_diag_scan.left_clear_mm = (int16_t)profile.left_clearance_mm;
+                    g_diag_scan.right_clear_mm = (int16_t)profile.right_clearance_mm;
+                    g_diag_scan.action = (uint8_t)plan.action;
+                    g_diag_scan.reason = (uint8_t)plan.reason;
+                    g_diag_scan.step_count = plan.step_count;
+                    for (k = 0U; k < PLAN_MAX_STEPS; k++) {
+                        g_diag_scan.steps[k] = (k < plan.step_count) ? (int16_t)plan.steps[k].value : (int16_t)0;
+                    }
+                    g_diag_scan.fresh = true;
+                }
+#endif
                 scanning = false;
             }
         } else if (!measuring && ((now - last_start_ms) >= ROBOT_US_PERIOD_MS)) {
@@ -1036,8 +1096,72 @@ static void net_task(INT stacd, void *exinf)
 /* ---- Diagnostics task --------------------------------------------------------------- */
 
 #if ROBOT_DIAG_PRINT
+static const char *diag_state_name(uint16_t s)
+{
+    static const char *const names[] = {
+        "boot", "idle", "calibrate", "follow", "junction-advance", "junction-turn", "reacquire", "search",
+        "obstacle-stop", "obstacle-scan", "bypass", "reverse", "recover", "stopped", "fault", "done"
+    };
+
+    return (s < (sizeof(names) / sizeof(names[0]))) ? names[s] : "?";
+}
+
+static const char *diag_event_name(uint8_t c)
+{
+    switch (c) {
+    case TEL_EVT_STATE:      return "state";
+    case TEL_EVT_BARCODE:    return "barcode";
+    case TEL_EVT_JUNCTION:   return "junction";
+    case TEL_EVT_NAV_EXEC:   return "nav-exec";
+    case TEL_EVT_HUMP:       return "hump";
+    case TEL_EVT_OBSTACLE:   return "obstacle";
+    case TEL_EVT_PLAN:       return "plan";
+    case TEL_EVT_FAULT:      return "fault";
+    case TEL_EVT_FAULT_CLEAR: return "fault-clear";
+    case TEL_EVT_LINE_LOST:  return "line-lost";
+    case TEL_EVT_LINE_FOUND: return "line-found";
+    case TEL_EVT_RECOVERED:  return "recovered";
+    default:                 return "event";
+    }
+}
+
+/* One line per event and per scan, so the run can be followed state by state. */
+static void diag_drain_events(void)
+{
+    while (g_diag_ev_tail != g_diag_ev_head) {
+        diag_ev_t e;
+        robot_irq_state_t state = robot_irq_save();
+
+        e = g_diag_ev[g_diag_ev_tail % DIAG_EV_RING];
+        g_diag_ev_tail++;
+        robot_irq_restore(state);
+        if (e.code == TEL_EVT_STATE) {
+            tm_printf((UB *)"[ev] t=%u d=%dmm state -> %s\n", (UINT)e.ms, (INT)e.odo_mm,
+                      (UB *)diag_state_name(e.arg));
+        } else {
+            tm_printf((UB *)"[ev] t=%u d=%dmm %s arg=%u\n", (UINT)e.ms, (INT)e.odo_mm,
+                      (UB *)diag_event_name(e.code), (UINT)e.arg);
+        }
+    }
+    if (g_diag_scan.fresh) {
+        diag_scan_t sc = g_diag_scan;
+        uint8_t k;
+
+        g_diag_scan.fresh = false;
+        tm_printf((UB *)"[scan] closest=%dmm forward=%dmm width=%dmm centre=%dmm left-clear=%dmm right-clear=%dmm "
+                        "plan=%d reason=%d steps=", (INT)sc.closest_mm, (INT)sc.forward_mm, (INT)sc.width_mm,
+                  (INT)sc.centre_mm, (INT)sc.left_clear_mm, (INT)sc.right_clear_mm, (INT)sc.action, (INT)sc.reason);
+        for (k = 0U; k < sc.step_count; k++) {
+            tm_printf((UB *)"%d ", (INT)sc.steps[k]);
+        }
+        tm_printf((UB *)"(plan 0=continue 1=left 2=right 3=reverse 4=stop)\n");
+    }
+}
+
 static void diag_task(INT stacd, void *exinf)
 {
+    uint8_t diag_loops = 0U;
+
     (void)stacd;
     (void)exinf;
     for (;;) {
@@ -1049,7 +1173,12 @@ static void diag_task(INT stacd, void *exinf)
         uint32_t ir_edges[3];
         uint32_t ir_do;
 
-        (void)tk_dly_tsk(1000);
+        (void)tk_dly_tsk(100);
+        diag_drain_events();
+        if (++diag_loops < 10U) {
+            continue;
+        }
+        diag_loops = 0U;
         state = robot_irq_save();
         line = g_line_share;
         motion = g_motion_share;

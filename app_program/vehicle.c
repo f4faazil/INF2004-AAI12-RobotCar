@@ -33,6 +33,7 @@
 #define SIDE_SEEN_N             (3U)    /* readings in a row that see the box before it counts as seen */
 #define SIDE_LOST_N             (3U)    /* readings in a row that miss it before it counts as passed */
 #define SIDE_MIN_CUT_MM         (20)    /* the shortest leg left after the box is passed */
+#define RECOVER_EARLY_MM        (100)   /* a line this much nearer than the planned return is not the one to rejoin */
 
 /* SEARCH_LINE phases */
 #define SEARCH_STOPPING     (0U)
@@ -746,16 +747,6 @@ static void run_state(vehicle_t *vc, const vehicle_in_t *in, vehicle_out_t *out,
             if (straight && settled && path_blocked(vc, in, 0U)) {
                 stop_for_obstacle(vc, out, now);
                 vc->phase = BYP_STOPPING;
-            } else if (straight && settled && ((vc->step_idx + 2U) == vc->plan.step_count) &&
-                       line_found(vc, in)) {
-                /* The last straight leg runs back toward the track's line: if the sensors see it
-                 * already (the track curves back, or the car drifted over), stop pushing on and
-                 * follow it. */
-                add_event(out, TEL_EVT_LINE_FOUND, 0U);
-                add_event(out, TEL_EVT_RECOVERED, 0U);
-                vc->reverse_attempts = 0U;
-                vc->blank_until_ms = now + vc->cfg.obstacle_blank_ms;
-                enter_follow(vc, out, now);
             } else if (straight && settled && is_side_leg(vc) && vc->side_seen &&
                        !vc->side_cut_done && (vc->side_miss >= SIDE_LOST_N)) {
                 side_cut_leg(vc, out, now, in);
@@ -767,7 +758,12 @@ static void run_state(vehicle_t *vc, const vehicle_in_t *in, vehicle_out_t *out,
 
     case VC_RECOVER_LINE:
         if (vc->phase == REC_CREEP) {
-            if (line_found(vc, in)) {
+            /* The line to rejoin is about return_leg_mm away.  A line seen much sooner is a line
+             * crossing the way (a junction beside the box), not it: drive on over it. */
+            const int32_t travelled = abs32(in->motion.distance_mm - vc->start_distance_mm);
+            const bool may_accept = travelled >= ((int32_t)vc->plan.return_leg_mm - RECOVER_EARLY_MM);
+
+            if (may_accept && line_found(vc, in)) {
                 if ((vc->realign_turn_deg != 0) && (vc->cfg.recover_advance_mm > 0)) {
                     /* The sensors are ahead of the axle: turning here would swing the line off to
                      * the side.  Drive on until the axle is over it, then turn. */

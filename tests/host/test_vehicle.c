@@ -690,7 +690,7 @@ static void test_left_bypass_runs_the_plan_then_recovers_the_line(void)
     CHECK_INT(680, h.log[first + 2].distance_mm);
     CHECK_INT(-90, h.log[first + 3].angle_deg);
 
-    cycles(&h, 5);                                       /* creeping */
+    cycles(&h, 80);                                      /* creeping: 48 mm, past the 40 mm before a line counts */
     CHECK_INT(MOTION_CMD_DRIVE, h.log[h.log_n - 1].type);
     CHECK_INT(60, h.log[h.log_n - 1].speed_mm_s);
 
@@ -732,7 +732,7 @@ static void test_recovery_drives_on_before_turning_back(void)
     h.in.plan = left_plan();
     h_cycle(&h);
     CHECK(until(&h, VC_RECOVER_LINE, 400));
-    cycles(&h, 5);                                       /* creeping */
+    cycles(&h, 80);                                      /* creeping: 48 mm, past the 40 mm before a line counts */
     line_ok(&h, 0, 0);
     CHECK(until(&h, VC_FOLLOW, 300));
     for (k = h.log_n - 1; k >= 0; k--) {
@@ -855,28 +855,56 @@ static void test_bypass_blocked_too_long_is_a_fault(void)
     CHECK((h.raised & FAULT_NO_SAFE_PATH) != 0U);
 }
 
-/* The last straight leg runs back toward the track's line.  If the sensors see the line
- * during it, the car follows it at once rather than driving on past.  The first sideways
- * leg starts on the line, so seeing it there must not end the bypass.  Catches: leaving the
- * bypass on the first leg; ignoring the line until the leg ends. */
-static void test_bypass_follows_the_line_if_it_is_seen_on_the_last_straight_leg(void)
+/* A line seen on the pass-by leg is not the line to rejoin: on the real circuit a line crosses the
+ * way beside the box.  The car must finish the leg and turn toward its line, not follow the
+ * crossing line (it did, and then lost it and searched).  The first sideways leg starts on the
+ * line, so seeing it there is no sign either.  Catches: leaving the bypass when any line is seen. */
+static void test_bypass_ignores_a_line_seen_on_the_way_past_the_box(void)
 {
     h_t h;
 
     bypass_rig(&h);
     CHECK(until_move(&h, 140, 800));
     cycles(&h, 60);
-    line_ok(&h, 0, 0);                                      /* still on the line's edge: ignore */
+    line_ok(&h, 0, 0);                                      /* the line the car just left */
     cycles(&h, 60);
     CHECK_INT(VC_BYPASS, h.out.state);
 
     line_gone(&h);
     CHECK(until_move(&h, 680, 800));
     cycles(&h, 60);
-    CHECK_INT(VC_BYPASS, h.out.state);
-    line_ok(&h, 0, 0);
-    cycles(&h, 6);
-    CHECK_INT(VC_FOLLOW, h.out.state);
+    line_ok(&h, 0, 0);                                      /* a crossing line beside the box */
+    cycles(&h, 60);
+    CHECK_INT(VC_BYPASS, h.out.state);                      /* still passing the box */
+    CHECK(until(&h, VC_RECOVER_LINE, 1500));                /* the leg ends, the car turns back */
+}
+
+/* On the drive back a line seen too soon is a crossing line, not the one being rejoined: the
+ * car drives on over it and accepts the line only once it has covered most of the planned way
+ * back.  Catches: stopping on the first line seen. */
+static void test_recovery_drives_on_over_a_crossing_line(void)
+{
+    h_t h;
+
+    h_init(&h);
+    to_follow(&h);
+    h.in.obstacle_present = true;
+    CHECK(until(&h, VC_OBSTACLE_SCAN, 100));
+    h.in.obstacle_present = false;
+    line_gone(&h);
+    h.in.scan_done = true;
+    h.in.plan = left_plan();                                /* the way back is 140 mm */
+    h_cycle(&h);
+    CHECK(until(&h, VC_RECOVER_LINE, 400));
+    cycles(&h, 10);
+    line_ok(&h, 0, 0);                                      /* a line almost at once: a crossing line */
+    cycles(&h, 20);
+    CHECK_INT(VC_RECOVER_LINE, h.out.state);
+    CHECK_INT(MOTION_CMD_DRIVE, h.log[h.log_n - 1].type);   /* still driving, no advance or turn */
+    line_gone(&h);
+    cycles(&h, 80);                                         /* over the crossing line, most of the way */
+    line_ok(&h, 0, 0);                                      /* now it is the line */
+    CHECK(until(&h, VC_FOLLOW, 400));
     CHECK(saw_event(&h, TEL_EVT_RECOVERED, 0U));
 }
 
@@ -1390,7 +1418,8 @@ int main(void)
     RUN(test_bypass_stops_for_something_in_the_way_then_finishes_the_leg);
     RUN(test_bypass_ignores_the_sonar_while_turning_and_just_after);
     RUN(test_bypass_blocked_too_long_is_a_fault);
-    RUN(test_bypass_follows_the_line_if_it_is_seen_on_the_last_straight_leg);
+    RUN(test_bypass_ignores_a_line_seen_on_the_way_past_the_box);
+    RUN(test_recovery_drives_on_over_a_crossing_line);
     RUN(test_sonar_tilts_toward_the_box_beside_it_only);
     RUN(test_leg_beside_the_box_ends_when_the_box_is_passed);
     RUN(test_leg_is_not_cut_if_the_box_was_never_seen);
