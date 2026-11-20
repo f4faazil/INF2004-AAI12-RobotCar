@@ -25,6 +25,10 @@
  */
 #define ROBOT_FIRMWARE          (1)
 
+/* Debug aid: wait this long after boot before starting the robot tasks, printing the radio's state once a second, so the
+ * USB console is up first and shows whether starting the robot is what breaks it.  0 = start at once (the mission). */
+#define ROBOT_START_DELAY_MS    (0U)
+
 /*
  * 1 = build the motor calibration application (motor_cal_task.c) instead of the
  * robot: one task, driven by the START button, that measures the dead zone and
