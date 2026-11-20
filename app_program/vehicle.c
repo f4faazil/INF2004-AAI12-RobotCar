@@ -60,8 +60,8 @@ bool vehicle_is_running(vehicle_state_t state)
     return (state >= VC_CALIBRATE) && (state <= VC_RECOVER_LINE);
 }
 
-uint8_t vehicle_remote_policy(vehicle_state_t state, bool allow_remote_stop, uint8_t cmd,
-                              uint8_t *request_bit)
+uint8_t vehicle_remote_policy(vehicle_state_t state, bool allow_remote_stop,
+                              bool imu_lift_latched, uint8_t cmd, uint8_t *request_bit)
 {
     const bool running = vehicle_is_running(state);
 
@@ -77,6 +77,9 @@ uint8_t vehicle_remote_policy(vehicle_state_t state, bool allow_remote_stop, uin
     case TEL_CMD_START:
     case TEL_CMD_CALIBRATE:
     case TEL_CMD_CLEAR_FAULTS:
+        if (imu_lift_latched) {
+            return TEL_ACK_REJECTED_RUNNING;    /* lift stop is cleared only by reboot/reset */
+        }
         if (running) {
             return TEL_ACK_REJECTED_RUNNING;    /* never change the mission mid-run */
         }
@@ -137,6 +140,7 @@ void vehicle_init(vehicle_t *vc, const vehicle_config_t *cfg)
     vc->side_cut_done = false;
     vc->side_last_mm = 0U;
     vc->side_miss_mm = 0;
+    vc->imu_lift_latched = false;
 }
 
 /* ---- helpers --------------------------------------------------------- */
@@ -879,6 +883,7 @@ void vehicle_step(vehicle_t *vc, const vehicle_in_t *in, vehicle_out_t *out)
 {
     const uint32_t now = in->now_ms;
     const bool fault_stop = (in->faults & FAULT_STOP_MASK) != 0U;
+    const bool imu_lift = (in->faults & FAULT_IMU_LIFT) != 0U;
     const bool stop_req = in->stop_pressed ||
                           (((in->remote & VC_REMOTE_STOP) != 0U) && vc->cfg.allow_remote_stop);
 
@@ -903,7 +908,15 @@ void vehicle_step(vehicle_t *vc, const vehicle_in_t *in, vehicle_out_t *out)
         vc->state_since_ms = now;
     }
 
-    if (vehicle_is_running(vc->state)) {
+    if (imu_lift && !vc->imu_lift_latched) {
+        vc->imu_lift_latched = true;
+        add_event(out, TEL_EVT_FAULT, (uint16_t)FAULT_IMU_LIFT);
+    }
+    if (vc->imu_lift_latched) {
+        if (vc->state != VC_STOPPED) {
+            enter_stopped(vc, out, now);
+        }
+    } else if (vehicle_is_running(vc->state)) {
         if (fault_stop) {
             enter_fault(vc, out, now, 0U);          /* someone else raised it */
         } else if (stop_req) {

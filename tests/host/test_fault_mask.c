@@ -67,10 +67,9 @@ static void test_init_has_no_faults(void)
     CHECK(!fault_stop_required(&m));
 }
 
-/* Only the stop class stops the car: informational faults are reported but
- * must not trigger a stop.  Catches: telemetry loss halting navigation
- * (Tribunal: network failure must not stop the mission) and an IMU failure
- * stopping the car (Tribunal: the IMU degrades to "hump N/A"). */
+/* Only stop-class faults stop the car.  Network loss must not halt navigation,
+ * and an IMU read failure is informational ("hump N/A"); lift/overturn is
+ * separately tested as a stop-class fault. */
 static void test_only_stop_class_faults_require_a_stop(void)
 {
     fault_mask_t m;
@@ -91,7 +90,7 @@ static void test_every_stop_fault_requires_a_stop(void)
     static const fault_bits_t STOP_FAULTS[] = {
         FAULT_LINE_STALE, FAULT_LINE_CAL, FAULT_LINE_LOST, FAULT_ENCODER,
         FAULT_MOTION, FAULT_ULTRASONIC, FAULT_NO_SAFE_PATH,
-        FAULT_RECOVERY_LIMIT
+        FAULT_RECOVERY_LIMIT, FAULT_IMU_LIFT
     };
     size_t i;
 

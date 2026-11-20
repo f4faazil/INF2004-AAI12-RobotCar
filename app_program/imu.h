@@ -3,7 +3,8 @@
  *
  * imu.h
  * IMU processing (Buddy 4): accelerometer decoding, rest calibration, tilt,
- * hump detection with height estimation, and motion classification.
+ * lift/overturn detection, hump detection with height estimation, and motion
+ * classification.
  *
  * The module has an accelerometer and magnetometer but no gyroscope, so tilt
  * comes from the gravity vector and is only trustworthy when the car is not
@@ -95,6 +96,28 @@ int16_t imu_roll_permille(const imu_cal_t *cal, const imu_vec3_t *mg);
 
 /* Magnitude of the measurement minus the calibrated 1 g (disturbance), mg. */
 int16_t imu_disturbance_mg(const imu_cal_t *cal, const imu_vec3_t *mg);
+
+/* ---- sustained lift/overturn detection ------------------------------- */
+
+typedef struct {
+    bool     tilt_active;
+    uint32_t tilt_since_ms;
+    bool     freefall_active;
+    uint32_t freefall_since_ms;
+    bool     latched;
+} imu_lift_detector_t;
+
+void imu_lift_init(imu_lift_detector_t *detector);
+
+/*
+ * Return true once when a tilt beyond the calibrated cosine limit or a
+ * near-freefall reading persists for hold_ms.  Thresholds are supplied by the
+ * robot configuration and are provisional until validated on the car.
+ */
+bool imu_lift_update(imu_lift_detector_t *detector, const imu_cal_t *cal,
+                     const imu_vec3_t *mg, uint32_t now_ms,
+                     uint16_t tilt_cos_max_permille, uint16_t freefall_max_mg,
+                     uint16_t hold_ms);
 
 /* ---- hump detection -------------------------------------------------- */
 
@@ -255,8 +278,7 @@ typedef enum {
     IMU_MOTION_ACCELERATING,
     IMU_MOTION_TURNING,
     IMU_MOTION_CLIMBING,
-    IMU_MOTION_DESCENDING,
-    IMU_MOTION_IMPACT
+    IMU_MOTION_DESCENDING
 } imu_motion_t;
 
 typedef struct {

@@ -256,16 +256,25 @@ EXPORT W dev_i2c_llctl( UW unit, INT cmd, UW p1, UW p2, UW *pp)
 
 		out_w(I2C_CON(unit), I2C_CON_SLAVE_DISABLE | I2C_CON_MASTER_MODE	// Master Mode
 			| I2C_CON_RESTART_EN | I2C_CON_TX_EMPTY_CTRL
-			| I2C_CON_7BIT_ADR | I2C_CON_SPEED_FAST);			// 7bit Address & Fast Speed
+			| I2C_CON_7BIT_ADR
+			| ((unit == DEV_I2C_1) ? I2C_CON_SPEED_STANDARD
+					       : I2C_CON_SPEED_FAST));		// 7bit Address
 
 		out_w(I2C_RX_TL(unit), 0);
 		out_w(I2C_TX_TL(unit), 0);
 		out_w(I2C_DMA_CR(unit), I2C_DMA_CR_RDMAE | I2C_DMA_CR_TDMAE);
 
-		/* Set Baudrate (400Kbts)*/
-		out_w(I2C_FS_SCL_HCNT(unit), 126);
-		out_w(I2C_FS_SCL_LCNT(unit), 187);
-		out_w(I2C_FS_SPKLEN(unit), 187/16);
+		if(unit == DEV_I2C_1) {
+			/* 100 kHz standard mode at the RP2040's 125 MHz system clock. */
+			out_w(I2C_SS_SCL_HCNT(unit), 625);
+			out_w(I2C_SS_SCL_LCNT(unit), 625);
+			out_w(I2C_FS_SPKLEN(unit), 625/16);
+		} else {
+			/* Set Baudrate (400Kbts) */
+			out_w(I2C_FS_SCL_HCNT(unit), 126);
+			out_w(I2C_FS_SCL_LCNT(unit), 187);
+			out_w(I2C_FS_SPKLEN(unit), 187/16);
+		}
 		out_w(I2C_SDA_HOLD(unit), 38);
 
 		/* I2C interrupt enable */
@@ -346,10 +355,10 @@ EXPORT ER dev_i2c_llinit( T_I2C_DCB *p_dcb)
 #endif
 
 #if DEVCNF_I2C_SETPINFUNC
-		out_w(GPIO_CTRL(6), GPIO_CTRL_FUNCSEL_I2C);
-		out_w(GPIO(6), GPIO_IE | GPIO_DRIVE_4MA | GPIO_PUE | GPIO_SHEMITT);
-		out_w(GPIO_CTRL(7), GPIO_CTRL_FUNCSEL_I2C);
-		out_w(GPIO(7), GPIO_IE | GPIO_DRIVE_4MA | GPIO_PUE | GPIO_SHEMITT);
+		out_w(GPIO_CTRL(26), GPIO_CTRL_FUNCSEL_I2C);
+		out_w(GPIO(26), GPIO_IE | GPIO_DRIVE_4MA | GPIO_PUE | GPIO_SHEMITT);
+		out_w(GPIO_CTRL(27), GPIO_CTRL_FUNCSEL_I2C);
+		out_w(GPIO(27), GPIO_IE | GPIO_DRIVE_4MA | GPIO_PUE | GPIO_SHEMITT);
 		break;
 #endif
 	default:

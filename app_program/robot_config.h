@@ -250,5 +250,14 @@ extern const safety_limits_t     ROBOT_SAFETY_LIMITS;
 #define ROBOT_IMU_CAL_SAMPLES   (50U)
 #define ROBOT_IMU_CAL_SPREAD_MG (250)       /* floor vibration is about +-50 mg at rest */
 #define ROBOT_IMU_FILTER_DIV    (8)         /* accelerometer low-pass: 1/8 per 20 ms sample */
+/*
+ * Provisional lift/overturn policy: at least 60 degrees from the calibrated
+ * attitude (cosine <= 0.5) or at most 300 mg for 300 ms. Tune on the car;
+ * an accelerometer cannot distinguish a level, stationary car from one
+ * lifted evenly.
+ */
+#define ROBOT_LIFT_TILT_COS_PERMILLE (500U)
+#define ROBOT_LIFT_FREEFALL_MG       (300U)
+#define ROBOT_LIFT_HOLD_MS           (300U)
 
 #endif /* ROBOT_CONFIG_H */

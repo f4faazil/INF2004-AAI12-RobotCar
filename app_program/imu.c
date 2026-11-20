@@ -35,7 +35,6 @@
 #define MOTION_STATIONARY_MM_S      (10)
 #define MOTION_TURNING_DPS          (25)
 #define MOTION_ACCEL_MM_S2          (150)
-#define MOTION_IMPACT_MG            (600)
 
 /* ---- small helpers --------------------------------------------------- */
 
@@ -263,6 +262,79 @@ int16_t imu_disturbance_mg(const imu_cal_t *cal, const imu_vec3_t *mg)
                              ((int32_t)mg->z * mg->z));
 
     return to_i16((int32_t)isqrt32(sq) - (int32_t)cal->base_mag);
+}
+
+static bool condition_held(bool active, bool *tracking, uint32_t *since_ms,
+                           uint32_t now_ms, uint16_t hold_ms)
+{
+    if (!active) {
+        *tracking = false;
+        return false;
+    }
+    if (!*tracking) {
+        *tracking = true;
+        *since_ms = now_ms;
+        return hold_ms == 0U;
+    }
+    return (now_ms - *since_ms) >= hold_ms;
+}
+
+void imu_lift_init(imu_lift_detector_t *detector)
+{
+    detector->tilt_active = false;
+    detector->tilt_since_ms = 0U;
+    detector->freefall_active = false;
+    detector->freefall_since_ms = 0U;
+    detector->latched = false;
+}
+
+bool imu_lift_update(imu_lift_detector_t *detector, const imu_cal_t *cal,
+                     const imu_vec3_t *mg, uint32_t now_ms,
+                     uint16_t tilt_cos_max_permille, uint16_t freefall_max_mg,
+                     uint16_t hold_ms)
+{
+    int32_t base[3] = { 0, 0, 0 };
+    int32_t x = mg->x;
+    int32_t y = mg->y;
+    int32_t z = mg->z;
+    int64_t dot;
+    int64_t scaled_dot;
+    int64_t tilt_limit;
+    uint32_t magnitude_sq;
+    uint32_t magnitude;
+    bool tilted = false;
+    bool near_freefall;
+    bool tilt_held;
+    bool freefall_held;
+
+    if ((cal->state != IMU_CAL_DONE) || detector->latched) {
+        return false;
+    }
+
+    base[cal->forward_axis] = (int32_t)cal->base_f * cal->forward_sign;
+    base[cal->vertical_axis] = (int32_t)cal->base_v * cal->vertical_sign;
+    base[cal->lateral_axis] = cal->base_l;
+    magnitude_sq = (uint32_t)(x * x) + (uint32_t)(y * y) + (uint32_t)(z * z);
+    magnitude = isqrt32(magnitude_sq);
+    near_freefall = magnitude <= freefall_max_mg;
+
+    if (!near_freefall && (cal->base_mag > 0)) {
+        dot = ((int64_t)x * base[0]) + ((int64_t)y * base[1]) +
+              ((int64_t)z * base[2]);
+        scaled_dot = dot * PERMILLE;
+        tilt_limit = (int64_t)tilt_cos_max_permille * cal->base_mag * magnitude;
+        tilted = scaled_dot <= tilt_limit;
+    }
+
+    tilt_held = condition_held(tilted, &detector->tilt_active,
+                               &detector->tilt_since_ms, now_ms, hold_ms);
+    freefall_held = condition_held(near_freefall, &detector->freefall_active,
+                                  &detector->freefall_since_ms, now_ms, hold_ms);
+    if (tilt_held || freefall_held) {
+        detector->latched = true;
+        return true;
+    }
+    return false;
 }
 
 /* ---- packed event ---------------------------------------------------- */
@@ -635,9 +707,6 @@ hump_event_t roll_hump_update(roll_hump_t *h, const roll_hump_input_t *in)
 
 imu_motion_t imu_classify_motion(const imu_motion_input_t *in)
 {
-    if (abs32(in->disturbance_mg) >= MOTION_IMPACT_MG) {
-        return IMU_MOTION_IMPACT;
-    }
     if (in->hump == HUMP_RISING) {
         return IMU_MOTION_CLIMBING;
     }

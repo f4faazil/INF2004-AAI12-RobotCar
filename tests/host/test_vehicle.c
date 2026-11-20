@@ -1345,6 +1345,31 @@ static void test_stop_fault_stops_the_car_in_any_running_state(void)
     }
 }
 
+/* An IMU lift indication is stop-class, reported to telemetry, and cannot be
+ * cleared by START or CLEAR_FAULTS; only reinitializing the controller clears it. */
+static void test_imu_lift_stop_is_latched_until_reboot(void)
+{
+    h_t h;
+    int drives;
+
+    h_init(&h);
+    to_follow(&h);
+    h.in.faults = FAULT_IMU_LIFT;
+    h_cycle(&h);
+    CHECK_INT(VC_STOPPED, h.out.state);
+    CHECK_INT(MOTION_CMD_STOP, h.log[h.log_n - 1].type);
+    CHECK_INT(TEL_EVT_FAULT, h.out.events[0].code);
+    CHECK_INT(FAULT_IMU_LIFT, h.out.events[0].arg);
+    drives = count_type(&h, MOTION_CMD_DRIVE);
+
+    h.in.faults = 0U;
+    h.in.start_pressed = true;
+    h.in.remote = VC_REMOTE_CLEAR_FAULTS;
+    cycles(&h, 5);
+    CHECK_INT(VC_STOPPED, h.out.state);
+    CHECK_INT(drives, count_type(&h, MOTION_CMD_DRIVE));
+}
+
 /* An informational fault does not stop the car. */
 static void test_informational_fault_does_not_stop(void)
 {
@@ -1440,27 +1465,35 @@ static void test_remote_policy(void)
     uint8_t bit = 0U;
 
     CHECK_INT(TEL_ACK_REJECTED_RUNNING,
-              vehicle_remote_policy(VC_FOLLOW, true, TEL_CMD_START, &bit));
+              vehicle_remote_policy(VC_FOLLOW, true, false, TEL_CMD_START, &bit));
     CHECK_INT(TEL_ACK_REJECTED_RUNNING,
-              vehicle_remote_policy(VC_FOLLOW, true, TEL_CMD_CALIBRATE, &bit));
+              vehicle_remote_policy(VC_FOLLOW, true, false, TEL_CMD_CALIBRATE, &bit));
     CHECK_INT(TEL_ACK_REJECTED_RUNNING,
-              vehicle_remote_policy(VC_OBSTACLE_SCAN, true, TEL_CMD_CLEAR_FAULTS, &bit));
+              vehicle_remote_policy(VC_OBSTACLE_SCAN, true, false, TEL_CMD_CLEAR_FAULTS, &bit));
 
-    CHECK_INT(TEL_ACK_RECEIVED, vehicle_remote_policy(VC_FOLLOW, true, TEL_CMD_STOP, &bit));
+    CHECK_INT(TEL_ACK_RECEIVED,
+              vehicle_remote_policy(VC_FOLLOW, true, false, TEL_CMD_STOP, &bit));
     CHECK_INT(VC_REMOTE_STOP, bit);
     CHECK_INT(TEL_ACK_REJECTED_RUNNING,
-              vehicle_remote_policy(VC_FOLLOW, false, TEL_CMD_STOP, &bit));
+              vehicle_remote_policy(VC_FOLLOW, false, false, TEL_CMD_STOP, &bit));
 
-    CHECK_INT(TEL_ACK_RECEIVED, vehicle_remote_policy(VC_IDLE, true, TEL_CMD_START, &bit));
+    CHECK_INT(TEL_ACK_RECEIVED,
+              vehicle_remote_policy(VC_IDLE, true, false, TEL_CMD_START, &bit));
     CHECK_INT(VC_REMOTE_START, bit);
-    CHECK_INT(TEL_ACK_RECEIVED, vehicle_remote_policy(VC_STOPPED, true, TEL_CMD_CALIBRATE, &bit));
+    CHECK_INT(TEL_ACK_RECEIVED,
+              vehicle_remote_policy(VC_STOPPED, true, false, TEL_CMD_CALIBRATE, &bit));
     CHECK_INT(VC_REMOTE_CALIBRATE, bit);
-    CHECK_INT(TEL_ACK_RECEIVED, vehicle_remote_policy(VC_FAULT, true, TEL_CMD_CLEAR_FAULTS, &bit));
+    CHECK_INT(TEL_ACK_RECEIVED,
+              vehicle_remote_policy(VC_FAULT, true, false, TEL_CMD_CLEAR_FAULTS, &bit));
     CHECK_INT(VC_REMOTE_CLEAR_FAULTS, bit);
+    CHECK_INT(TEL_ACK_REJECTED_RUNNING,
+              vehicle_remote_policy(VC_STOPPED, true, true, TEL_CMD_START, &bit));
+    CHECK_INT(TEL_ACK_REJECTED_RUNNING,
+              vehicle_remote_policy(VC_STOPPED, true, true, TEL_CMD_CLEAR_FAULTS, &bit));
 
     CHECK_INT(TEL_ACK_COMPLETED,
-              vehicle_remote_policy(VC_FOLLOW, true, TEL_CMD_REQUEST_STATUS, &bit));
-    CHECK_INT(TEL_ACK_INVALID, vehicle_remote_policy(VC_IDLE, true, 15U, &bit));
+              vehicle_remote_policy(VC_FOLLOW, true, false, TEL_CMD_REQUEST_STATUS, &bit));
+    CHECK_INT(TEL_ACK_INVALID, vehicle_remote_policy(VC_IDLE, true, false, 15U, &bit));
 }
 
 /* A manoeuvre that Motion never completes is a motion fault, not an endless
@@ -1556,6 +1589,7 @@ int main(void)
     RUN(test_scan_timeout_is_a_fault);
     RUN(test_continue_plan_resumes_and_blanks_the_monitor);
     RUN(test_stop_fault_stops_the_car_in_any_running_state);
+    RUN(test_imu_lift_stop_is_latched_until_reboot);
     RUN(test_informational_fault_does_not_stop);
     RUN(test_fault_during_a_scan_wins);
     RUN(test_fault_needs_the_operator_to_clear_it);

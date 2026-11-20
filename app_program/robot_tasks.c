@@ -12,7 +12,7 @@
  *      2      Line      10 ms    IR ring, calibration, barcode, line events
  *      3      Vehicle   10 ms    mission state; the only sender of movement
  *      3      Obstacle  10 ms    servo, HC-SR04, scan and bypass planning
- *      5      IMU       20 ms    I2C1, tilt and hump height
+ *      5      IMU       20 ms    I2C1, tilt, hump height and lift detection
  *     10      Net       20 ms    WiFi/MQTT, telemetry publishing (lowest)
  *     11      Diag      1 s      one status line on the console
  *
@@ -995,6 +995,7 @@ static void imu_task(INT stacd, void *exinf)
 {
     static imu_cal_t cal;
     static roll_hump_t hump;
+    static imu_lift_detector_t lift;
     int32_t filt[3] = { 0, 0, 0 };
     bool filt_init = false;
     imu_variant_t variant = IMU_VARIANT_LSM303D;
@@ -1007,6 +1008,7 @@ static void imu_task(INT stacd, void *exinf)
     (void)stacd;
     (void)exinf;
     roll_hump_init(&hump, &ROBOT_ROLL_HUMP_CFG);
+    imu_lift_init(&lift);
     imu_cal_init(&cal, ROBOT_IMU_FORWARD_AXIS, ROBOT_IMU_FORWARD_SIGN, ROBOT_IMU_CAL_SAMPLES,
                  ROBOT_IMU_CAL_SPREAD_MG);
 
@@ -1052,6 +1054,14 @@ static void imu_task(INT stacd, void *exinf)
                 continue;
             }
             motion_share_get(&motion);
+            if (imu_lift_update(&lift, &cal, &g, now, ROBOT_LIFT_TILT_COS_PERMILLE,
+                                ROBOT_LIFT_FREEFALL_MG, ROBOT_LIFT_HOLD_MS)) {
+                fault_set(&g_faults, FAULT_IMU_LIFT);
+            }
+            if (lift.latched) {
+                publish_imu(&hump, false, false, now);
+                continue;
+            }
             {
                 roll_hump_input_t hin;
                 hump_event_t ev;
@@ -1182,6 +1192,7 @@ static void on_command(void *ctx, const char *topic, const uint8_t *payload, uin
         return;
     }
     result = vehicle_remote_policy((vehicle_state_t)g_vstate, ROBOT_ALLOW_REMOTE_STOP != 0,
+                                   (fault_read(&g_faults) & FAULT_IMU_LIFT) != 0U,
                                    c.cmd, &bit);
     if ((result == TEL_ACK_RECEIVED) && (bit != 0U)) {
         robot_irq_state_t state = robot_irq_save();

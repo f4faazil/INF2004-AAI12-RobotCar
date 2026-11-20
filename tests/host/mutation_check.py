@@ -183,11 +183,6 @@ mutant("test_imu", "imu.c",
        "    if (spread > cal->spread_limit_mg) {",
        "    if (spread > 30000) {",
        "a moving car is accepted as the rest baseline")
-mutant("test_imu", "imu.c",
-       "    if (abs32(in->disturbance_mg) >= MOTION_IMPACT_MG) {\n        return IMU_MOTION_IMPACT;\n    }",
-       "",
-       "impact not detected")
-
 # ---- ultrasonic and servo -------------------------------------------------
 mutant("test_ultrasonic", "ultrasonic.c",
        "    mm = (echo_us * SOUND_MM_PER_MS) / ROUND_TRIP_DIV_US;",

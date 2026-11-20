@@ -553,7 +553,7 @@ static void test_motion_classification(void)
     in.hump = HUMP_FLAT;
 
     in.disturbance_mg = 900;
-    CHECK_INT(IMU_MOTION_IMPACT, imu_classify_motion(&in));    /* beats the rest */
+    CHECK_INT(IMU_MOTION_CRUISING, imu_classify_motion(&in));
 }
 
 /* ---- roll: one wheel on a hump ---------------------------------------- */
@@ -565,6 +565,55 @@ static imu_vec3_t rolled(double deg)
     double a = deg * PI_D / 180.0;
 
     return vec(0, (int16_t)lround(-1000.0 * sin(a)), (int16_t)lround(1000.0 * cos(a)));
+}
+
+static void test_lift_requires_sustained_out_of_range_tilt(void)
+{
+    imu_cal_t cal;
+    imu_lift_detector_t detector;
+    imu_vec3_t normal_hump = rolled(20.0);
+    imu_vec3_t lift_tilt = rolled(70.0);
+    uint32_t now;
+
+    calibrate(&cal, vec(0, 0, 1000), IMU_AXIS_X, 1);
+    imu_lift_init(&detector);
+    for (now = 0U; now <= 400U; now += 20U) {
+        CHECK(!imu_lift_update(&detector, &cal, &normal_hump, now, 500U, 300U, 300U));
+    }
+    CHECK(!imu_lift_update(&detector, &cal, &lift_tilt, 420U, 500U, 300U, 300U));
+    CHECK(!imu_lift_update(&detector, &cal, &lift_tilt, 700U, 500U, 300U, 300U));
+    CHECK(imu_lift_update(&detector, &cal, &lift_tilt, 720U, 500U, 300U, 300U));
+    CHECK(detector.latched);
+    CHECK(!imu_lift_update(&detector, &cal, &lift_tilt, 340U, 500U, 300U, 300U));
+}
+
+static void test_lift_does_not_accumulate_separate_tilt_periods(void)
+{
+    imu_cal_t cal;
+    imu_lift_detector_t detector;
+    imu_vec3_t level = vec(0, 0, 1000);
+    imu_vec3_t lift_tilt = rolled(70.0);
+
+    calibrate(&cal, level, IMU_AXIS_X, 1);
+    imu_lift_init(&detector);
+    CHECK(!imu_lift_update(&detector, &cal, &lift_tilt, 0U, 500U, 300U, 300U));
+    CHECK(!imu_lift_update(&detector, &cal, &level, 280U, 500U, 300U, 300U));
+    CHECK(!imu_lift_update(&detector, &cal, &lift_tilt, 300U, 500U, 300U, 300U));
+    CHECK(!imu_lift_update(&detector, &cal, &lift_tilt, 580U, 500U, 300U, 300U));
+    CHECK(imu_lift_update(&detector, &cal, &lift_tilt, 600U, 500U, 300U, 300U));
+}
+
+static void test_lift_detects_sustained_near_freefall(void)
+{
+    imu_cal_t cal;
+    imu_lift_detector_t detector;
+    imu_vec3_t freefall = vec(0, 0, 0);
+
+    calibrate(&cal, vec(0, 0, 1000), IMU_AXIS_X, 1);
+    imu_lift_init(&detector);
+    CHECK(!imu_lift_update(&detector, &cal, &freefall, 0U, 500U, 300U, 300U));
+    CHECK(!imu_lift_update(&detector, &cal, &freefall, 280U, 500U, 300U, 300U));
+    CHECK(imu_lift_update(&detector, &cal, &freefall, 300U, 500U, 300U, 300U));
 }
 
 /* sin(roll) for known sideways tilts, left-up positive.  Catches: wrong sign,
@@ -904,6 +953,9 @@ int main(void)
     RUN(test_out_of_range_height_uses_code_127);
     RUN(test_tiny_rise_never_becomes_a_valid_height);
     RUN(test_motion_classification);
+    RUN(test_lift_requires_sustained_out_of_range_tilt);
+    RUN(test_lift_does_not_accumulate_separate_tilt_periods);
+    RUN(test_lift_detects_sustained_near_freefall);
     RUN(test_roll_for_known_sideways_tilts);
     RUN(test_pitching_does_not_show_as_roll);
     RUN(test_roll_with_the_cars_upside_down_board);

@@ -37,6 +37,7 @@ The code follows the Barr C standard as far as the µT-Kernel glue allows (4-spa
                                                             ▲
  encoders ─GPIO irq─────────────────────────────────────────┘ (snapshot)
  IMU ─I2C1─▶ IMU task ──hump status──▶ LINE (suppress false line-lost) and VEHICLE
+                 └── sustained lift/overturn ──FAULT_IMU_LIFT──▶ Motion STOP + latched VC_STOPPED
 ```
 
 | Pri | Task | Period | Owns | File |
@@ -45,7 +46,7 @@ The code follows the Barr C standard as far as the µT-Kernel glue allows (4-spa
 | 2 | Line | 10 ms | IR ring, calibration, barcode lanes, junctions, steering request | `line_nav.c`, `line_sensor.c`, `barcode.c` |
 | 3 | Vehicle | 10 ms | mission state; the only sender of movement commands; safety evaluation | `vehicle.c`, `safety.c` |
 | 3 | Obstacle | 10 ms | servo, HC-SR04, scan, profile, bypass plan | `ultrasonic.c`, `servo.c`, `obstacle.c` |
-| 5 | IMU | 20 ms | I2C1, tilt, hump height, motion events | `imu.c` |
+| 5 | IMU | 20 ms | I2C1, tilt, lift/overturn and hump height | `imu.c` |
 | 10 | Net | 20 ms | MQTT client, telemetry publishing, remote commands | `mqtt_client.c`, `telemetry.c` |
 | 11 | Diag | 1 s | one console status line | `robot_tasks.c` |
 
@@ -58,7 +59,12 @@ The 1 kHz tick is a hardware-timer interrupt, **not** the kernel tick (10 ms): t
 - Motion is the only code that writes motor PWM. A command has an **id** and a **50 ms lease**; if the Vehicle Controller stops refreshing it, the wheels stop by themselves. A refresh of the same id never restarts a manoeuvre; an expired, stopped or finished id can never be resumed; commands older than the newest accepted id are rejected (wrap-aware).
 - A stop-class fault zeroes the PWM **from inside the Motion task**, without waiting for the Vehicle task.
 - The obstacle scan starts only after Motion confirms the car has stopped *for the STOP that was sent* (a stale "stopped" flag from an earlier command does not count).
-- The IMU is deliberately **not** a stop-class fault: an IMU failure degrades to "hump N/A".
+- An IMU read failure remains informational and degrades to "hump N/A". A sustained
+  tilt of at least 60 degrees or acceleration magnitude at most 300 mg for
+  300 ms raises stop-class `FAULT_IMU_LIFT`, sends STOP, reports a fault event,
+  and latches `VC_STOPPED` until reboot/reset.
+  These limits are provisional. A single accelerometer cannot detect a level,
+  stationary robot lifted evenly; that needs a wheel-contact sensor or another input.
 - Network loss never reaches the control tasks: telemetry is a bounded, non-blocking queue that drops new records when full and discards anything older than 1 s.
 
 ---

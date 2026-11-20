@@ -220,6 +220,7 @@ typedef struct {
     bool             side_cut_done;
     uint16_t         side_last_mm;      /* the last range that saw it */
     int32_t          side_miss_mm;      /* odometer when the readings stopped seeing it */
+    bool             imu_lift_latched;
 } vehicle_t;
 
 void vehicle_init(vehicle_t *vc, const vehicle_config_t *cfg);
@@ -235,8 +236,8 @@ void vehicle_step(vehicle_t *vc, const vehicle_in_t *in, vehicle_out_t *out);
  * Remote commands never move the wheels, and START, CALIBRATE and
  * CLEAR_FAULTS are refused while the mission is running.
  */
-uint8_t vehicle_remote_policy(vehicle_state_t state, bool allow_remote_stop, uint8_t cmd,
-                              uint8_t *request_bit);
+uint8_t vehicle_remote_policy(vehicle_state_t state, bool allow_remote_stop,
+                              bool imu_lift_latched, uint8_t cmd, uint8_t *request_bit);
 
 bool vehicle_is_running(vehicle_state_t state);
 
