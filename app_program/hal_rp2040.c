@@ -520,9 +520,18 @@ static void edge_clear(uint32_t pin)
           IO_EDGE_BOTH << ((pin % IO_PINS_PER_REG) * IO_BITS_PER_PIN));
 }
 
+static volatile uint32_t g_gpio_isr_count;
+
+uint32_t hal_gpio_isr_count(void)
+{
+    return g_gpio_isr_count;
+}
+
 static void gpio_isr(UINT intno)
 {
     const uint32_t now = hal_time_us();
+
+    g_gpio_isr_count++;
     const UW levels = in_w(GPIO_IN);
 
 #if ROBOT_ENCODER_SINGLE_CHANNEL

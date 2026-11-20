@@ -28,6 +28,9 @@
  */
 #include <tk/tkernel.h>
 #include <tm/tmonitor.h>
+#if TK_SUPPORT_SMP
+#include <tk/smp.h>
+#endif
 
 #include "barcode_map.h"
 #include "fault_mask.h"
@@ -155,6 +158,9 @@ static nav_map_entry_t g_map_stage[BMAP_MAX];
 static volatile uint8_t g_map_stage_len;
 static volatile uint32_t g_map_seq;             /* bumped for every accepted mapping */
 static volatile uint32_t g_map_applied;         /* mappings the Line task has applied */
+static volatile ER g_irq_result;                /* the result of switching the GPIO interrupt and the ticks on (irq_start_task) */
+static volatile bool g_irq_done;
+static volatile INT g_irq_prc;                  /* the processor that did it: it must be 1 */
 static volatile int16_t g_imu_roll_permille;   /* the IMU task's latest sideways tilt, for the sensor record */
 static volatile bool g_imu_lift;                /* the lift detector has latched */
 static volatile bool g_imu_cal_done;            /* the rest attitude is calibrated */
@@ -1560,6 +1566,8 @@ static void diag_task(INT stacd, void *exinf)
                   (UINT)g_max_motion_us, (UINT)g_max_line_us, (UINT)g_max_vehicle_us,
                   (UINT)hal_adc_max_isr_us(), (UINT)hal_tick_overruns(HAL_TICK_MOTION),
                   (UINT)hal_tick_overruns(HAL_TICK_CONTROL), (UINT)hal_tick_overruns(HAL_TICK_VEHICLE));
+        tm_printf((UB *)"[gpio] edge-interrupts=%u (the encoders and the sonar echo count here)  switched on from processor %d, result %d\n",
+                  (UINT)hal_gpio_isr_count(), (INT)g_irq_prc, (INT)g_irq_result);
 #if TM_WIFI_CYW43
         {
             /* What the radio is doing, once a second: this is what says why the car has not joined. */
@@ -1647,6 +1655,28 @@ static ER make_task(void (*entry)(INT, void *), PRI pri, INT stack)
     return tk_sta_tsk(id, 0);
 }
 
+/*
+ * The GPIO edge interrupt (the wheel encoders and the sonar echo) is routed to processor 1 (RP2040 core 0): the HAL uses the
+ * PROC0 interrupt-enable registers.  EnableInt() switches an interrupt on in the NVIC of the core that CALLS it, and the
+ * initial task that runs robot_start() is not pinned, so on the radio build it ran on core 1: the interrupt was enabled on
+ * the wrong core and never fired (encoders stuck at 0, so the car faulted on START; no sonar echo).  This task is pinned to
+ * processor 1, like every robot task, and does the two calls that switch interrupts on.
+ */
+static void irq_start_task(INT stacd, void *exinf)
+{
+    (void)stacd;
+    (void)exinf;
+#if TK_SUPPORT_SMP
+    g_irq_prc = (INT)tk_get_prc();
+#endif
+    g_irq_result = hal_gpio_irq_start();
+    if (g_irq_result >= E_OK) {
+        g_irq_result = hal_tick_start(g_flg);
+    }
+    g_irq_done = true;
+    tk_ext_tsk();
+}
+
 /* Debug aid (ROBOT_START_DELAY_MS != 0): print a line and pause before each start-up step, so that a step which stalls the
  * core is named by the last line that reached the console. */
 #if ROBOT_START_DELAY_MS
@@ -1708,13 +1738,19 @@ ER robot_start(void)
     if (err < E_OK) { return err; }
 #endif
 
-    STAGE("gpio interrupts");
-    err = hal_gpio_irq_start();
-    if (err < E_OK) {
-        return err;
+    STAGE("gpio interrupts and control ticks (on processor 1)");
+    err = make_task(irq_start_task, 1, ROBOT_STACK_BYTES);
+    if (err < E_OK) { return err; }
+    {
+        uint32_t waited;
+
+        for (waited = 0U; (!g_irq_done) && (waited < 2000U); waited += 2U) {
+            (void)tk_dly_tsk(2U);
+        }
     }
-    STAGE("control ticks (the tasks begin to run)");
-    err = hal_tick_start(g_flg);
+    if (!g_irq_done) {
+        return E_TMOUT;
+    }
     STAGE("all started");
-    return err;
+    return g_irq_result;
 }
