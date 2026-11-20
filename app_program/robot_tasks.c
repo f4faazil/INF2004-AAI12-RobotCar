@@ -46,6 +46,9 @@
 #if TM_WIFI_MQTT
 #include "telemetry_tkernel_port.h"
 #endif
+#if TM_WIFI_CYW43
+#include "cyw43_utk.h"
+#endif
 #include "ultrasonic.h"
 #include "vehicle.h"
 
@@ -1555,6 +1558,31 @@ static void diag_task(INT stacd, void *exinf)
                   (UINT)g_max_motion_us, (UINT)g_max_line_us, (UINT)g_max_vehicle_us,
                   (UINT)hal_adc_max_isr_us(), (UINT)hal_tick_overruns(HAL_TICK_MOTION),
                   (UINT)hal_tick_overruns(HAL_TICK_CONTROL), (UINT)hal_tick_overruns(HAL_TICK_VEHICLE));
+#if TM_WIFI_CYW43
+        {
+            /* What the radio is doing, once a second: this is what says why the car has not joined. */
+            T_CYW43_UTK_STATUS w;
+            const char *js = "?";
+
+            cyw43_utk_get_status(&w);
+            switch (w.join_state) {
+            case CYW43_UTK_JOIN_WAIT_SCAN:      js = "waiting-for-scan"; break;
+            case CYW43_UTK_JOIN_JOINING:        js = "joining"; break;
+            case CYW43_UTK_JOIN_CONNECTED:      js = "connected"; break;
+            case CYW43_UTK_JOIN_LOSS_GRACE:     js = "link-lost-grace"; break;
+            case CYW43_UTK_JOIN_BACKOFF:        js = "backoff-before-retry"; break;
+            case CYW43_UTK_JOIN_DISCONNECTING:  js = "disconnecting"; break;
+            default: break;
+            }
+            tm_printf((UB *)"[wifi] radio=%s init=%d networks-seen=%u strongest=%ddBm join=%s attempts=%u failed=%u last-rc=%d "
+                            "link=%u rssi=%ddBm dhcp=%u ip=%u.%u.%u.%u mqtt=%u\n",
+                      (UB *)(w.ready ? "ready" : "NOT-READY"), (INT)w.init_result, (UINT)w.scan_count, (INT)w.strongest_rssi,
+                      (UB *)js, (UINT)w.join_attempts, (UINT)w.join_failures, (INT)w.join_result,
+                      (UINT)w.link_up, (INT)w.link_rssi, (UINT)w.dhcp_complete,
+                      (UINT)w.dhcp_address[0], (UINT)w.dhcp_address[1], (UINT)w.dhcp_address[2], (UINT)w.dhcp_address[3],
+                      (UINT)w.mqtt_state);
+        }
+#endif
         {
             static uint32_t shown_tries;
 
