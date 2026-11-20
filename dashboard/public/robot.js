@@ -174,7 +174,7 @@ function onBroker(e) {
 }
 
 // --- the barcode letter map: A-Z, each unmapped or Left / Right / Straight / U-turn, sent over MQTT
-const ACTIONS = [["", "—"], ["L", "Left"], ["R", "Right"], ["F", "Straight"], ["U", "U-turn"]];
+const ACTIONS = [["", "â€”"], ["L", "Left"], ["R", "Right"], ["F", "Straight"], ["U", "U-turn"]];
 const mapState = { ws: null, sending: false };
 const mapSelect = letter => $("mapGrid").querySelector(`select[data-letter="${letter}"]`);
 for (let i = 0; i < 26; i++) {
@@ -205,17 +205,17 @@ $("mapSend").addEventListener("click", () => {
   if (!mapState.ws || mapState.ws.readyState !== WebSocket.OPEN) { set("mapSent", "dashboard link is down: try again", "bad"); return; }
   const text = mapAsText();
   mapState.ws.send(JSON.stringify({ type: "send-map", map: text || "CLEAR" }));
-  set("mapSent", "sending…", "warn"); set("mapAck", "waiting for the robot…", "warn");
+  set("mapSent", "sendingâ€¦", "warn"); set("mapAck", "waiting for the robotâ€¦", "warn");
 });
 function onMapSent(m) {
   const d = m.data;
-  set("mapSent", `${d.text} · ${clock(m.receivedAt)}${d.deliveredNow === 0 ? " · robot offline: delivered when it connects" : ""}`, d.deliveredNow === 0 ? "warn" : "ok");
-  if (!m.cached) set("mapAck", "waiting for the robot…", "warn");
+  set("mapSent", `${d.text} Â· ${clock(m.receivedAt)}${d.deliveredNow === 0 ? " Â· robot offline: delivered when it connects" : ""}`, d.deliveredNow === 0 ? "warn" : "ok");
+  if (!m.cached) set("mapAck", "waiting for the robotâ€¦", "warn");
   if (m.cached) loadMapText(d.text === "CLEAR" ? "" : d.text);   // a page opened later shows what was last sent
 }
 function onMapAck(m) {
   const ok = m.data.startsWith("OK");
-  set("mapAck", `${m.data}${ok ? " (letters mapped on the car)" : " (the car refused it and kept its old map)"} · ${clock(m.receivedAt)}`, ok ? "ok" : "bad");
+  set("mapAck", `${m.data}${ok ? " (letters mapped on the car)" : " (the car refused it and kept its old map)"} Â· ${clock(m.receivedAt)}`, ok ? "ok" : "bad");
 }
 
 function setPill(id, cls, text, textId) { $(id).className = `pill ${cls}`; if (textId) $(textId).textContent = text; }
@@ -235,7 +235,7 @@ function connect() {
     else if (m.type === "broker-event") onBroker(m.data);
     else if (m.type === "map-sent") onMapSent(m);
     else if (m.type === "map-ack") onMapAck(m);
-    else if (m.type === "map-result" && !m.ok) { set("mapSent", `refused: ${m.error}`, "bad"); set("mapAck", "—", ""); }
+    else if (m.type === "map-result" && !m.ok) { set("mapSent", `refused: ${m.error}`, "bad"); set("mapAck", "â€”", ""); }
     else if (m.type === "parse-error") logEvent({ name: "BAD RECORD", detail: `${m.topic}: ${m.data.message}` }, m.receivedAt);
   };
 }

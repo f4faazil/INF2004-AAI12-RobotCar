@@ -144,7 +144,7 @@ rejoin, barcode Z, U-turn, hump, picked up) through exactly the same decoding.  
 ## Feeding the barcode instructions to the car
 
 The car has **no built-in barcode table**: until one arrives over MQTT every barcode it reads is rejected. The page's
-**Barcode instructions** card sets what each letter does (Left, Right, Straight, U-turn; “—” leaves it unmapped) and
+**Barcode instructions** card sets what each letter does (Left, Right, Straight, U-turn; â€œâ€”â€ leaves it unmapped) and
 **Send to the robot** publishes it, *retained*, on `aai12/robot/map`. The car subscribes to that topic when it connects (so
 it gets the table even if it connects after you sent it) and answers on `aai12/robot/map_ack` (`OK n=3`, or `ERR ...` and
 it keeps its old table). The answer shows on the card.

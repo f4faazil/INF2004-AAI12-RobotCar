@@ -75,12 +75,12 @@
     </article>
 
     <article class="card wide" id="mapCard">
-      <h2>Barcode instructions <small>what each letter makes the car do · sent to the car over MQTT</small></h2>
+      <h2>Barcode instructions <small>what each letter makes the car do Â· sent to the car over MQTT</small></h2>
       <div class="mapgrid" id="mapGrid"></div>
       <div class="maprow">
         <span class="label">Presets</span>
-        <button type="button" data-preset="A=L,B=R,F=U">A left · B right · F U-turn</button>
-        <button type="button" data-preset="A=L,B=R,W=R,Z=U">A left · B right · W right · Z U-turn</button>
+        <button type="button" data-preset="A=L,B=R,F=U">A left Â· B right Â· F U-turn</button>
+        <button type="button" data-preset="A=L,B=R,W=R,Z=U">A left Â· B right Â· W right Â· Z U-turn</button>
         <button type="button" id="mapClear">Clear all</button>
       </div>
       <div class="maprow">
@@ -89,9 +89,9 @@
       </div>
       <dl>
         <div><dt>Last sent</dt><dd id="mapSent">not yet</dd></div>
-        <div><dt>Robot says</dt><dd id="mapAck">—</dd></div>
+        <div><dt>Robot says</dt><dd id="mapAck">â€”</dd></div>
       </dl>
-      <p class="hint">Each send replaces the car's whole table; letters left on “—” are unmapped and the car ignores those barcodes. The map is kept by the broker while this dashboard runs, so the car picks it up whenever it connects. A U-turn turns to the right.</p>
+      <p class="hint">Each send replaces the car's whole table; letters left on â€œâ€”â€ are unmapped and the car ignores those barcodes. The map is kept by the broker while this dashboard runs, so the car picks it up whenever it connects. A U-turn turns to the right.</p>
     </article>
 
     <article class="card">
