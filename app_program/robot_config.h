@@ -197,7 +197,10 @@
 /* An obstacle ahead nearer than this stops the car and starts the scan.  The scan
  * can only confirm a path of the car's width from about 650 mm (the servo sweep is
  * only 28 degrees each side); see the note on ROBOT_OBSTACLE_CFG. */
-#define ROBOT_OBSTACLE_SCAN_MM  (330U)
+/* 450: the sonar read about 250 mm when the box was 110 mm away (the car stopped only 110 mm from it), so the
+ * trigger has to fire while the box is still far enough for a true reading and for the tilted sonar to see its
+ * side as the car passes.  The car stops about 70 mm after the trigger. */
+#define ROBOT_OBSTACLE_SCAN_MM  (450U)
 #define ROBOT_IR_RING_FRAMES    (256U)
 
 /*

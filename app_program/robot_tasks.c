@@ -1128,6 +1128,8 @@ static const char *diag_event_name(uint8_t c)
 /* One line per event and per scan, so the run can be followed state by state. */
 static void diag_drain_events(void)
 {
+    static uint16_t diag_side_seq;
+
     while (g_diag_ev_tail != g_diag_ev_head) {
         diag_ev_t e;
         robot_irq_state_t state = robot_irq_save();
@@ -1142,6 +1144,11 @@ static void diag_drain_events(void)
             tm_printf((UB *)"[ev] t=%u d=%dmm %s arg=%u\n", (UINT)e.ms, (INT)e.odo_mm,
                       (UB *)diag_event_name(e.code), (UINT)e.arg);
         }
+    }
+    if ((g_obstacle_share.aim != 0) && (g_obstacle_share.raw_seq != diag_side_seq)) {
+        diag_side_seq = g_obstacle_share.raw_seq;           /* the sonar is tilted at the box: show what it sees */
+        tm_printf((UB *)"[side] aim=%d echo=%d range=%dmm\n", (INT)g_obstacle_share.aim,
+                  (INT)g_obstacle_share.raw_echo, (INT)g_obstacle_share.raw_mm);
     }
     if (g_diag_scan.fresh) {
         diag_scan_t sc = g_diag_scan;

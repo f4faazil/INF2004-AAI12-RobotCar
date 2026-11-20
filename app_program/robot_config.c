@@ -193,7 +193,7 @@ const obstacle_config_t ROBOT_OBSTACLE_CFG = {
     .robot_width_mm = 200U,             /* measured by Buddy 5, protruding parts included */
     .robot_length_mm = 250U,            /* measured by Buddy 5 */
     .margin_mm = 60U,                   /* side margin: turns are only about 3 degrees accurate */
-    .assumed_depth_mm = 150U,           /* the deepest obstacle on the course: measure it and set it */
+    .assumed_depth_mm = 100U,           /* the course box: 150 wide, 100 deep, 200 tall.  The deepest obstacle: measure it and set it */
     .min_turn_distance_mm = 140U,       /* the front corner swings 190 mm from the axle: nearer than this, back up first */
     .recovery_limit_mm = 500U,          /* Tribunal: 0.5 m */
     .sweep_clear_min_rays = 2U,         /* a side is open when 2 rays in a row reach the sweep limit clear */
@@ -201,7 +201,7 @@ const obstacle_config_t ROBOT_OBSTACLE_CFG = {
     .forward_extra_mm = 0U,
     .sensor_to_axle_mm = 100U,          /* the sonar on its new bar: about 100 mm ahead of the axle (was 80) */
     .axle_to_rear_mm = 135U,            /* the rear corner's swing radius: it turns back onto the line right behind the box (the rear edge is 90 mm, the corner 135) */
-    .forward_margin_mm = 20U,           /* the rear clears the obstacle's back edge by 2 cm */
+    .forward_margin_mm = 100U,          /* the rear corner's swing radius is cleared by 10 cm more: 2 cm was too close on the car */
     .blind_side = 0                     /* +1 left, -1 right: set it to the side the course leaves free */
 };
 
@@ -229,11 +229,11 @@ const vehicle_config_t ROBOT_VEHICLE_CFG = {
     .bypass_stop_mm = 100U,             /* during a bypass: something this close ahead stops the car (the front is the sonar face) */
     .bypass_blank_ms = 500U,            /* the sonar's median still holds readings from before the turn */
     .bypass_hold_ms = 4000U,            /* wait this long for the way to clear, then fault */
-    .side_aim_deg = 33,                 /* the servo reaches 37 degrees to the left, 43 to the right */
+    .side_aim_deg = 35,                 /* the servo reaches 37 degrees to the left, 43 to the right */
     .side_min_mm = 50U,
     .side_max_mm = 700U,                /* the box's side is about 150 / sin(25) = 350 mm away; a far wall is ignored */
-    .side_loss_ahead_pct = 58U,         /* sin(33) / tan(33 + 10) = 0.58: the beam is about 10 degrees either side (TUNE from the log) */
-    .side_tail_mm = 255U,               /* 100 sonar to axle + 135 axle to rear corner + 20 margin */
+    .side_loss_ahead_pct = 57U,         /* sin(35) / tan(35 + 10) = 0.57: the beam is about 10 degrees either side (TUNE from the log) */
+    .side_tail_mm = 335U,               /* 100 sonar to axle + 135 axle to rear corner + 100 margin (= forward_margin_mm) */
     .side_extend_mm = 100U,
     .side_extend_max_mm = 300U,
     .max_reverse_attempts = 1U,
