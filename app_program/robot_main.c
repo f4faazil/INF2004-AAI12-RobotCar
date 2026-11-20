@@ -41,7 +41,7 @@ EXPORT INT usermain(void)
 
         for (waited = 0U; waited < ROBOT_START_DELAY_MS; waited += 1000U) {
 #if TM_WIFI_CYW43
-            T_CYW43_UTK_STATUS w;
+            static T_CYW43_UTK_STATUS w;                /* static: the init task's stack is small */
 
             cyw43_utk_get_status(&w);
             tm_printf((UB *)"[boot] t=%us radio=%s networks-seen=%u join-state=%u attempts=%u failed=%u last-rc=%d link=%u dhcp=%u mqtt=%u\n",

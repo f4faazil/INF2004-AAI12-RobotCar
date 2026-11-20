@@ -1678,7 +1678,11 @@ ER robot_start(void)
     if (err < E_OK) { return err; }
     err = make_task(imu_task, ROBOT_PRI_IMU, ROBOT_STACK_BYTES);
     if (err < E_OK) { return err; }
+#if TM_WIFI_MQTT
+    err = make_task(net_task, ROBOT_PRI_NET, ROBOT_STACK_BYTES * 2);        /* it calls into the kernel (mutex, queue copy) */
+#else
     err = make_task(net_task, ROBOT_PRI_NET, ROBOT_STACK_BYTES);
+#endif
     if (err < E_OK) { return err; }
 #if ROBOT_DIAG_PRINT
     err = make_task(diag_task, ROBOT_PRI_DIAG, ROBOT_STACK_BYTES * 2);
