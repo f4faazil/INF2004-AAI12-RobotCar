@@ -1345,9 +1345,11 @@ static void test_stop_fault_stops_the_car_in_any_running_state(void)
     }
 }
 
-/* An IMU lift indication is stop-class, reported to telemetry, and cannot be
- * cleared by START or CLEAR_FAULTS; only reinitializing the controller clears it. */
-static void test_imu_lift_stop_is_latched_until_reboot(void)
+/* An IMU lift indication is stop-class and reported to telemetry.  START and CLEAR_FAULTS cannot clear it while it is
+ * set.  It clears only when the IMU task clears the fault (the car is back on the floor, level and steady); the car then
+ * stays STOPPED until START, and START works again without a reboot.  Catches: a latch that needs a reboot; a car that
+ * starts by itself when it is put down. */
+static void test_imu_lift_stop_holds_until_the_imu_clears_it(void)
 {
     h_t h;
     int drives;
@@ -1362,12 +1364,37 @@ static void test_imu_lift_stop_is_latched_until_reboot(void)
     CHECK_INT(FAULT_IMU_LIFT, h.out.events[0].arg);
     drives = count_type(&h, MOTION_CMD_DRIVE);
 
-    h.in.faults = 0U;
+    /* the fault is still set: START and CLEAR_FAULTS are refused */
     h.in.start_pressed = true;
     h.in.remote = VC_REMOTE_CLEAR_FAULTS;
     cycles(&h, 5);
     CHECK_INT(VC_STOPPED, h.out.state);
     CHECK_INT(drives, count_type(&h, MOTION_CMD_DRIVE));
+    h.in.start_pressed = false;
+    h.in.remote = 0U;
+    cycles(&h, 5);
+    CHECK_INT(drives, count_type(&h, MOTION_CMD_DRIVE));
+
+    /* the IMU task re-arms (the car is on the floor): the fault clears, the car stays stopped, and says so */
+    h.in.faults = 0U;
+    h_cycle(&h);
+    CHECK(saw_event(&h, TEL_EVT_FAULT_CLEAR, (uint16_t)FAULT_IMU_LIFT));
+    cycles(&h, 20);
+    CHECK_INT(VC_STOPPED, h.out.state);
+    CHECK_INT(drives, count_type(&h, MOTION_CMD_DRIVE));    /* it does not start by itself */
+
+    /* START now works, without a reboot */
+    h.in.start_pressed = true;
+    h_cycle(&h);
+    h.in.start_pressed = false;
+    cycles(&h, 5);
+    CHECK_INT(VC_FOLLOW, h.out.state);
+    CHECK(count_type(&h, MOTION_CMD_DRIVE) > drives);
+
+    /* and a second lift stops it again */
+    h.in.faults = FAULT_IMU_LIFT;
+    cycles(&h, 3);
+    CHECK_INT(VC_STOPPED, h.out.state);
 }
 
 /* An informational fault does not stop the car. */
@@ -1589,7 +1616,7 @@ int main(void)
     RUN(test_scan_timeout_is_a_fault);
     RUN(test_continue_plan_resumes_and_blanks_the_monitor);
     RUN(test_stop_fault_stops_the_car_in_any_running_state);
-    RUN(test_imu_lift_stop_is_latched_until_reboot);
+    RUN(test_imu_lift_stop_holds_until_the_imu_clears_it);
     RUN(test_informational_fault_does_not_stop);
     RUN(test_fault_during_a_scan_wins);
     RUN(test_fault_needs_the_operator_to_clear_it);

@@ -265,4 +265,15 @@ extern const safety_limits_t     ROBOT_SAFETY_LIMITS;
 #define ROBOT_LIFT_FREEFALL_MG       (300U)
 #define ROBOT_LIFT_HOLD_MS           (300U)
 
+/*
+ * After a lift the car re-arms by itself, so it can be tested again without a reboot, once it is back on the floor:
+ * level to within 15 degrees (cosine 966), at 1 g within 120 mg, and steady (no axis moves more than 60 mg between 20 ms
+ * samples) for 2 s in a row, and not sooner than 1 s after the lift was detected.  Re-arming only lets START work again.
+ */
+#define ROBOT_LIFT_REARM_COS_PERMILLE (966U)
+#define ROBOT_LIFT_REARM_MAG_TOL_MG   (120U)
+#define ROBOT_LIFT_REARM_STEP_MG      (60U)
+#define ROBOT_LIFT_REARM_HOLD_MS      (2000U)
+#define ROBOT_LIFT_MIN_LATCH_MS       (1000U)
+
 #endif /* ROBOT_CONFIG_H */

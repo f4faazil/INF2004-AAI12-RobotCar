@@ -603,6 +603,82 @@ static void test_lift_does_not_accumulate_separate_tilt_periods(void)
     CHECK(imu_lift_update(&detector, &cal, &lift_tilt, 600U, 500U, 300U, 300U));
 }
 
+/* After a lift the car may run again only once it is level, at 1 g and steady for the hold time.  Catches: re-arming
+ * too early, or while it is still tilted, swung about, or falling. */
+static void test_rearm_needs_level_1g_and_steady_for_the_hold_time(void)
+{
+    imu_cal_t cal;
+    imu_rearm_t r;
+    imu_vec3_t flat = vec(0, 0, 1000);
+    uint32_t t;
+    bool armed = false;
+
+    calibrate(&cal, vec(0, 0, 1000), IMU_AXIS_X, 1);
+    imu_rearm_init(&r);
+    for (t = 0U; t <= 2000U; t += 20U) {                /* the first sample only sets the reference: steady counts from t = 20 */
+        armed = imu_rearm_update(&r, &cal, &flat, t, 966U, 120U, 60U, 2000U);
+        CHECK(!armed);                                  /* not before 2 s of it */
+    }
+    CHECK(imu_rearm_update(&r, &cal, &flat, 2020U, 966U, 120U, 60U, 2000U));
+}
+
+static void test_rearm_refuses_a_tilted_car(void)
+{
+    imu_cal_t cal;
+    imu_rearm_t r;
+    imu_vec3_t tilted = rolled(40.0);                   /* cosine 766: more than 15 degrees */
+    uint32_t t;
+
+    calibrate(&cal, vec(0, 0, 1000), IMU_AXIS_X, 1);
+    imu_rearm_init(&r);
+    for (t = 0U; t < 6000U; t += 20U) {
+        CHECK(!imu_rearm_update(&r, &cal, &tilted, t, 966U, 120U, 60U, 2000U));
+    }
+}
+
+static void test_rearm_refuses_a_car_being_swung_or_dropped(void)
+{
+    imu_cal_t cal;
+    imu_rearm_t r;
+    imu_vec3_t a = vec(0, 0, 1000);
+    imu_vec3_t b = vec(0, 150, 1000);                   /* a 150 mg jolt between samples: handled, not resting */
+    imu_vec3_t falling = vec(0, 0, 500);                /* not at 1 g */
+    uint32_t t;
+
+    calibrate(&cal, vec(0, 0, 1000), IMU_AXIS_X, 1);
+    imu_rearm_init(&r);
+    for (t = 0U; t < 6000U; t += 20U) {
+        CHECK(!imu_rearm_update(&r, &cal, (((t / 20U) & 1U) != 0U) ? &a : &b, t, 966U, 120U, 60U, 2000U));
+    }
+    imu_rearm_init(&r);
+    for (t = 0U; t < 6000U; t += 20U) {
+        CHECK(!imu_rearm_update(&r, &cal, &falling, t, 966U, 120U, 60U, 2000U));
+    }
+}
+
+/* A break in the level, steady period restarts the count: separate short periods do not add up. */
+static void test_rearm_does_not_accumulate_separate_periods(void)
+{
+    imu_cal_t cal;
+    imu_rearm_t r;
+    imu_vec3_t flat = vec(0, 0, 1000);
+    imu_vec3_t tilted = rolled(40.0);
+    uint32_t t = 0U;
+    uint32_t k;
+
+    calibrate(&cal, vec(0, 0, 1000), IMU_AXIS_X, 1);
+    imu_rearm_init(&r);
+    for (k = 0U; k < 3U; k++) {
+        uint32_t i;
+
+        for (i = 0U; i < 70U; i++, t += 20U) {          /* 1.4 s level */
+            CHECK(!imu_rearm_update(&r, &cal, &flat, t, 966U, 120U, 60U, 2000U));
+        }
+        (void)imu_rearm_update(&r, &cal, &tilted, t, 966U, 120U, 60U, 2000U);   /* picked up again */
+        t += 20U;
+    }
+}
+
 static void test_lift_detects_sustained_near_freefall(void)
 {
     imu_cal_t cal;
@@ -956,6 +1032,10 @@ int main(void)
     RUN(test_lift_requires_sustained_out_of_range_tilt);
     RUN(test_lift_does_not_accumulate_separate_tilt_periods);
     RUN(test_lift_detects_sustained_near_freefall);
+    RUN(test_rearm_needs_level_1g_and_steady_for_the_hold_time);
+    RUN(test_rearm_refuses_a_tilted_car);
+    RUN(test_rearm_refuses_a_car_being_swung_or_dropped);
+    RUN(test_rearm_does_not_accumulate_separate_periods);
     RUN(test_roll_for_known_sideways_tilts);
     RUN(test_pitching_does_not_show_as_roll);
     RUN(test_roll_with_the_cars_upside_down_board);

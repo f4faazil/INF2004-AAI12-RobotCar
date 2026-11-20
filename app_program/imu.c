@@ -279,6 +279,67 @@ static bool condition_held(bool active, bool *tracking, uint32_t *since_ms,
     return (now_ms - *since_ms) >= hold_ms;
 }
 
+void imu_rearm_init(imu_rearm_t *r)
+{
+    r->ok_active = false;
+    r->ok_since_ms = 0U;
+    r->have_prev = false;
+    r->prev.x = 0;
+    r->prev.y = 0;
+    r->prev.z = 0;
+}
+
+bool imu_rearm_update(imu_rearm_t *r, const imu_cal_t *cal, const imu_vec3_t *mg, uint32_t now_ms,
+                      uint16_t level_cos_min_permille, uint16_t mag_tol_mg, uint16_t step_max_mg,
+                      uint16_t hold_ms)
+{
+    int32_t base[3] = { 0, 0, 0 };
+    const int32_t x = mg->x;
+    const int32_t y = mg->y;
+    const int32_t z = mg->z;
+    int32_t dx;
+    int32_t dy;
+    int32_t dz;
+    int32_t dm;
+    int64_t dot;
+    uint32_t magnitude;
+    bool level;
+    bool at_1g;
+    bool steady;
+
+    if (cal->state != IMU_CAL_DONE) {
+        return false;
+    }
+    base[cal->forward_axis] = (int32_t)cal->base_f * cal->forward_sign;
+    base[cal->vertical_axis] = (int32_t)cal->base_v * cal->vertical_sign;
+    base[cal->lateral_axis] = cal->base_l;
+    magnitude = isqrt32((uint32_t)(x * x) + (uint32_t)(y * y) + (uint32_t)(z * z));
+
+    dot = ((int64_t)x * base[0]) + ((int64_t)y * base[1]) + ((int64_t)z * base[2]);
+    level = (magnitude > 0U) && (cal->base_mag > 0) &&
+            ((dot * PERMILLE) >= ((int64_t)level_cos_min_permille * cal->base_mag * magnitude));
+    dm = (int32_t)magnitude - (int32_t)cal->base_mag;
+    if (dm < 0) {
+        dm = -dm;
+    }
+    at_1g = dm <= (int32_t)mag_tol_mg;
+
+    steady = false;
+    if (r->have_prev) {
+        dx = x - r->prev.x;
+        dy = y - r->prev.y;
+        dz = z - r->prev.z;
+        dx = (dx < 0) ? -dx : dx;
+        dy = (dy < 0) ? -dy : dy;
+        dz = (dz < 0) ? -dz : dz;
+        steady = (dx <= (int32_t)step_max_mg) && (dy <= (int32_t)step_max_mg) && (dz <= (int32_t)step_max_mg);
+    }
+    r->prev = *mg;
+    r->have_prev = true;
+
+    return condition_held(level && at_1g && steady, &r->ok_active, &r->ok_since_ms, now_ms, hold_ms);
+}
+
 void imu_lift_init(imu_lift_detector_t *detector)
 {
     detector->tilt_active = false;

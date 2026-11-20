@@ -1063,6 +1063,8 @@ static void imu_task(INT stacd, void *exinf)
     static imu_cal_t cal;
     static roll_hump_t hump;
     static imu_lift_detector_t lift;
+    static imu_rearm_t rearm;
+    static uint32_t lift_since_ms;
     int32_t filt[3] = { 0, 0, 0 };
     bool filt_init = false;
     imu_variant_t variant = IMU_VARIANT_LSM303D;
@@ -1076,6 +1078,7 @@ static void imu_task(INT stacd, void *exinf)
     (void)exinf;
     roll_hump_init(&hump, &ROBOT_ROLL_HUMP_CFG);
     imu_lift_init(&lift);
+    imu_rearm_init(&rearm);
     imu_cal_init(&cal, ROBOT_IMU_FORWARD_AXIS, ROBOT_IMU_FORWARD_SIGN, ROBOT_IMU_CAL_SAMPLES,
                  ROBOT_IMU_CAL_SPREAD_MG);
 
@@ -1125,9 +1128,25 @@ static void imu_task(INT stacd, void *exinf)
             if (imu_lift_update(&lift, &cal, &g, now, ROBOT_LIFT_TILT_COS_PERMILLE,
                                 ROBOT_LIFT_FREEFALL_MG, ROBOT_LIFT_HOLD_MS)) {
                 fault_set(&g_faults, FAULT_IMU_LIFT);
+                lift_since_ms = now;
+                imu_rearm_init(&rearm);
             }
             g_imu_lift = lift.latched;
             if (lift.latched) {
+                /* Stopped.  Keep reading, so the tilt stays live on the dashboard, and re-arm once the car is back on the
+                 * floor: level, at 1 g and steady for a while.  That only clears the stop; START is still needed. */
+                const bool settled = imu_rearm_update(&rearm, &cal, &g, now, ROBOT_LIFT_REARM_COS_PERMILLE,
+                                                      ROBOT_LIFT_REARM_MAG_TOL_MG, ROBOT_LIFT_REARM_STEP_MG,
+                                                      ROBOT_LIFT_REARM_HOLD_MS);
+
+                g_imu_roll_permille = imu_roll_permille(&cal, &g);
+                if (settled && ((now - lift_since_ms) >= ROBOT_LIFT_MIN_LATCH_MS)) {
+                    imu_lift_init(&lift);
+                    imu_rearm_init(&rearm);
+                    g_imu_lift = false;
+                    filt_init = false;
+                    fault_clear(&g_faults, FAULT_IMU_LIFT);
+                }
                 publish_imu(&hump, false, false, now);
                 continue;
             }

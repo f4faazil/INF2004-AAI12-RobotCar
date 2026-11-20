@@ -78,7 +78,7 @@ uint8_t vehicle_remote_policy(vehicle_state_t state, bool allow_remote_stop,
     case TEL_CMD_CALIBRATE:
     case TEL_CMD_CLEAR_FAULTS:
         if (imu_lift_latched) {
-            return TEL_ACK_REJECTED_RUNNING;    /* lift stop is cleared only by reboot/reset */
+            return TEL_ACK_REJECTED_RUNNING;    /* the lift stop clears itself when the car is back on the floor */
         }
         if (running) {
             return TEL_ACK_REJECTED_RUNNING;    /* never change the mission mid-run */
@@ -911,6 +911,11 @@ void vehicle_step(vehicle_t *vc, const vehicle_in_t *in, vehicle_out_t *out)
     if (imu_lift && !vc->imu_lift_latched) {
         vc->imu_lift_latched = true;
         add_event(out, TEL_EVT_FAULT, (uint16_t)FAULT_IMU_LIFT);
+    }
+    if (!imu_lift && vc->imu_lift_latched) {
+        /* The IMU task cleared the lift fault: the car is back on the floor.  It stays STOPPED until START. */
+        vc->imu_lift_latched = false;
+        add_event(out, TEL_EVT_FAULT_CLEAR, (uint16_t)FAULT_IMU_LIFT);
     }
     if (vc->imu_lift_latched) {
         if (vc->state != VC_STOPPED) {

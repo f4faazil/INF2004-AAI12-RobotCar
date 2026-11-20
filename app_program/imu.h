@@ -110,6 +110,28 @@ typedef struct {
 void imu_lift_init(imu_lift_detector_t *detector);
 
 /*
+ * Re-arming after a lift.  A lifted car is stopped; it may run again only once it is back on the floor.  An accelerometer
+ * cannot SEE the floor, so "on the floor" is taken to be: level (within level_cos_min of the calibrated rest attitude),
+ * at 1 g (the magnitude within mag_tol_mg of the rest magnitude: not being swung or dropped) and steady (no axis moved more
+ * than step_max_mg since the previous sample) for hold_ms in a row.  A car held perfectly level and still in the air
+ * satisfies it too: a wheel-contact sensor would be needed to tell that apart.  Re-arming only permits START; it never
+ * starts the car.
+ */
+typedef struct {
+    bool       ok_active;
+    uint32_t   ok_since_ms;
+    bool       have_prev;
+    imu_vec3_t prev;
+} imu_rearm_t;
+
+void imu_rearm_init(imu_rearm_t *r);
+
+/* Feed every sample.  True once the car has been level, at 1 g and steady for hold_ms. */
+bool imu_rearm_update(imu_rearm_t *r, const imu_cal_t *cal, const imu_vec3_t *mg, uint32_t now_ms,
+                      uint16_t level_cos_min_permille, uint16_t mag_tol_mg, uint16_t step_max_mg,
+                      uint16_t hold_ms);
+
+/*
  * Return true once when a tilt beyond the calibrated cosine limit or a
  * near-freefall reading persists for hold_ms.  Thresholds are supplied by the
  * robot configuration and are provisional until validated on the car.
