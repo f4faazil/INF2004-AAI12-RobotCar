@@ -1645,12 +1645,22 @@ static ER make_task(void (*entry)(INT, void *), PRI pri, INT stack)
     return tk_sta_tsk(id, 0);
 }
 
+/* Debug aid (ROBOT_START_DELAY_MS != 0): print a line and pause before each start-up step, so that a step which stalls the
+ * core is named by the last line that reached the console. */
+#if ROBOT_START_DELAY_MS
+#define STAGE(name) do { tm_printf((UB *)"[start] %s\n", (UB *)(name)); (void)tk_dly_tsk(1500U); } while (0)
+#else
+#define STAGE(name) ((void)0)
+#endif
+
 ER robot_start(void)
 {
     T_CFLG cflg;
     ER err;
 
+    STAGE("hal_init");
     hal_init();
+    STAGE("telemetry inbox");
 #if TM_WIFI_MQTT
     if (telemetry_rtos_boot_init() == 0) {      /* the inbox mutex, before any producer or radio task runs */
         return E_SYS;
@@ -1668,30 +1678,41 @@ ER robot_start(void)
         return g_flg;
     }
 
+    STAGE("motion task");
     err = make_task(motion_task, ROBOT_PRI_MOTION, ROBOT_STACK_BYTES);
     if (err < E_OK) { return err; }
+    STAGE("line task");
     err = make_task(line_task, ROBOT_PRI_LINE, ROBOT_STACK_BYTES);
     if (err < E_OK) { return err; }
+    STAGE("vehicle task");
     err = make_task(vehicle_task, ROBOT_PRI_VEHICLE, ROBOT_STACK_BYTES);
     if (err < E_OK) { return err; }
+    STAGE("obstacle task");
     err = make_task(obstacle_task, ROBOT_PRI_OBSTACLE, ROBOT_STACK_BYTES);
     if (err < E_OK) { return err; }
+    STAGE("imu task");
     err = make_task(imu_task, ROBOT_PRI_IMU, ROBOT_STACK_BYTES);
     if (err < E_OK) { return err; }
+    STAGE("net task");
 #if TM_WIFI_MQTT
     err = make_task(net_task, ROBOT_PRI_NET, ROBOT_STACK_BYTES * 2);        /* it calls into the kernel (mutex, queue copy) */
 #else
     err = make_task(net_task, ROBOT_PRI_NET, ROBOT_STACK_BYTES);
 #endif
     if (err < E_OK) { return err; }
+    STAGE("diag task");
 #if ROBOT_DIAG_PRINT
     err = make_task(diag_task, ROBOT_PRI_DIAG, ROBOT_STACK_BYTES * 2);
     if (err < E_OK) { return err; }
 #endif
 
+    STAGE("gpio interrupts");
     err = hal_gpio_irq_start();
     if (err < E_OK) {
         return err;
     }
-    return hal_tick_start(g_flg);
+    STAGE("control ticks (the tasks begin to run)");
+    err = hal_tick_start(g_flg);
+    STAGE("all started");
+    return err;
 }
