@@ -74,11 +74,11 @@ LOCAL const UW module_tbl[] = {
  */
 LOCAL const T_SETUP_REG pinfnc_tbl[] = {
 	/* External LED */
-	{GPIO_CTRL(BOARD_LED_PIN),	GPIO_CTRL_FUNCSEL_SIO},	/* LED pin GPIO */
-	{GPIO_OE, (1<<BOARD_LED_PIN)},				/* LED pin output enable */
+	// {GPIO_CTRL(BOARD_LED_PIN),	GPIO_CTRL_FUNCSEL_SIO},	/* LED pin GPIO */
+	// {GPIO_OE, (1<<BOARD_LED_PIN)},				/* LED pin output enable */
 	/* P0,P1 : UART0 */
-	{GPIO_CTRL(0),	GPIO_CTRL_FUNCSEL_UART},	/* P0 UART0-TX */
-	{GPIO_CTRL(1),	GPIO_CTRL_FUNCSEL_UART},	/* P1 UART0-RX */
+	// {GPIO_CTRL(0),	GPIO_CTRL_FUNCSEL_UART},	/* P0 UART0-TX */
+	// {GPIO_CTRL(1),	GPIO_CTRL_FUNCSEL_UART},	/* P1 UART0-RX */
 
 #if USE_SDEV_DRV	// Do not use sample device driver
 	/* P26 : ADC0 */

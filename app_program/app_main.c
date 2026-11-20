@@ -54,6 +54,11 @@
 #include "demo_tasks.h"
 #include "imu.h"			/* Buddy 4: IMU / hump task */
 
+#if TM_WIFI_MQTT
+/* Narrow startup ABI: avoids the micro T-Kernel size_t header clash. */
+#include "telemetry_tkernel_port.h"
+#endif
+
 #if TM_WIFI_CYW43
 /* Plain C types on purpose - see the note in cyw43_utk.h. */
 #include "cyw43_utk.h"
@@ -242,7 +247,21 @@ LOCAL void monitor_task(INT stacd, void *exinf)
 			  imu_launch_status, imu_debug_stage,
 			  imu_debug_init_step, imu_debug_error);
 
-		/* One line every REPORT_MS cannot overrun a 4 KB ring, but say
+		#if TM_WIFI_MQTT
+            /* Stage 5D1: best-effort, non-waiting stats snapshot.
+             * No mutex is held while printing. */
+            {
+                unsigned int queued = 0U;
+                unsigned int full = 0U;
+                unsigned int stale = 0U;
+                if (telemetry_rtos_stats_copy(&queued, &full, &stale)) {
+                    tm_printf((UB *)"[telemetry-stats] queued=%u full=%u stale=%u\n",
+                              queued, full, stale);
+                }
+            }
+#endif
+
+            /* One line every REPORT_MS cannot overrun a 4 KB ring, but say
 		   so out loud if the console ever does drop bytes. */
 		if(tm_usb_dropped_bytes() != 0) {
 			tm_printf((UB *)"[monitor] console dropped %u bytes\n",
@@ -278,6 +297,35 @@ LOCAL void fmt_ipv4(UB *dst, const UB *a)
 	tm_sprintf(dst, (UB *)"%u.%u.%u.%u", a[0], a[1], a[2], a[3]);
 }
 
+#if TM_WIFI_MQTT
+LOCAL const UB *mqtt_state_name(UW state)
+{
+	switch(state) {
+	case 0: return (const UB *)"WAIT_NET";
+	case 1: return (const UB *)"TCP_CONNECT";
+	case 2: return (const UB *)"WAIT_ACK";
+	case 3: return (const UB *)"ONLINE";
+	case 4: return (const UB *)"BACKOFF";
+	default: return (const UB *)"UNKNOWN";
+	}
+}
+#endif
+
+#if TM_WIFI_JOIN
+LOCAL const UB *wifi_join_state_name(UW state)
+{
+	switch(state) {
+	case CYW43_UTK_JOIN_WAIT_SCAN: return (const UB *)"WAIT_SCAN";
+	case CYW43_UTK_JOIN_JOINING: return (const UB *)"JOINING";
+	case CYW43_UTK_JOIN_CONNECTED: return (const UB *)"CONNECTED";
+	case CYW43_UTK_JOIN_LOSS_GRACE: return (const UB *)"LOSS_GRACE";
+	case CYW43_UTK_JOIN_BACKOFF: return (const UB *)"BACKOFF";
+	case CYW43_UTK_JOIN_DISCONNECTING: return (const UB *)"DISCONNECTING";
+	default: return (const UB *)"UNKNOWN";
+	}
+}
+#endif
+
 LOCAL void wifi_status_task(INT stacd, void *exinf)
 {
 	T_CYW43_UTK_STATUS	st;
@@ -288,6 +336,7 @@ LOCAL void wifi_status_task(INT stacd, void *exinf)
 	UW			stalled_polls = 0;
 	UW			shown_session = 0xffffffffU;
 	UW			summarised = 0xffffffffU;
+	UW diag_ticks = 0;
 	INT			i;
 
 	(void)stacd; (void)exinf;
@@ -302,6 +351,66 @@ LOCAL void wifi_status_task(INT stacd, void *exinf)
 
 	while(1) {
 		cyw43_utk_get_status(&st);
+
+		if(++diag_ticks >= 5U) {
+			diag_ticks = 0;
+#if TM_WIFI_JOIN
+			tm_printf((UB *)"[net-diag] polls=%u wifi=%s attempt=%u fail=%u ok=%u recover=%u loss=%u retry=%u join_rc=%d link=%u netif=%u netlink=%u dhcp_ok=%u timeout=%u started=%u tries=%u ms=%u rc=%d gw=%u dns=%u noip_rejoin=%u\n",
+				  st.poll_count, wifi_join_state_name(st.join_state),
+				  st.join_attempts, st.join_failures,
+				  st.join_successes, st.join_recoveries,
+				  st.link_losses, st.join_retry_remaining_ms,
+				  st.join_result, st.link_up, st.netif_up,
+				  st.netif_link_up, st.dhcp_complete,
+				  st.dhcp_timed_out, st.dhcp_started,
+				  st.dhcp_tries,
+				  st.dhcp_elapsed_ms, st.dhcp_result,
+				  st.dhcp_gateway_available,
+				  st.dhcp_dns_available,
+				  st.join_no_ip_rejoins);
+#else
+			tm_printf((UB *)"[net-diag] polls=%u link=%u netif=%u netlink=%u dhcp_ok=%u timeout=%u started=%u tries=%u ms=%u rc=%d gw=%u dns=%u\n",
+				  st.poll_count, st.link_up, st.netif_up,
+				  st.netif_link_up, st.dhcp_complete,
+				  st.dhcp_timed_out, st.dhcp_started,
+				  st.dhcp_tries,
+				  st.dhcp_elapsed_ms, st.dhcp_result,
+				  st.dhcp_gateway_available,
+				  st.dhcp_dns_available);
+#endif
+#if TM_WIFI_MQTT
+			tm_printf((UB *)"[mqtt-diag] init=%u polls=%u state=%s tcp=%u sess=%u/%u/%u last=%u tx=%u ping=%u/%u resp=%u pq=%u/%u wait=%u wr=%u/%u/%u out=%u q=%u/%u/%u ack=%u/%u/%u rc=%d/%d err=%u:%d\n",
+				  st.mqtt_initialized,
+				  st.mqtt_poll_calls,
+				  mqtt_state_name(st.mqtt_state),
+				  st.mqtt_tcp_active,
+				  st.mqtt_connects_started,
+				  st.mqtt_sessions_online,
+				  st.mqtt_session_failures,
+				  st.mqtt_last_poll_ms,
+				  st.mqtt_last_tx_ms,
+				  st.mqtt_pings_queued,
+				  st.mqtt_ping_attempts,
+				  st.mqtt_ping_responses,
+				  st.mqtt_waiting_pingqueue,
+				  st.mqtt_ping_queue_timeouts,
+				  st.mqtt_waiting_pingresp,
+				  st.mqtt_tcp_write_failures,
+				  st.mqtt_tcp_write_calls,
+				  st.mqtt_tcp_write_fatal_errors,
+				  st.mqtt_tcp_output_failures,
+				  st.mqtt_tcp_output_pending,
+				  st.mqtt_tcp_output_retries,
+				  st.mqtt_tcp_output_timeouts,
+				  st.mqtt_tcp_sent_callbacks,
+				  st.mqtt_tcp_acked_bytes,
+				  st.mqtt_last_tcp_ack_ms,
+				  st.mqtt_last_tcp_write_result,
+				  st.mqtt_last_tcp_output_result,
+				  st.mqtt_tcp_errors,
+				  st.mqtt_last_tcp_error);
+#endif
+		}
 
 		/* Link transitions, printed once each rather than every tick. */
 		if(st.link_up != last_link) {
@@ -328,8 +437,9 @@ LOCAL void wifi_status_task(INT stacd, void *exinf)
 				fmt_ipv4(ip, st.dhcp_address);
 				fmt_ipv4(gw, st.dhcp_gateway);
 				fmt_ipv4(dns, st.dhcp_dns);
-				tm_printf((UB *)"[wifi] ip=%s  gw=%s  dns=%s\n",
-					  ip, gw, dns);
+				tm_printf((UB *)"[wifi] ip=%s  gw=%s (%u)  dns=%s (%u)\n",
+					  ip, gw, st.dhcp_gateway_available,
+					  dns, st.dhcp_dns_available);
 			}
 		}
 
@@ -532,6 +642,14 @@ EXPORT INT usermain(void)
 {
 	ID	tid;
 	ER	er;
+
+#if TM_WIFI_MQTT
+    /* Create queue mutex BEFORE any radio/producer task starts. */
+    if (!telemetry_rtos_boot_init()) {
+        tm_printf((UB *)"[init] telemetry inbox mutex creation failed\n");
+        return 1;
+    }
+#endif
 
 	mpfid = tk_cre_mpf(&cmpf); if(!made("mpf", mpfid)) return 1;
 	mtxid = tk_cre_mtx(&cmtx); if(!made("mtx", mtxid)) return 1;

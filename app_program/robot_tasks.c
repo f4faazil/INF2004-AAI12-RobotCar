@@ -43,6 +43,9 @@
 #include "robot_tasks.h"
 #include "safety.h"
 #include "telemetry.h"
+#if TM_WIFI_MQTT
+#include "telemetry_tkernel_port.h"
+#endif
 #include "ultrasonic.h"
 #include "vehicle.h"
 
@@ -1217,6 +1220,77 @@ static const char *topic_for(uint8_t type)
     return TOPIC_TELEMETRY;
 }
 
+#if TM_WIFI_MQTT
+/*
+ * Owner build: the MQTT session belongs to the radio task (Aamir's mqtt_lwip.c).  This task only moves the
+ * robot's records from the telemetry queue into that session's inbox, and watches the session state.
+ * Records go out on aai12/robot/telemetry; the first byte of each says what it is (see telemetry.h).
+ */
+#define ROBOT_MQTT_ONLINE   (3U)
+
+static void net_task(INT stacd, void *exinf)
+{
+    static uint32_t last_heartbeat_ms;
+    static uint32_t down_since_ms;
+
+    (void)stacd;
+    (void)exinf;
+    (void)on_command;                           /* no application-level client in this build */
+    (void)topic_for;
+    for (;;) {
+        uint32_t now;
+        uint8_t i;
+        bool connected;
+
+        (void)tk_dly_tsk(20U);
+        now = hal_time_ms();
+        g_mqtt_state = robot_net_mqtt_state();
+        connected = robot_net_link_up() && (g_mqtt_state == ROBOT_MQTT_ONLINE);
+
+        if (connected) {
+            down_since_ms = now;
+            fault_clear(&g_faults, FAULT_NET_DOWN);
+        } else if ((now - down_since_ms) >= ROBOT_NET_DOWN_MS) {
+            fault_set(&g_faults, FAULT_NET_DOWN);
+        } else {
+            /* briefly down: not worth reporting yet */
+        }
+
+        /* Hand records over only while the session is online, so they age out in the queue instead of being
+         * sent late. */
+        for (i = 0U; connected && (i < ROBOT_NET_POP_PER_LOOP); i++) {
+            uint8_t buf[TEL_RECORD_MAX];
+            uint16_t len = 0U;
+
+            if (!tel_queue_pop(&g_tel_q, buf, &len, now)) {
+                break;
+            }
+            if (telemetry_robot_submit(buf, (unsigned int)len) != 0) {
+                g_tel_q.dropped_full++;         /* the session's inbox was full or busy: counted, not blocked on */
+            }
+        }
+        if (connected && (tel_queue_depth(&g_tel_q) < (TEL_QUEUE_DEPTH / 4U))) {
+            fault_clear(&g_faults, FAULT_TELEMETRY_DROP);
+        }
+        g_map_ack_len = 0U;                     /* the letter map cannot arrive over MQTT in this build */
+
+        if (connected && ((now - last_heartbeat_ms) >= ROBOT_HEARTBEAT_MS)) {
+            uint8_t buf[TEL_MAX_MESSAGE];
+            tel_heartbeat_t hb;
+            uint16_t n;
+
+            last_heartbeat_ms = now;
+            hb.uptime_s = now / 1000U;
+            hb.dropped = (uint16_t)g_tel_q.dropped_full;
+            hb.reconnects = 0U;
+            hb.queue_depth = tel_queue_depth(&g_tel_q);
+            hb.net_state = (uint8_t)g_mqtt_state;
+            n = tel_encode_heartbeat(&hb, buf, sizeof(buf));
+            (void)telemetry_robot_submit(buf, (unsigned int)n);
+        }
+    }
+}
+#else   /* no radio, or the application's own MQTT client */
 static void net_task(INT stacd, void *exinf)
 {
     static mqtt_client_t client;
@@ -1301,6 +1375,7 @@ static void net_task(INT stacd, void *exinf)
         }
     }
 }
+#endif  /* TM_WIFI_MQTT */
 
 /* ---- Diagnostics task --------------------------------------------------------------- */
 
@@ -1490,6 +1565,11 @@ ER robot_start(void)
     ER err;
 
     hal_init();
+#if TM_WIFI_MQTT
+    if (telemetry_rtos_boot_init() == 0) {      /* the inbox mutex, before any producer or radio task runs */
+        return E_SYS;
+    }
+#endif
     fault_mask_init(&g_faults);
     tel_queue_init(&g_tel_q);
     g_obstacle_share.updated_ms = 0U;

@@ -9,6 +9,9 @@
 #include "cyw43.h"
 #include "cyw43_country.h"
 #include "cyw43_utk.h"
+#if TM_WIFI_MQTT
+#include "mqtt_lwip.h"
+#endif
 
 #if TM_WIFI_NETIF
 #include "lwip/init.h"
@@ -31,9 +34,6 @@
 #if TM_WIFI_STATIC || TM_WIFI_DHCP
 #include "lwip_utk_ipv4.h"
 #endif
-#if TM_WIFI_MQTT
-#include "lwip_utk_link.h"
-#endif
 #if TM_WIFI_STATIC
 #include "network_config.h"
 #endif
@@ -42,7 +42,6 @@
 /* Bounded so a reader can never wedge if the writer is starved; an exhausted
  * budget returns the last copy and is visible through status_retries. */
 #define CYW43_STATUS_READ_ATTEMPTS 16
-#define CYW43_JOIN_TIMEOUT_US 30000000ULL
 #define CYW43_DHCP_TIMEOUT_US 30000000ULL
 #define CYW43_DNS_TIMEOUT_US  30000000ULL
 
@@ -65,6 +64,19 @@ extern volatile uint32_t cyw43_utk_poll_requested;
 extern int32_t tk_dly_tsk(uint32_t delay);
 extern void mp_memory_barrir(void);
 extern uint64_t time_us_64(void);
+#if TM_WIFI_MQTT
+#if TM_CONSOLE_USB_CDC
+extern volatile uint32_t tm_usb_irq_count;
+extern volatile uint32_t tm_usb_service_count;
+extern volatile uint32_t tm_usb_event_count;
+extern uint32_t tm_usb_state(void);
+#else
+#define tm_usb_irq_count 0U
+#define tm_usb_service_count 0U
+#define tm_usb_event_count 0U
+static uint32_t tm_usb_state(void) { return 0U; }
+#endif
+#endif
 
 /* Seqlock guarding radio_status.  The radio-owner task publishes field by
  * field on processor 1 while the qualification harness reads the whole
@@ -82,7 +94,7 @@ static T_CYW43_UTK_STATUS radio_status = {
     .link_status = CYW43_LINK_DOWN,
     .link_rssi = -32768,
     .dhcp_enabled = TM_WIFI_DHCP,
-    .dhcp_result = -5,
+    .dhcp_result = ERR_INPROGRESS,
     .dns_enabled = TM_WIFI_DNS,
     .dns_request_result = -5,
     .dns_result = -3,
@@ -137,6 +149,63 @@ static void update_netif_status(void)
         radio_status.netif_mac[i] = netif->hwaddr[i];
     }
     radio_status.link_up = radio_status.netif_link_up;
+}
+#endif
+
+#if TM_WIFI_MQTT
+static void update_mqtt_status(void)
+{
+    T_MQTT_LWIP_STATUS status;
+
+    mqtt_lwip_get_status(&status);
+    radio_status.mqtt_initialized = status.initialized;
+    radio_status.mqtt_state = status.state;
+    radio_status.mqtt_tcp_active = status.tcp_active;
+    radio_status.mqtt_connects_started = status.connects_started;
+    radio_status.mqtt_sessions_online = status.sessions_online;
+    radio_status.mqtt_session_failures = status.session_failures;
+    radio_status.mqtt_poll_calls = status.poll_calls;
+    radio_status.mqtt_last_poll_ms = status.last_poll_ms;
+    radio_status.mqtt_max_poll_gap_ms = status.max_poll_gap_ms;
+    radio_status.mqtt_owner_calls = status.owner_calls;
+    radio_status.mqtt_owner_last_ms = status.owner_last_ms;
+    radio_status.mqtt_owner_max_gap_ms = status.owner_max_gap_ms;
+    radio_status.mqtt_last_tx_ms = status.last_tx_ms;
+    radio_status.mqtt_ping_attempts = status.ping_attempts;
+    radio_status.mqtt_pings_queued = status.pings_queued;
+    radio_status.mqtt_ping_responses = status.ping_responses;
+    radio_status.mqtt_waiting_pingqueue = status.waiting_pingqueue;
+    radio_status.mqtt_ping_queue_timeouts = status.ping_queue_timeouts;
+    radio_status.mqtt_waiting_pingresp = status.waiting_pingresp;
+    radio_status.mqtt_tcp_write_calls = status.tcp_write_calls;
+    radio_status.mqtt_tcp_write_failures = status.tcp_write_failures;
+    radio_status.mqtt_tcp_write_fatal_errors = status.tcp_write_fatal_errors;
+    radio_status.mqtt_tcp_output_failures = status.tcp_output_failures;
+    radio_status.mqtt_tcp_output_pending = status.tcp_output_pending;
+    radio_status.mqtt_tcp_output_retries = status.tcp_output_retries;
+    radio_status.mqtt_tcp_output_timeouts = status.tcp_output_timeouts;
+    radio_status.mqtt_tcp_sent_callbacks = status.tcp_sent_callbacks;
+    radio_status.mqtt_tcp_acked_bytes = status.tcp_acked_bytes;
+    radio_status.mqtt_last_tcp_ack_ms = status.last_tcp_ack_ms;
+    radio_status.mqtt_last_tcp_write_result = status.last_tcp_write_result;
+    radio_status.mqtt_last_tcp_output_result = status.last_tcp_output_result;
+    radio_status.mqtt_tcp_errors = status.tcp_errors;
+    radio_status.mqtt_last_tcp_error = status.last_tcp_error;
+    radio_status.mqtt_disconnect_callbacks = status.disconnect_callbacks;
+    radio_status.mqtt_diagnostic_publishes = status.diagnostic_publishes;
+    radio_status.mqtt_diagnostic_publish_failures =
+            status.diagnostic_publish_failures;
+    radio_status.mqtt_boot_nonce = status.boot_nonce;
+    radio_status.mqtt_reset_reason = status.reset_reason;
+    radio_status.mqtt_timer_tick_config = status.timer_tick_config;
+    radio_status.mqtt_usb_irq_count = status.usb_irq_count;
+    radio_status.mqtt_usb_service_count = status.usb_service_count;
+    radio_status.mqtt_usb_event_count = status.usb_event_count;
+    radio_status.mqtt_usb_link_state = status.usb_link_state;
+    radio_status.mqtt_wifi_link_changes = status.wifi_link_changes;
+    radio_status.mqtt_dhcp_changes = status.dhcp_changes;
+    radio_status.mqtt_last_wifi_change_ms = status.last_wifi_change_ms;
+    radio_status.mqtt_last_dhcp_change_ms = status.last_dhcp_change_ms;
 }
 #endif
 
@@ -284,11 +353,12 @@ static void update_bulk_status(void)
 #if TM_WIFI_DNS
 static void copy_ip4(uint8_t dst[4], const ip4_addr_t *src);
 static uint64_t dns_started_us;
+static uint32_t dns_generation;
 
 static void dns_found(const char *name, const ip_addr_t *address, void *arg)
 {
     (void)name;
-    (void)arg;
+    if((uint32_t)(uintptr_t)arg != dns_generation) return;
     if(radio_status.dns_complete) return;
 
     radio_status.dns_elapsed_ms =
@@ -315,7 +385,8 @@ static void update_dns_status(void)
         radio_status.dns_started = 1;
         dns_started_us = now;
         result = dns_gethostbyname(CYW43_UTK_DNS_TEST_HOSTNAME, &address,
-                                   dns_found, NULL);
+                                   dns_found,
+                                   (void *)(uintptr_t)dns_generation);
         radio_status.dns_request_result = result;
         if(result == ERR_OK) {
             copy_ip4(radio_status.dns_address, ip_2_ip4(&address));
@@ -381,50 +452,126 @@ static void copy_ip4(uint8_t dst[4], const ip4_addr_t *src)
     dst[3] = ip4_addr4(src);
 }
 
+static void clear_ip4(uint8_t dst[4])
+{
+    for(unsigned int i = 0; i < 4; i++) dst[i] = 0;
+}
+
+static void handle_dhcp_link_transition(struct netif *netif, uint32_t link_up)
+{
+    if(link_up) {
+        /* netif_set_link_up() already makes lwIP reboot/discover DHCP. */
+        return;
+    }
+
+    dhcp_started_us = 0;
+    dhcp_ipv4_adopted = 0;
+    radio_status.dhcp_started = 0;
+    radio_status.dhcp_complete = 0;
+    radio_status.dhcp_timed_out = 0;
+    radio_status.dhcp_result = ERR_INPROGRESS;
+    radio_status.dhcp_elapsed_ms = 0;
+    radio_status.dhcp_tries = 0;
+    radio_status.dhcp_gateway_available = 0;
+    radio_status.dhcp_dns_available = 0;
+    clear_ip4(radio_status.dhcp_address);
+    clear_ip4(radio_status.dhcp_netmask);
+    clear_ip4(radio_status.dhcp_gateway);
+    clear_ip4(radio_status.dhcp_dns);
+
+    /* The SDK changes only the link flag. Invalidate the old lease locally;
+     * lwIP retains the DHCP offer and handles INIT-REBOOT on the next link-up. */
+    netif_set_addr(netif, IP4_ADDR_ANY4, IP4_ADDR_ANY4, IP4_ADDR_ANY4);
+    dns_setserver(0, IP_ADDR_ANY);
+    lwip_utk_ipv4_reset(netif);
+
+#if TM_WIFI_DNS
+    /* lwIP has no public DNS cancellation API. Ignore any callback retained
+     * by the resolver from before this link loss. */
+    dns_generation++;
+    dns_started_us = 0;
+    radio_status.dns_started = 0;
+    radio_status.dns_complete = 0;
+    radio_status.dns_request_result = ERR_INPROGRESS;
+    radio_status.dns_result = ERR_INPROGRESS;
+    radio_status.dns_elapsed_ms = 0;
+    clear_ip4(radio_status.dns_address);
+#endif
+}
+
 static void update_dhcp_status(void)
 {
     struct netif *netif = &cyw43_state.netif[CYW43_ITF_STA];
     struct dhcp *dhcp = netif_dhcp_data(netif);
     const ip_addr_t *dns = dns_getserver(0);
+    const ip4_addr_t *address = netif_ip4_addr(netif);
+    const ip4_addr_t *netmask = netif_ip4_netmask(netif);
+    const ip4_addr_t *gateway = netif_ip4_gw(netif);
     uint64_t now = time_us_64();
+    uint32_t lease_valid;
 
-    radio_status.dhcp_started = (dhcp != NULL);
-    if(dhcp != NULL) radio_status.dhcp_tries = dhcp->tries;
+    radio_status.dhcp_started =
+            (dhcp != NULL) && radio_status.netif_link_up;
+    radio_status.dhcp_tries = radio_status.dhcp_started ? dhcp->tries : 0;
+
+    /* Refresh the mirror even after a lease was obtained so renewals and
+     * option changes cannot leave stale status values. Gateway and DNS are
+     * useful route/service information, but neither is part of lease validity. */
+    lease_valid = dhcp != NULL && dhcp_supplied_address(netif)
+               && radio_status.netif_link_up
+               && !ip4_addr_isany_val(*address)
+               && !ip4_addr_isany_val(*netmask);
+    if(lease_valid) {
+        copy_ip4(radio_status.dhcp_address, address);
+        copy_ip4(radio_status.dhcp_netmask, netmask);
+        copy_ip4(radio_status.dhcp_gateway, gateway);
+    } else {
+        clear_ip4(radio_status.dhcp_address);
+        clear_ip4(radio_status.dhcp_netmask);
+        clear_ip4(radio_status.dhcp_gateway);
+    }
+    radio_status.dhcp_gateway_available =
+            lease_valid && !ip4_addr_isany_val(*gateway);
+    if(lease_valid && dns != NULL) {
+        copy_ip4(radio_status.dhcp_dns, ip_2_ip4(dns));
+        radio_status.dhcp_dns_available =
+                !ip4_addr_isany_val(*ip_2_ip4(dns));
+    } else {
+        for(unsigned int i = 0; i < sizeof(radio_status.dhcp_dns); i++) {
+            radio_status.dhcp_dns[i] = 0;
+        }
+        radio_status.dhcp_dns_available = 0;
+    }
+
     if(radio_status.netif_link_up && dhcp_started_us == 0) {
         dhcp_started_us = now;
     }
-    if(dhcp_started_us != 0 && !radio_status.dhcp_complete) {
+    if(dhcp_started_us != 0) {
         radio_status.dhcp_elapsed_ms =
                 (uint32_t)((now - dhcp_started_us) / 1000ULL);
     }
 
-    if(!radio_status.dhcp_complete && dhcp_supplied_address(netif)) {
-        copy_ip4(radio_status.dhcp_address, netif_ip4_addr(netif));
-        copy_ip4(radio_status.dhcp_netmask, netif_ip4_netmask(netif));
-        copy_ip4(radio_status.dhcp_gateway, netif_ip4_gw(netif));
-        if(dns != NULL) {
-            copy_ip4(radio_status.dhcp_dns, ip_2_ip4(dns));
-        }
-        if(!ip4_addr_isany_val(*netif_ip4_addr(netif))
-           && !ip4_addr_isany_val(*netif_ip4_netmask(netif))
-           && !ip4_addr_isany_val(*netif_ip4_gw(netif))
-           && dns != NULL && !ip4_addr_isany_val(*ip_2_ip4(dns))) {
-            if(!dhcp_ipv4_adopted) {
-                radio_status.ipv4_config_result =
-                        lwip_utk_ipv4_adopt_netif(netif);
+    if(lease_valid) {
+        /* The optional ping qualification still needs a route. Do not let
+         * that additional requirement hold DHCP success hostage. */
+        if(radio_status.dhcp_gateway_available && !dhcp_ipv4_adopted) {
+            radio_status.ipv4_config_result =
+                    lwip_utk_ipv4_adopt_netif(netif);
+            if(radio_status.ipv4_config_result == ERR_OK) {
                 dhcp_ipv4_adopted = 1;
             }
-            radio_status.dhcp_result = ERR_OK;
-            mp_memory_barrir();
-            radio_status.dhcp_complete = 1;
         }
-    }
-
-    if(!radio_status.dhcp_complete && dhcp_started_us != 0
-       && now - dhcp_started_us >= CYW43_DHCP_TIMEOUT_US) {
-        radio_status.dhcp_result = ERR_TIMEOUT;
+        radio_status.dhcp_result = ERR_OK;
+        radio_status.dhcp_timed_out = 0;
         mp_memory_barrir();
         radio_status.dhcp_complete = 1;
+    } else {
+        radio_status.dhcp_complete = 0;
+        radio_status.dhcp_timed_out =
+                dhcp_started_us != 0
+             && now - dhcp_started_us >= CYW43_DHCP_TIMEOUT_US;
+        radio_status.dhcp_result = radio_status.dhcp_timed_out
+                                 ? ERR_TIMEOUT : ERR_INPROGRESS;
     }
 }
 #endif
@@ -448,18 +595,101 @@ static int scan_result(void *env, const cyw43_ev_scan_result_t *result)
     return 0;
 }
 
+#if TM_WIFI_JOIN
+static void publish_join_status(const T_CYW43_UTK_JOIN_POLICY *policy)
+{
+    radio_status.join_state = policy->state;
+    radio_status.join_started = policy->started;
+    radio_status.join_complete = policy->complete;
+    radio_status.join_result = policy->result;
+    radio_status.join_elapsed_ms = policy->elapsed_ms;
+    radio_status.join_attempts = policy->attempts;
+    radio_status.join_failures = policy->failures;
+    radio_status.join_successes = policy->successes;
+    radio_status.join_recoveries = policy->recoveries;
+    radio_status.link_losses = policy->link_losses;
+    radio_status.join_no_ip_rejoins = policy->no_ip_rejoins;
+    radio_status.join_retry_delay_ms = policy->retry_delay_ms;
+    radio_status.join_retry_remaining_ms = policy->retry_remaining_ms;
+}
+
+static void refresh_join_link_details(void)
+{
+    (void)cyw43_wifi_get_bssid(&cyw43_state, radio_status.bssid);
+    (void)cyw43_wifi_get_rssi(&cyw43_state,
+                              (int32_t *)&radio_status.link_rssi);
+}
+
+static void issue_join_request(T_CYW43_UTK_JOIN_POLICY *policy, uint64_t now)
+{
+    int32_t result;
+
+    result = cyw43_wifi_join(&cyw43_state,
+                             sizeof(wifi_ssid) - 1, wifi_ssid,
+                             sizeof(wifi_password) - 1, wifi_password,
+                             UTK_WIFI_AUTH, NULL, CYW43_CHANNEL_NONE);
+    radio_status.join_request_result = result;
+    radio_status.link_status = cyw43_wifi_link_status(
+            &cyw43_state, CYW43_ITF_STA);
+    cyw43_utk_join_policy_request_result(policy, now, result);
+}
+
+static void start_join_attempt(T_CYW43_UTK_JOIN_POLICY *policy, uint64_t now)
+{
+    cyw43_utk_join_policy_begin(policy, now);
+    issue_join_request(policy, now);
+    publish_join_status(policy);
+}
+
+static void update_join_state(T_CYW43_UTK_JOIN_POLICY *policy)
+{
+    uint64_t now = time_us_64();
+    int32_t link = cyw43_wifi_link_status(&cyw43_state, CYW43_ITF_STA);
+    T_CYW43_UTK_JOIN_ACTION action;
+#if TM_WIFI_DHCP
+    const uint32_t have_ip = radio_status.dhcp_complete;
+#else
+    const uint32_t have_ip = 1U;        /* a static address needs no wait */
+#endif
+
+    radio_status.link_status = link;
+    action = cyw43_utk_join_policy_update_ip(
+            policy, now, radio_status.link_up, have_ip, link,
+            -CYW43_ETIMEDOUT);
+    if(action == CYW43_UTK_JOIN_ACTION_START) {
+        issue_join_request(policy, now);
+    } else if(action == CYW43_UTK_JOIN_ACTION_CONNECTED) {
+        refresh_join_link_details();
+    } else if(action == CYW43_UTK_JOIN_ACTION_LEAVE) {
+        /* The policy waits for the asynchronous link-down event before it
+         * permits a new join request. */
+        (void)cyw43_wifi_leave(&cyw43_state, CYW43_ITF_STA);
+    } else {
+        /* nothing to do */
+    }
+    publish_join_status(policy);
+}
+#endif
+
 void cyw43_utk_task(int32_t stacd, void *exinf)
 {
     cyw43_wifi_scan_options_t options = {0};
     int32_t result;
     bool was_scanning;
+#if TM_WIFI_NETIF
+    uint32_t link_was_up;
+#endif
 #if TM_WIFI_JOIN
-    uint64_t join_started_us = 0;
+    T_CYW43_UTK_JOIN_POLICY join_policy;
 #endif
 
     (void)stacd;
     (void)exinf;
     radio_status.owner_prc = (uint32_t)CYW43_THIS_PRC();
+#if TM_WIFI_JOIN
+    cyw43_utk_join_policy_init(&join_policy, radio_status.join_result);
+    publish_join_status(&join_policy);
+#endif
 
 #if TM_WIFI_NETIF
     lwip_init();
@@ -512,11 +742,29 @@ void cyw43_utk_task(int32_t stacd, void *exinf)
         if(cyw43_poll != NULL) cyw43_poll();
         status_publish_begin();
 #if TM_WIFI_NETIF
+        link_was_up = radio_status.netif_link_up;
         sys_check_timeouts();
         update_netif_status();
 #endif
 #if TM_WIFI_DHCP
+        if(link_was_up != radio_status.netif_link_up) {
+            handle_dhcp_link_transition(
+                    &cyw43_state.netif[CYW43_ITF_STA],
+                    radio_status.netif_link_up);
+        }
         update_dhcp_status();
+#endif
+#if TM_WIFI_MQTT
+        mqtt_lwip_observe_owner(radio_status.link_up,
+                                radio_status.dhcp_complete,
+                                radio_status.join_attempts,
+                                radio_status.join_recoveries,
+                                tm_usb_irq_count,
+                                tm_usb_service_count,
+                                tm_usb_event_count,
+                                tm_usb_state());
+        mqtt_lwip_poll(&cyw43_state.netif[CYW43_ITF_STA]);
+        update_mqtt_status();
 #endif
 #if TM_WIFI_DNS
         update_dns_status();
@@ -549,61 +797,17 @@ void cyw43_utk_task(int32_t stacd, void *exinf)
         lwip_utk_ipv4_poll(&cyw43_state.netif[CYW43_ITF_STA]);
         update_ipv4_status();
 #endif
-#if TM_WIFI_MQTT
-        /* The application's TCP link (robot telemetry); it idles until an
-         * application task asks for a connection. */
-        lwip_utk_link_poll(&cyw43_state.netif[CYW43_ITF_STA]);
-#endif
         radio_status.poll_count++;
         radio_status.scan_active = cyw43_wifi_scan_active(&cyw43_state);
         if(was_scanning && !radio_status.scan_active) {
             mp_memory_barrir();
             radio_status.scan_complete = 1;
 #if TM_WIFI_JOIN
-            radio_status.join_started = 1;
-            radio_status.join_complete = 0;
-            radio_status.link_up = 0;
-            radio_status.link_status = CYW43_LINK_DOWN;
-            join_started_us = time_us_64();
-            result = cyw43_wifi_join(&cyw43_state,
-                                     sizeof(wifi_ssid) - 1, wifi_ssid,
-                                     sizeof(wifi_password) - 1, wifi_password,
-                                     UTK_WIFI_AUTH, NULL,
-                                     CYW43_CHANNEL_NONE);
-            radio_status.join_request_result = result;
-            if(result != 0) {
-                radio_status.join_result = result;
-                radio_status.join_complete = 1;
-            }
+            start_join_attempt(&join_policy, time_us_64());
 #endif
         }
 #if TM_WIFI_JOIN
-        if(radio_status.join_started && !radio_status.join_complete) {
-            uint64_t now = time_us_64();
-            int32_t link = cyw43_wifi_link_status(&cyw43_state,
-                                                  CYW43_ITF_STA);
-
-            radio_status.join_elapsed_ms = (uint32_t)
-                    ((now - join_started_us) / 1000ULL);
-            radio_status.link_status = link;
-            if(radio_status.link_up) {
-                (void)cyw43_wifi_get_bssid(&cyw43_state,
-                                           radio_status.bssid);
-                (void)cyw43_wifi_get_rssi(&cyw43_state,
-                                          (int32_t *)&radio_status.link_rssi);
-                radio_status.join_result = 0;
-                mp_memory_barrir();
-                radio_status.join_complete = 1;
-            } else if(link < CYW43_LINK_DOWN) {
-                radio_status.join_result = link;
-                mp_memory_barrir();
-                radio_status.join_complete = 1;
-            } else if(now - join_started_us >= CYW43_JOIN_TIMEOUT_US) {
-                radio_status.join_result = -CYW43_ETIMEDOUT;
-                mp_memory_barrir();
-                radio_status.join_complete = 1;
-            }
-        }
+        update_join_state(&join_policy);
 #endif
         status_publish_end();
         cyw43_utk_poll_requested = 0;

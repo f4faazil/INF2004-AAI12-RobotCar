@@ -10,8 +10,14 @@
 
 #if TM_WIFI_MQTT
 #include "cyw43_utk.h"
-#include "lwip_utk_link.h"
 
+/*
+ * With WIFI_MQTT=1 the MQTT session lives inside the radio owner task (lib/libnet/lwip/mqtt_lwip.c, with the
+ * WiFi/DHCP recovery and diagnostics).  The robot does not run its own client: net_task in robot_tasks.c hands
+ * its telemetry records to that session with telemetry_robot_submit().  The application-level MQTT client
+ * (mqtt_client.c) and its TCP link (lwip_utk_link.c) are therefore not used in this build, and this transport
+ * only reports failure.
+ */
 bool robot_net_link_up(void)
 {
     T_CYW43_UTK_STATUS st;
@@ -20,28 +26,39 @@ bool robot_net_link_up(void)
     return (st.link_up != 0U) && (st.dhcp_complete != 0U);
 }
 
+uint32_t robot_net_mqtt_state(void)
+{
+    T_CYW43_UTK_STATUS st;
+
+    cyw43_utk_get_status(&st);
+    return (uint32_t)st.mqtt_state;
+}
+
 static int net_connect(void *ctx)
 {
     (void)ctx;
-    return lwip_utk_link_connect();
+    return -1;
 }
 
 static int net_send(void *ctx, const uint8_t *data, uint16_t n)
 {
     (void)ctx;
-    return lwip_utk_link_send(data, n);
+    (void)data;
+    (void)n;
+    return -1;
 }
 
 static int net_recv(void *ctx, uint8_t *buf, uint16_t cap)
 {
     (void)ctx;
-    return lwip_utk_link_recv(buf, cap);
+    (void)buf;
+    (void)cap;
+    return -1;
 }
 
 static void net_close(void *ctx)
 {
     (void)ctx;
-    lwip_utk_link_close();
 }
 
 #else   /* no radio in this build */
@@ -49,6 +66,11 @@ static void net_close(void *ctx)
 bool robot_net_link_up(void)
 {
     return false;
+}
+
+uint32_t robot_net_mqtt_state(void)
+{
+    return 0U;
 }
 
 static int net_connect(void *ctx)

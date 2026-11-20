@@ -1,0 +1,13 @@
+CC ?= cc
+CFLAGS = -std=c11 -O2 -Wall -Wextra -Werror -pedantic
+INCLUDES = -I../kernel/sysdepend/pico_rp2040
+
+.PHONY: test clean
+test: test_rp2040_timer_tick
+	./test_rp2040_timer_tick
+
+test_rp2040_timer_tick: test_rp2040_timer_tick.c ../kernel/sysdepend/pico_rp2040/timer_tick_policy.h
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ test_rp2040_timer_tick.c
+
+clean:
+	rm -f test_rp2040_timer_tick
