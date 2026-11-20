@@ -73,15 +73,18 @@ typedef struct {
     int16_t  cruise_mm_s;
     int16_t  curve_mm_s;                /* slowest line-following speed */
     int16_t  hump_mm_s;
-    int16_t  creep_mm_s;                /* reacquiring a line */
+    int16_t  creep_mm_s;                /* reacquiring / recovering a line */
+    int16_t  approach_mm_s;             /* top speed while a barcode waits for its junction (0 = off) */
     int16_t  recover_advance_mm;        /* wheel axle to the IR sensor row, less half the line: once the
                                            line is found the car drives this far so the axle is over the
                                            line before it turns to face along it.  0 = turn at once */
     int16_t  recover_mm_s;              /* returning to the line after a bypass: the whole sideways leg
                                            (up to 0.5 m) must be covered inside recovery_time_limit_ms */
     int16_t  junction_advance_mm;       /* sensor bar to wheel axle, less the crossing offset */
-    int16_t  turn_deg;                  /* a left/right instruction */
-    int16_t  uturn_deg;
+    int16_t  turn_deg;                  /* a left/right instruction: + left; sets the side only */
+    int16_t  uturn_deg;                 /* + left, - right; sets the side only */
+    int16_t  turn_spin_mm_s;            /* wheel speed while spinning on to the new line */
+    uint32_t turn_spin_timeout_ms;      /* no line found while spinning: search instead */
     int16_t  cal_sweep_deg[3];
     int16_t  search_sweep_deg[4];
     uint8_t  search_sweep_count;
@@ -185,6 +188,7 @@ typedef struct {
     uint32_t         cmd_timeout_ms;
 
     int16_t          pending_turn_deg;
+    uint8_t          turn_lines;        /* lines still to meet while spinning at a junction */
     uint16_t         last_executed_id;
     bool             have_executed;
 

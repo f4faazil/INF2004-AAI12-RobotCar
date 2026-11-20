@@ -43,6 +43,18 @@
 #define CAL_SWEEPING        (0U)
 #define CAL_WAITING         (1U)
 
+/*
+ * JUNCTION_TURN phases.  The car spins on the spot towards the turn and counts
+ * lines with the tracking pair, so the turn ends on a line whatever the wheel
+ * calibration.  A line counts once the pair has first left every line (LEAVING)
+ * and then has both sensors on one (LOOKING).  On a crossroads a left or right
+ * turn stops on the first line it meets; a U-turn passes that branch and stops
+ * on the second, the line it came in on.
+ */
+#define SPIN_LEAVING        (0U)
+#define SPIN_LOOKING        (1U)
+#define UTURN_MIN_DEG       (135)   /* a pending turn at least this big is a U-turn */
+
 bool vehicle_is_running(vehicle_state_t state)
 {
     return (state >= VC_CALIBRATE) && (state <= VC_RECOVER_LINE);
@@ -437,6 +449,20 @@ static void follow_drive(vehicle_t *vc, vehicle_out_t *out, const vehicle_in_t *
         speed = vc->cfg.curve_mm_s;             /* no position: slow and straight */
         diff = 0;
     }
+    /* While a barcode is being read, hold the speed: the decoder reads bar
+     * widths, and a speed change in the middle of a symbol distorts them. */
+    if ((in->line.barcode_lanes_active != 0U) && (vc->cmd.type == MOTION_CMD_DRIVE) &&
+        (vc->cmd.speed_mm_s > 0)) {
+        speed = vc->cmd.speed_mm_s;
+    }
+    /* A barcode has been read and its junction is still ahead: slow down, so
+     * the car spends longer on the junction's arm and a short or patchy black
+     * reading is caught.  Reading is over by now (the symbol is decoded), so the
+     * barcode itself is not disturbed. */
+    if ((in->instruction_valid || in->line.junction_armed) && (vc->cfg.approach_mm_s > 0) &&
+        (speed > vc->cfg.approach_mm_s)) {
+        speed = vc->cfg.approach_mm_s;
+    }
     if (in->hump_in_progress && (speed > vc->cfg.hump_mm_s)) {
         speed = vc->cfg.hump_mm_s;
     }
@@ -569,8 +595,13 @@ static void run_state(vehicle_t *vc, const vehicle_in_t *in, vehicle_out_t *out,
     case VC_JUNCTION_ADVANCE:
         if (cmd_done(vc, in)) {
             if (vc->pending_turn_deg != 0) {
-                start_cmd(vc, out, now, MOTION_CMD_TURN, 0, 0, 0, vc->pending_turn_deg);
+                /* spin on the spot: right minus left wheel, + turns left */
+                const int16_t spin = (int16_t)(2 * vc->cfg.turn_spin_mm_s);
+
+                start_cmd(vc, out, now, MOTION_CMD_DRIVE, 0,
+                          (vc->pending_turn_deg > 0) ? spin : (int16_t)(-spin), 0, 0);
                 enter(vc, out, VC_JUNCTION_TURN, now);
+                vc->turn_lines = (abs32(vc->pending_turn_deg) >= UTURN_MIN_DEG) ? 2U : 1U;
             } else {
                 enter_follow(vc, out, now);
             }
@@ -582,12 +613,23 @@ static void run_state(vehicle_t *vc, const vehicle_in_t *in, vehicle_out_t *out,
         break;
 
     case VC_JUNCTION_TURN:
-        if (cmd_done(vc, in)) {
-            vc->start_distance_mm = in->motion.distance_mm;
-            start_cmd(vc, out, now, MOTION_CMD_DRIVE, vc->cfg.creep_mm_s, 0, 0, 0);
-            enter(vc, out, VC_REACQUIRE, now);
-        } else if (cmd_timed_out(vc, now)) {
-            enter_fault(vc, out, now, FAULT_MOTION);
+        if ((now - vc->state_since_ms) > vc->cfg.turn_spin_timeout_ms) {
+            enter_search(vc, out, now);             /* spun without finding the line */
+        } else if (vc->phase == SPIN_LEAVING) {
+            if (!in->line.position_valid) {
+                vc->phase = SPIN_LOOKING;           /* clear of every line */
+            }
+            refresh_cmd(vc, out);
+        } else if (in->line.pair_on_line) {
+            vc->turn_lines--;
+            if (vc->turn_lines == 0U) {
+                vc->start_distance_mm = in->motion.distance_mm;
+                start_cmd(vc, out, now, MOTION_CMD_DRIVE, vc->cfg.creep_mm_s, 0, 0, 0);
+                enter(vc, out, VC_REACQUIRE, now);
+            } else {
+                vc->phase = SPIN_LEAVING;           /* a branch to pass: keep spinning */
+                refresh_cmd(vc, out);
+            }
         } else {
             refresh_cmd(vc, out);
         }

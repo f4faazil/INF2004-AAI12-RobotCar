@@ -29,6 +29,7 @@
 #include <tk/tkernel.h>
 #include <tm/tmonitor.h>
 
+#include "barcode_map.h"
 #include "fault_mask.h"
 #include "hal_rp2040.h"
 #include "imu.h"
@@ -142,6 +143,14 @@ static uint32_t g_cmd_overwritten;
 
 static volatile uint8_t g_vstate = (uint8_t)VC_BOOT;
 static volatile uint8_t g_remote_bits;
+
+/* The letter -> movement mapping: parsed by the Net task from MQTT, copied by the Line task. */
+static nav_map_entry_t g_map_stage[BMAP_MAX];
+static volatile uint8_t g_map_stage_len;
+static volatile uint32_t g_map_seq;             /* bumped for every accepted mapping */
+static volatile uint32_t g_map_applied;         /* mappings the Line task has applied */
+static volatile uint8_t g_map_len;              /* entries in the mapping now in use */
+static volatile uint32_t g_map_rejected;        /* mapping messages refused */
 static volatile uint8_t g_remote_req[4];        /* req_id + 1 per VC_REMOTE_* bit; 0 = none */
 static uint8_t g_event_seq;
 
@@ -149,6 +158,28 @@ static volatile uint32_t g_max_motion_us;
 static volatile uint32_t g_max_line_us;
 static volatile uint32_t g_max_vehicle_us;
 static volatile uint32_t g_ir_frames;
+static volatile uint32_t g_bar_decoded;         /* barcodes stored as instructions */
+static volatile uint32_t g_bar_rejected;        /* barcodes decoded but not in the map */
+static volatile uint32_t g_bar_tries;           /* barcode attempts (5+ runs) that ended undecoded */
+#define TRACE_LEN (64U)
+static volatile int32_t  g_tr_pos[TRACE_LEN];   /* where along the track (mean encoder count) */
+static volatile char     g_tr_kind[TRACE_LEN];  /* B/W: left sensor went black/white, J: junction, D: decoded */
+static volatile uint32_t g_tr_n;                /* entries ever added */
+
+static void trace_add(char kind, int32_t pos)
+{
+    g_tr_kind[g_tr_n % TRACE_LEN] = kind;
+    g_tr_pos[g_tr_n % TRACE_LEN] = pos;
+    g_tr_n++;
+}
+
+static volatile uint16_t g_bar_log[NAV_RUN_LOG];   /* run widths (ms) of the last failed attempt */
+static volatile uint32_t g_bar_tryruns;
+static volatile uint32_t g_bars_done;           /* barcodes that went by whole (15 bars or decoded) */
+static volatile uint32_t g_bars_now;            /* bars counted so far in the current pass (left lane) */         /* runs seen in the last such attempt (a full A is 29) */
+static volatile uint32_t g_junctions_line;      /* junctions reported by the Line task */
+static volatile uint32_t g_junctions_seen;      /* ... and seen by the Vehicle task */
+static volatile uint32_t g_nav_executed;        /* instructions executed at a junction */
 static volatile uint32_t g_mqtt_state;
 static volatile uint32_t g_mqtt_reconnects;
 
@@ -339,6 +370,12 @@ static void line_task(INT stacd, void *exinf)
     static line_nav_t nav;
     static uint32_t overflows_seen;
     static uint32_t rejected_until_ms;
+    static uint32_t map_applied_seq;
+    static int32_t trace_prev_travel;
+    static uint32_t trace_prev_ms;
+    static bool trace_left_black;
+    int32_t travel_now = 0;
+    uint32_t travel_now_ms = 0U;
     line_nav_out_t out;
     line_request_t req;
     imu_share_t imu;
@@ -348,6 +385,17 @@ static void line_task(INT stacd, void *exinf)
     (void)stacd;
     (void)exinf;
     line_nav_init(&nav, &ROBOT_LINE_NAV_CFG);
+    if (sizeof(ROBOT_BENCH_MAP) > 1U) {
+        /* bench only: a mapping from the build, until one arrives over MQTT */
+        nav_map_entry_t bench[BMAP_MAX];
+        uint8_t bench_n = 0U;
+
+        if (bmap_parse((const uint8_t *)ROBOT_BENCH_MAP, (uint16_t)(sizeof(ROBOT_BENCH_MAP) - 1U),
+                       bench, &bench_n) == BMAP_OK) {
+            line_nav_set_map(&nav, bench, bench_n);
+            g_map_len = bench_n;
+        }
+    }
 
     for (;;) {
         uint32_t start;
@@ -382,19 +430,83 @@ static void line_task(INT stacd, void *exinf)
             robot_irq_restore(state);
         }
 
+        if (g_map_seq != map_applied_seq) {
+            nav_map_entry_t entries[BMAP_MAX];
+            uint8_t entry_count;
+            robot_irq_state_t state = robot_irq_save();
+
+            entry_count = g_map_stage_len;
+            for (uint8_t k = 0U; k < entry_count; k++) {
+                entries[k] = g_map_stage[k];
+            }
+            map_applied_seq = g_map_seq;
+            robot_irq_restore(state);
+            line_nav_set_map(&nav, entries, entry_count);
+            g_map_len = entry_count;
+            g_map_applied++;
+        }
+
         seen = hal_ir_overflows();
         if (seen != overflows_seen) {
             overflows_seen = seen;
             line_nav_note_overflow(&nav);       /* the barcode attempt in progress is void */
         }
+        {
+            /* bar widths are measured in distance travelled, not time: a car that is
+             * still accelerating, stuttering or stopped over a bar then reads the same */
+            encoder_snapshot_t enc_l;
+            encoder_snapshot_t enc_r;
+
+            hal_encoders_snapshot(&enc_l, &enc_r);
+            travel_now = (int32_t)(enc_l.count + enc_r.count);
+            travel_now_ms = hal_time_ms();
+            line_nav_set_travel(&nav, travel_now, travel_now_ms);
+        }
         while (hal_ir_pop(&frame)) {
             line_nav_push_frame(&nav, frame.adc, frame.ms);
             g_ir_frames++;
+            if (nav.ch_black[LINE_CHANNEL_LEFT] != trace_left_black) {
+                /* a flip of the left (barcode) sensor, placed along the track for the status dump */
+                const int32_t span = travel_now - trace_prev_travel;
+                const uint32_t win = travel_now_ms - trace_prev_ms;
+                int32_t at = trace_prev_travel;
+
+                trace_left_black = nav.ch_black[LINE_CHANNEL_LEFT];
+                if ((win > 0U) && (frame.ms >= trace_prev_ms) && (frame.ms <= travel_now_ms)) {
+                    at += (int32_t)(((int64_t)span * (int64_t)(frame.ms - trace_prev_ms)) / (int64_t)win);
+                }
+                trace_add(trace_left_black ? 'B' : 'W', at / 2);
+            }
         }
+        trace_prev_travel = travel_now;
+        trace_prev_ms = travel_now_ms;
 
         line_nav_set_hump(&nav, imu.in_progress, imu.updated_ms);
         motion_share_get(&motion);
         line_nav_step(&nav, hal_time_ms(), centre_speed(&motion), &out);
+        if (nav.attempt_count != g_bar_tries) {
+            for (uint8_t k = 0U; k < NAV_RUN_LOG; k++) {
+                g_bar_log[k] = nav.attempt_log[k];
+            }
+        }
+        if (nav.bars_done_count != g_bars_done) {
+            trace_add('F', travel_now / 2);     /* 15 bars counted (or decoded): the barcode is over */
+        }
+        g_bars_done = nav.bars_done_count;
+        g_bars_now = nav.lane[0].bar_count;
+        g_bar_tries = nav.attempt_count;
+        g_bar_tryruns = nav.last_attempt_runs;
+        if ((out.events & NAV_EVENT_BARCODE) != 0U) {
+            trace_add('D', travel_now / 2);
+            g_bar_decoded++;
+        }
+        if ((out.events & NAV_EVENT_BARCODE_REJECTED) != 0U) {
+            g_bar_rejected++;
+        }
+        if ((out.events & NAV_EVENT_JUNCTION) != 0U) {
+            trace_add('J', travel_now / 2);
+            g_junctions_line++;
+        }
 
         if ((out.events & NAV_EVENT_OVERFLOW) != 0U) {
             fault_set(&g_faults, FAULT_LINE_OVERFLOW);
@@ -423,7 +535,14 @@ static void line_task(INT stacd, void *exinf)
         {
             robot_irq_state_t state = robot_irq_save();
 
+            /* Events last one step: keep any the Vehicle task has not read yet,
+             * so a junction or barcode can never be overwritten unseen. */
+            const uint8_t unread_events = g_line_share.out.events;
+            const uint8_t unread_junction = g_line_share.out.junction_mask;
+
             g_line_share.out = out;
+            g_line_share.out.events |= unread_events;
+            g_line_share.out.junction_mask |= unread_junction;
             g_line_share.instruction_valid =
                 line_nav_peek_instruction(&nav, hal_time_ms(), &g_line_share.instruction);
             g_line_share.rejected_recent = (int32_t)(rejected_until_ms - hal_time_ms()) > 0;
@@ -520,7 +639,7 @@ static void vehicle_task(INT stacd, void *exinf)
         uint8_t remote;
         uint8_t i;
 
-        wait_tick(HAL_TICK_CONTROL);
+        wait_tick(HAL_TICK_VEHICLE);
         start = hal_time_us();
         now = hal_time_ms();
 
@@ -528,6 +647,8 @@ static void vehicle_task(INT stacd, void *exinf)
             robot_irq_state_t state = robot_irq_save();
 
             line = g_line_share;
+            g_line_share.out.events = 0U;           /* read: the Line task may report new ones */
+            g_line_share.out.junction_mask = 0U;
             obs = g_obstacle_share;
             imu = g_imu_share;
             motion = g_motion_share;
@@ -557,7 +678,13 @@ static void vehicle_task(INT stacd, void *exinf)
         in.hump_in_progress = imu.in_progress;
         in.faults = fault_read(&g_faults);
 
+        if ((in.line.events & NAV_EVENT_JUNCTION) != 0U) {
+            g_junctions_seen++;
+        }
         vehicle_step(&vc, &in, &out);
+        if (out.consume_instruction) {
+            g_nav_executed++;
+        }
 
         if (out.cmd.type != MOTION_CMD_NONE) {
             cmd_post(&out.cmd);
@@ -977,9 +1104,69 @@ static void imu_task(INT stacd, void *exinf)
 #define TOPIC_ACK           ROBOT_MQTT_BASE "/ack"
 #define TOPIC_STATUS        ROBOT_MQTT_BASE "/status"
 #define TOPIC_CMD           ROBOT_MQTT_BASE "/cmd"
+#define TOPIC_MAP           ROBOT_MQTT_BASE "/map"          /* PC -> car: letter -> movement mapping */
+#define TOPIC_MAP_ACK       ROBOT_MQTT_BASE "/map_ack"      /* car -> PC: "OK n=26" or "ERR ..." */
 
 /* An incoming command: apply the policy, latch the request for the Vehicle
  * Controller, and acknowledge receipt (completion is acknowledged later). */
+static bool topic_is(const char *topic, const char *expect)
+{
+    while ((*topic != '\0') && (*expect != '\0') && (*topic == *expect)) {
+        topic++;
+        expect++;
+    }
+    return (*topic == '\0') && (*expect == '\0');
+}
+
+/* The acknowledgement text for the last mapping message, published by the Net loop. */
+static char g_map_ack[24];
+static uint8_t g_map_ack_len;
+
+static void map_ack(const char *text, uint8_t count, bool with_count)
+{
+    uint8_t n = 0U;
+
+    while ((text[n] != '\0') && (n < 12U)) {
+        g_map_ack[n] = text[n];
+        n++;
+    }
+    if (with_count) {
+        g_map_ack[n++] = ' ';
+        g_map_ack[n++] = 'n';
+        g_map_ack[n++] = '=';
+        if (count >= 10U) {
+            g_map_ack[n++] = (char)('0' + (count / 10U));
+        }
+        g_map_ack[n++] = (char)('0' + (count % 10U));
+    }
+    g_map_ack_len = n;
+}
+
+/* A mapping from the PC.  Applied whole or not at all; the old one is kept on any error. */
+static void on_map(const uint8_t *payload, uint16_t len)
+{
+    nav_map_entry_t parsed[BMAP_MAX];
+    uint8_t count = 0U;
+    bmap_result_t r = bmap_parse(payload, len, parsed, &count);
+
+    if (r != BMAP_OK) {
+        g_map_rejected++;
+        map_ack(bmap_result_text(r), 0U, false);
+        return;
+    }
+    {
+        robot_irq_state_t state = robot_irq_save();
+
+        for (uint8_t k = 0U; k < count; k++) {
+            g_map_stage[k] = parsed[k];
+        }
+        g_map_stage_len = count;
+        g_map_seq++;
+        robot_irq_restore(state);
+    }
+    map_ack("OK", count, true);
+}
+
 static void on_command(void *ctx, const char *topic, const uint8_t *payload, uint16_t len)
 {
     tel_command_t c;
@@ -987,7 +1174,10 @@ static void on_command(void *ctx, const char *topic, const uint8_t *payload, uin
     uint8_t result;
 
     (void)ctx;
-    (void)topic;
+    if (topic_is(topic, TOPIC_MAP)) {
+        on_map(payload, len);
+        return;
+    }
     if (!tel_decode_command(payload, len, &c)) {
         return;
     }
@@ -1031,6 +1221,7 @@ static void net_task(INT stacd, void *exinf)
     cfg.password = NULL;
     cfg.status_topic = TOPIC_STATUS;
     cfg.command_topic = TOPIC_CMD;
+    cfg.extra_topic = TOPIC_MAP;
     cfg.keepalive_s = 30U;
     cfg.connect_timeout_ms = 5000U;
     cfg.backoff_initial_ms = 1000U;
@@ -1075,6 +1266,13 @@ static void net_task(INT stacd, void *exinf)
         }
         if (connected && (tel_queue_depth(&g_tel_q) < (TEL_QUEUE_DEPTH / 4U))) {
             fault_clear(&g_faults, FAULT_TELEMETRY_DROP);
+        }
+
+        if (connected && (g_map_ack_len != 0U)) {
+            if (mqtt_client_publish(&client, TOPIC_MAP_ACK, (const uint8_t *)g_map_ack,
+                                    g_map_ack_len, false)) {
+                g_map_ack_len = 0U;
+            }
         }
 
         if (connected && ((now - last_heartbeat_ms) >= ROBOT_HEARTBEAT_MS)) {
@@ -1194,7 +1392,8 @@ static void diag_task(INT stacd, void *exinf)
         ir_do = hal_ir_levels();
         hal_ir_edges(ir_edges);
         tm_printf((UB *)"[robot] st=%d f=%04x pos=%d v=%d/%d d=%dmm enc=%d/%d bad=%u/%u ir=%u "
-                        "do=%u%u%u edges=%u/%u/%u vm=%x bc=%c ovf=%u drop=%u net=%u us(m/l/v/isr)=%u/%u/%u/%u ovr=%u/%u\n",
+                        "do=%u%u%u edges=%u/%u/%u vm=%x bc=%c map=%u/%u bar=%u/%u bars=%u/%u try=%u/%u jn=%u/%u ex=%u ovf=%u drop=%u net=%u "
+                        "us(m/l/v/isr)=%u/%u/%u/%u ovr=%u/%u/%u\n",
                   (INT)g_vstate, (UINT)fault_read(&g_faults), (INT)line.out.position,
                   (INT)motion.status.left_mm_s, (INT)motion.status.right_mm_s,
                   (INT)motion.status.distance_mm, (INT)enc_l.count, (INT)enc_r.count,
@@ -1203,10 +1402,49 @@ static void diag_task(INT stacd, void *exinf)
                   (UINT)ir_edges[0], (UINT)ir_edges[1], (UINT)ir_edges[2],
                   (UINT)line.out.valid_mask,
                   (INT)(line.instruction_valid ? line.instruction.letter : '-'),
+                  (UINT)g_map_len, (UINT)g_map_rejected,
+                  (UINT)g_bar_decoded, (UINT)g_bar_rejected,
+                  (UINT)g_bars_now, (UINT)g_bars_done,
+                  (UINT)g_bar_tries, (UINT)g_bar_tryruns,
+                  (UINT)g_junctions_line, (UINT)g_junctions_seen, (UINT)g_nav_executed,
                   (UINT)hal_ir_overflows(), (UINT)g_tel_q.dropped_full, (UINT)g_mqtt_state,
                   (UINT)g_max_motion_us, (UINT)g_max_line_us, (UINT)g_max_vehicle_us,
                   (UINT)hal_adc_max_isr_us(), (UINT)hal_tick_overruns(HAL_TICK_MOTION),
-                  (UINT)hal_tick_overruns(HAL_TICK_CONTROL));
+                  (UINT)hal_tick_overruns(HAL_TICK_CONTROL), (UINT)hal_tick_overruns(HAL_TICK_VEHICLE));
+        {
+            static uint32_t shown_tries;
+
+            if (g_bar_tries != shown_tries) {
+                uint32_t n = g_bar_tryruns;
+                uint32_t k;
+
+                shown_tries = g_bar_tries;
+                tm_printf((UB *)"[barlog] runs=%u widths(bar,gap,..;1:3 narrow:wide)=", (UINT)n);
+                for (k = 0U; (k < n) && (k < NAV_RUN_LOG); k++) {
+                    tm_printf((UB *)"%u ", (UINT)g_bar_log[k]);
+                }
+                tm_printf((UB *)"\n");
+            }
+        }
+        {
+            static uint32_t trace_shown;
+            const uint32_t n = g_tr_n;
+
+            if (n != trace_shown) {
+                uint32_t first = trace_shown;
+                uint32_t k;
+
+                if ((n - first) > 40U) {
+                    first = n - 40U;            /* the newest 40 only */
+                }
+                tm_printf((UB *)"[trace] B/W=left sensor black/white J=junction D=decoded F=15 bars seen @mean-enc-counts: ");
+                for (k = first; k < n; k++) {
+                    tm_printf((UB *)"%c@%d ", (INT)g_tr_kind[k % TRACE_LEN], (INT)g_tr_pos[k % TRACE_LEN]);
+                }
+                tm_printf((UB *)"\n");
+                trace_shown = n;
+            }
+        }
     }
 }
 #endif

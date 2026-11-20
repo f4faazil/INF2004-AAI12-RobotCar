@@ -112,18 +112,27 @@ static void test_junk_before_symbol_gives_exactly_one_decode(void)
     CHECK_INT('A', out.decoded_char);
 }
 
-/* Read backwards, "*A*" becomes "P1P".  Catches: accepting a reversed symbol
- * as a different valid letter (a wrong command, not just a missed one). */
-static void test_reversed_symbol_is_rejected(void)
+/* Read backwards, "*A*" looks like "P1P".  The car can meet a barcode from
+ * either side (after a U-turn, or a strip laid the other way round), so every
+ * real page scanned from its far end must decode to its own letter, once.
+ * Catches: accepting a reversed symbol as a different valid letter (a wrong
+ * command), or missing it altogether. */
+static void test_reversed_symbol_decodes_to_the_same_letter(void)
 {
-    uint16_t symbol[BARCODE_ELEMENT_COUNT];
-    const uint16_t *a = fixture_runs('A', "large");
-    size_t i;
+    size_t f;
 
-    for (i = 0U; i < BARCODE_ELEMENT_COUNT; i++) {
-        symbol[i] = a[BARCODE_ELEMENT_COUNT - 1U - i];
+    for (f = 0U; f < BARCODE_FIXTURE_COUNT; f++) {
+        uint16_t symbol[BARCODE_ELEMENT_COUNT];
+        push_outcome_t out;
+        size_t i;
+
+        for (i = 0U; i < BARCODE_ELEMENT_COUNT; i++) {
+            symbol[i] = BARCODE_FIXTURES[f].runs[BARCODE_ELEMENT_COUNT - 1U - i];
+        }
+        out = push_symbol(symbol);
+        CHECK_INT(1, out.decoded_count);
+        CHECK_INT(BARCODE_FIXTURES[f].expected, out.decoded_char);
     }
-    CHECK_INT(0, push_symbol(symbol).decoded_count);
 }
 
 /* A valid character 'A' where the start '*' belongs.  Catches: a missing
@@ -295,11 +304,95 @@ static void test_random_runs_never_decode(void)
     CHECK_INT(0, decodes);
 }
 
+
+/*
+ * Every letter A to Z, built from the standard Code 39 patterns (written out here,
+ * independently of the decoder's own table): bar, space, bar ... with n = narrow and
+ * w = wide.  Each must decode to itself read forwards, and read from the other end
+ * must give the same letter or nothing, never a different letter.  Catches: a wrong
+ * pattern in the decoder's table, and a letter that reads as another one backwards,
+ * which would send the car the wrong way.
+ */
+static void test_every_letter_decodes_forward_and_reversed(void)
+{
+    static const char *PATTERN[26] = {
+        "wnnnnwnnw", "nnwnnwnnw", "wnwnnwnnn", "nnnnwwnnw", "wnnnwwnnn", "nnwnwwnnn",
+        "nnnnnwwnw", "wnnnnwwnn", "nnwnnwwnn", "nnnnwwwnn", "wnnnnnnww", "nnwnnnnww",
+        "wnwnnnnwn", "nnnnwnnww", "wnnnwnnwn", "nnwnwnnwn", "nnnnnnwww", "wnnnnnwwn",
+        "nnwnnnwwn", "nnnnwnwwn", "wwnnnnnnw", "nwwnnnnnw", "wwwnnnnnn", "nwnnwnnnw",
+        "wwnnwnnnn", "nwwnwnnnn"
+    };
+    static const char *STAR = "nwnnwnwnn";
+    unsigned letter;
+
+    for (letter = 0U; letter < 26U; letter++) {
+        uint16_t fwd[BARCODE_ELEMENT_COUNT];
+        uint16_t rev[BARCODE_ELEMENT_COUNT];
+        const char *parts[3];
+        size_t n = 0U;
+        unsigned part;
+        unsigned i;
+        barcode_decoder_t d;
+        push_outcome_t out;
+
+        parts[0] = STAR;
+        parts[1] = PATTERN[letter];
+        parts[2] = STAR;
+        for (part = 0U; part < 3U; part++) {
+            for (i = 0U; i < 9U; i++) {
+                fwd[n++] = (parts[part][i] == 'w') ? 30U : 10U;
+            }
+            if (part < 2U) {
+                fwd[n++] = 10U;                         /* the narrow gap between characters */
+            }
+        }
+        CHECK_INT((int)BARCODE_ELEMENT_COUNT, (int)n);
+
+        barcode_init(&d);
+        out = push_runs(&d, fwd, BARCODE_ELEMENT_COUNT);
+        CHECK_INT(1, out.decoded_count);
+        CHECK_INT((int)('A' + letter), (int)out.decoded_char);
+
+        for (i = 0U; i < BARCODE_ELEMENT_COUNT; i++) {
+            rev[i] = fwd[BARCODE_ELEMENT_COUNT - 1U - i];
+        }
+        barcode_init(&d);
+        out = push_runs(&d, rev, BARCODE_ELEMENT_COUNT);
+        if (out.decoded_count != 0) {
+            CHECK_INT((int)('A' + letter), (int)out.decoded_char);
+        }
+    }
+}
+
+
+/*
+ * A real capture from the car: a Z read from its far end, so the runs arrive reversed, with
+ * the sensor's edge bias making some bars short and some gaps long (one narrow element 924,
+ * one wide 1356: a ratio of only 1.47).  It must decode as Z.  Catches: a narrow/wide
+ * tolerance so strict that a whole, correctly read barcode is refused.
+ */
+static void test_real_capture_with_edge_bias_decodes(void)
+{
+    static const uint16_t CAPTURE[BARCODE_ELEMENT_COUNT] = {
+        536, 650, 1726, 631, 1657, 671, 579, 1813, 432, 611, 550, 608, 548, 624, 1612, 616,
+        1700, 1844, 478, 766, 264, 924, 1356, 825, 1615, 640, 526, 1698, 496
+    };
+    barcode_decoder_t d;
+    push_outcome_t out;
+
+    barcode_init(&d);
+    out = push_runs(&d, CAPTURE, BARCODE_ELEMENT_COUNT);
+    CHECK_INT(1, out.decoded_count);
+    CHECK_INT('Z', out.decoded_char);
+}
+
 int main(void)
 {
     RUN(test_decodes_every_real_barcode_page);
+    RUN(test_every_letter_decodes_forward_and_reversed);
+    RUN(test_real_capture_with_edge_bias_decodes);
     RUN(test_junk_before_symbol_gives_exactly_one_decode);
-    RUN(test_reversed_symbol_is_rejected);
+    RUN(test_reversed_symbol_decodes_to_the_same_letter);
     RUN(test_wrong_start_character_is_rejected);
     RUN(test_wrong_stop_character_is_rejected);
     RUN(test_ambiguous_narrow_wide_separation_is_rejected);

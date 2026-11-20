@@ -284,7 +284,78 @@ mutant("test_obstacle", "obstacle.c",
        "    return cfg->left_is_high_angle ? x : x;",
        "servo mounting direction ignored")
 
+mutant("test_barcode", "barcode.c",
+       "#define GAP_SEPARATION_NUM  (8U)\n#define GAP_SEPARATION_DEN  (5U)",
+       "#define GAP_SEPARATION_NUM  (1U)\n#define GAP_SEPARATION_DEN  (1U)",
+       "a wide-looking gap between characters is accepted")
+mutant("test_barcode", "barcode.c",
+       "#define SEPARATION_NUM      (13U)\n#define SEPARATION_DEN      (10U)",
+       "#define SEPARATION_NUM      (1U)\n#define SEPARATION_DEN      (1U)",
+       "a character with no clear narrow/wide split is accepted")
+mutant("test_barcode", "barcode.c",
+       "#define SEPARATION_NUM      (13U)\n#define SEPARATION_DEN      (10U)",
+       "#define SEPARATION_NUM      (2U)\n#define SEPARATION_DEN      (1U)",
+       "a real barcode with edge bias is refused")
+
+# ---- barcode mapping over MQTT ------------------------------------------
+mutant("test_barcode_map", "barcode_map.c",
+       "        if (out[i].letter == letter) {\n            return BMAP_ERR_DUPLICATE;",
+       "        if ((out[i].letter == letter) && false) {\n            return BMAP_ERR_DUPLICATE;",
+       "the same letter can be mapped twice")
+mutant("test_barcode_map", "barcode_map.c",
+       "    if (!is_letter(token[0])) {\n        return BMAP_ERR_LETTER;",
+       "    if (!is_letter(token[0]) && false) {\n        return BMAP_ERR_LETTER;",
+       "a non-letter is accepted as a barcode letter")
+mutant("test_barcode_map", "barcode_map.c",
+       "    if ((n < 3U) || (n > TOKEN_MAX) || ((token[1] != '=') && (token[1] != ':'))) {",
+       "    if ((n < 3U) || (n > TOKEN_MAX)) {",
+       "an entry with no = or : is accepted")
+mutant("test_barcode_map", "barcode_map.c",
+       "        if (same(token, \"CLEAR\")) {",
+       "        if (true) {",
+       "any lone token clears the mapping")
+mutant("test_barcode_map", "barcode_map.c",
+       "        if ((n == BMAP_MAX) && is_action_string(token, (uint8_t)n)) {",
+       "        if ((n == BMAP_MAX) && (is_action_string(token, (uint8_t)n) || true)) {",
+       "the 26-letter form accepts letters that are not actions")
+mutant("test_line_nav", "line_nav.c",
+       "    const uint8_t n = (len > NAV_MAP_MAX) ? (uint8_t)NAV_MAP_MAX : len;",
+       "    const uint8_t n = (len > 40U) ? 40U : len;",
+       "a mapping longer than the alphabet overruns the table")
+mutant("test_line_nav", "line_nav.c",
+       "    nav->cfg.map = nav->map_store;\n    nav->cfg.map_len = n;",
+       "    nav->cfg.map_len = n;",
+       "the new mapping is copied but never used")
+mutant("test_mqtt_client", "mqtt_client.c",
+       "    if (c->cfg.extra_topic != NULL) {",
+       "    if (false) {",
+       "the mapping topic is never subscribed")
+
 # ---- line_nav -----------------------------------------------------------
+mutant("test_line_nav", "line_nav.c",
+       "    if (!nav->travel_on) {\n        return 1U;\n    }",
+       "    if (true) {\n        return 1U;\n    }",
+       "bar widths ignore the distance travelled")
+mutant("test_line_nav", "line_nav.c",
+       "        nav->travel_win_q = (delta > 0) ? ((uint32_t)delta * 4U) : 0U;",
+       "        nav->travel_win_q = (delta > 0) ? ((uint32_t)delta * 4U) : 4U;",
+       "a stopped or reversing car still adds bar width")
+mutant("test_line_nav", "line_nav.c",
+       "            } else if ((nav->cfg.barcode_bars != 0U) && (lane->bar_count >= nav->cfg.barcode_bars)) {",
+       "            } else if ((nav->cfg.barcode_bars != 0U) && (lane->bar_count >= (nav->cfg.barcode_bars - 1U))) {",
+       "a barcode is taken as over one bar early")
+mutant("test_line_nav", "line_nav.c",
+       "            if (is_bar && (ticks >= nav->cfg.barcode_min_bar) && (lane->bar_count < UINT8_MAX)) {",
+       "            if (is_bar && (lane->bar_count < UINT8_MAX)) {",
+       "glitches are counted as bars")
+mutant("test_line_nav", "line_nav.c",
+       "        nav->bars_done = false;                 /* its junction has come */\n",
+       "",
+       "a counted barcode arms every later junction too")
+mutant("test_line_nav", "line_nav.c",
+       "            if (is_branch && anchor_black &&",
+       "            if (is_branch &&",
+       "the left sensor alone is a junction")
 mutant("test_line_nav", "line_nav.c",
        "        int32_t diff = -(((int32_t)nav->cfg.steer_kp_mm_s * (out->position + rate)) / PERMILLE);",
        "        int32_t diff = (((int32_t)nav->cfg.steer_kp_mm_s * (out->position + rate)) / PERMILLE);",
@@ -322,9 +393,29 @@ mutant("test_line_nav", "line_nav.c",
        "void line_nav_note_overflow(line_nav_t *nav)\n{",
        "an ADC overflow does not void the barcode attempt")
 mutant("test_line_nav", "line_nav.c",
-       "            if (is_branch && black_now && anchor_black && (black_um >= junction_um) &&",
-       "            if (is_branch && black_now && anchor_black && (black_um >= 0U) &&",
+       "                       : (!active && black_now && (black_um >= junction_um))) &&",
+       "                       : (!active && black_now && (black_um >= 0U))) &&",
        "any black on an outer sensor is a junction")
+mutant("test_line_nav", "line_nav.c",
+       "                (armed ? (nav->ch_score[channel] >= ARMED_JUNCTION_SCORE)",
+       "                (armed ? (black_um >= junction_um)",
+       "a junction after a barcode still needs the wheel speed")
+mutant("test_line_nav", "line_nav.c",
+       "                       : (!active && black_now && (black_um >= junction_um))) &&",
+       "                       : (black_now && (black_um >= junction_um))) &&",
+       "a wide barcode bar becomes a junction when the speed reads high")
+mutant("test_line_nav", "line_nav.c",
+       "                (armed ? (nav->ch_score[channel] >= ARMED_JUNCTION_SCORE)",
+       "                (armed ? (black_now && (nav->ch_black_frames[channel] >= 30U))",
+       "a patchy reading misses the junction (an unbroken run of black is required)")
+mutant("test_vehicle", "vehicle.c",
+       "                vc->turn_lines = (abs32(vc->pending_turn_deg) >= UTURN_MIN_DEG) ? 2U : 1U;",
+       "                vc->turn_lines = 1U;",
+       "a U-turn stops on the first branch it meets")
+mutant("test_vehicle", "vehicle.c",
+       "                          (vc->pending_turn_deg > 0) ? spin : (int16_t)(-spin), 0, 0);",
+       "                          spin, 0, 0);",
+       "every junction turn spins left")
 mutant("test_line_nav", "line_nav.c",
        "static const uint8_t LANE_SIDE[NAV_LANE_COUNT] = { NAV_JUNCTION_LEFT, NAV_JUNCTION_RIGHT };",
        "static const uint8_t LANE_SIDE[NAV_LANE_COUNT] = { NAV_JUNCTION_RIGHT, NAV_JUNCTION_LEFT };",
@@ -335,7 +426,7 @@ mutant("test_line_nav", "line_nav.c",
        "a junction is reported on every step while crossing it")
 mutant("test_line_nav", "line_nav.c",
        "                 (black_now && anchor_black && (black_um < junction_um)))) {",
-       "                 false)) {",
+       "                 (black_now && anchor_black && (black_um < junction_um) && (junction_um == 0U)))) {",
        "a barcode bar pulls the steering")
 # (skipping an untrusted lane is only an optimisation: its blackness is already
 #  zeroed, so removing the skip is an equivalent mutant and is not listed)
@@ -464,8 +555,8 @@ mutant("test_mqtt_client", "mqtt_client.c",
        "    cc.will_topic = NULL;",
        "no last-will message")
 mutant("test_mqtt_client", "mqtt_client.c",
-       "    if (send_packet(c, buf, n) != SEND_OK) {\n        return false;\n    }\n    n = mqtt_encode_publish(c->cfg.status_topic",
-       "    n = mqtt_encode_publish(c->cfg.status_topic",
+       "    if (send_packet(c, buf, n) != SEND_OK) {\n        return false;\n    }\n    if (c->cfg.extra_topic != NULL) {",
+       "    if (c->cfg.extra_topic != NULL) {",
        "never subscribes to the command topic")
 mutant("test_mqtt_client", "mqtt_client.c",
        "    if (c->state != MQTT_CONNECTED) {\n        c->dropped_offline++;\n        return false;\n    }",

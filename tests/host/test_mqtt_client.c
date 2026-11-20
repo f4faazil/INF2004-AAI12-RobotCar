@@ -112,6 +112,7 @@ static void rig_init(rig_t *r)
     cfg.password = NULL;
     cfg.status_topic = "robot/status";
     cfg.command_topic = "robot/cmd";
+    cfg.extra_topic = NULL;
     cfg.keepalive_s = 30U;
     cfg.connect_timeout_ms = 5000U;
     cfg.backoff_initial_ms = 1000U;
@@ -189,6 +190,40 @@ static void test_connect_subscribe_and_birth_message(void)
         CHECK_INT((long)(n + bn), r.f.sent_len);
         CHECK(memcmp(&r.f.sent[n], birth, bn) == 0);
     }
+}
+
+/* An extra topic (the barcode mapping) is subscribed right after the command topic, before
+ * the birth message.  Catches: no subscription to the mapping topic, so the PC could never
+ * send a mapping. */
+static void test_extra_topic_is_subscribed_too(void)
+{
+    rig_t r;
+    uint8_t expect[128];
+    uint8_t sub1[64];
+    uint8_t sub2[64];
+    uint8_t birth[64];
+    uint16_t n1;
+    uint16_t n2;
+    uint16_t bn;
+
+    rig_init(&r);
+    r.c.cfg.extra_topic = "robot/map";
+    mqtt_client_step(&r.c, r.t);
+    r.f.sent_len = 0U;
+    feed(&r.f, CONNACK_OK, sizeof(CONNACK_OK));
+    r.t += 100U;
+    mqtt_client_step(&r.c, r.t);
+    CHECK_INT(MQTT_CONNECTED, mqtt_client_state(&r.c));
+
+    n1 = mqtt_encode_subscribe(1U, "robot/cmd", sub1, sizeof(sub1));
+    n2 = mqtt_encode_subscribe(2U, "robot/map", sub2, sizeof(sub2));
+    bn = mqtt_encode_publish("robot/status", (const uint8_t *)"online", 6U, true, birth,
+                             sizeof(birth));
+    memcpy(expect, sub1, n1);
+    memcpy(&expect[n1], sub2, n2);
+    memcpy(&expect[n1 + n2], birth, bn);
+    CHECK_INT((long)(n1 + n2 + bn), r.f.sent_len);
+    CHECK(memcmp(r.f.sent, expect, (size_t)(n1 + n2 + bn)) == 0);
 }
 
 /* Telemetry can be published once connected. */
@@ -488,6 +523,7 @@ static void test_pending_tcp_connect_is_polled_then_times_out(void)
 int main(void)
 {
     RUN(test_connect_subscribe_and_birth_message);
+    RUN(test_extra_topic_is_subscribed_too);
     RUN(test_publish_when_connected);
     RUN(test_publish_while_offline_is_dropped_and_counted);
     RUN(test_reconnect_backoff_is_exponential_and_bounded);

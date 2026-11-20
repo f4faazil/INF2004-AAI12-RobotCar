@@ -96,7 +96,7 @@
  * 1 = the far sensor reads barcodes and spots junction branches; 0 = it is ignored
  * (line following only: no barcodes, no junctions).  Only the near pair steers.
  */
-#define ROBOT_USE_BARCODE_SENSOR (0)
+#define ROBOT_USE_BARCODE_SENSOR (1)
 #define ROBOT_IR_COUNTS_WHITE   (150U)
 #define ROBOT_IR_COUNTS_BLACK   (4000U)
 /*
@@ -113,6 +113,15 @@
  * car then does NOT stop for obstacles.  Set it back to 1 for the real mission.
  */
 #define ROBOT_REQUIRE_ULTRASONIC (0)
+
+/*
+ * BENCH TESTING ONLY.  The letter -> movement mapping belongs to the PC and arrives over
+ * MQTT (topic <base>/map); the car has no mapping of its own.  Until the Wi-Fi/MQTT link is
+ * working, a mapping for bench tests can be loaded at start-up from this text, in the same
+ * format as the MQTT message (see barcode_map.h), for example "A=L,Z=U".  An MQTT mapping
+ * that arrives later replaces it.  Leave it "" (no mapping) for the real build.
+ */
+#define ROBOT_BENCH_MAP ""
 
 /* IMU on I2C1. */
 #define ROBOT_PIN_I2C_SDA       (26U)
@@ -156,9 +165,10 @@
  *
  * PLACEHOLDER: the positions below are a proposal, not the car's geometry.
  */
-/* Line following uses the CENTRE and RIGHT sensors (a 12 mm pair straddling the centreline);
- * the LEFT sensor is the far one, unused while ROBOT_USE_BARCODE_SENSOR is 0. */
-#define ROBOT_SENSOR_MM_LEFT    (-39)       /* IR on GP6: far, unused for now */
+/* Line following uses the CENTRE and RIGHT sensors (a 12 mm pair straddling the centreline).
+ * The LEFT sensor is the far one: it reads the barcodes and spots junction branches on the
+ * left (ROBOT_USE_BARCODE_SENSOR).  A barcode is executed at the next junction. */
+#define ROBOT_SENSOR_MM_LEFT    (-39)       /* IR on GP6: far, barcodes and left branches */
 #define ROBOT_SENSOR_MM_CENTRE  (-6)        /* IR on GP17: tracks the line */
 #define ROBOT_SENSOR_MM_RIGHT   (6)         /* IR on GP3: tracks the line */
 #define ROBOT_TRACK_REF_MM      (6)         /* spacing that maps to +/-1000 in the position */
@@ -233,8 +243,6 @@ extern const roll_hump_config_t  ROBOT_ROLL_HUMP_CFG;
 extern const obstacle_config_t   ROBOT_OBSTACLE_CFG;
 extern const vehicle_config_t    ROBOT_VEHICLE_CFG;
 extern const safety_limits_t     ROBOT_SAFETY_LIMITS;
-extern const nav_map_entry_t     ROBOT_BARCODE_MAP[];
-extern const uint8_t             ROBOT_BARCODE_MAP_LEN;
 
 /* Servo trim and IMU mounting live with their structures in robot_config.c. */
 #define ROBOT_IMU_FORWARD_AXIS  (IMU_AXIS_X)

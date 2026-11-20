@@ -16,12 +16,23 @@
 
 /*
  * Code 39 nominal wide:narrow is 3:1 and the standard allows 2.2:1 to 3:1.
- * The smallest wide element must be at least 1.6 x the largest narrow one;
- * that leaves room for blur and thresholding error and was checked against
- * a worst case of every narrow +25% and every wide -25% (ratio 1.8).
+ * The smallest wide element must be at least 1.3 x the largest narrow one.  The three
+ * widest elements of each character are the wide ones, and the pattern, the '*' at both
+ * ends and the spacing are all checked as well, so this only has to reject an element that
+ * could be either.  It was 1.6 x; a capture from the car (a Z read from its far end, the
+ * paper's ink against the sensor's threshold) had one narrow element at 924 and one wide at
+ * 1356, a ratio of 1.47, and was refused with all 29 elements present.
  */
-#define SEPARATION_NUM      (8U)
-#define SEPARATION_DEN      (5U)
+#define SEPARATION_NUM      (13U)
+#define SEPARATION_DEN      (10U)
+
+/*
+ * The gap between two characters is a clean narrow element on a real barcode (611 and 766
+ * where the narrow bars measured about 600 and the wide ones about 1700), so it keeps the
+ * stricter 1.6 x rule: a wide element next to it must be at least 1.6 x the gap.
+ */
+#define GAP_SEPARATION_NUM  (8U)
+#define GAP_SEPARATION_DEN  (5U)
 
 /*
  * One pass at one speed: the narrow-element size of any two characters in a
@@ -191,8 +202,8 @@ static bool decode_symbol(const uint16_t *runs, char *decoded)
     for (c = 0U; c < (CHARS_PER_SYMBOL - 1U); c++) {
         uint16_t gap = runs[(c * CHAR_STRIDE) + ELEMENTS_PER_CHAR];
 
-        if ((!at_least(info[c].min_wide, gap, SEPARATION_NUM, SEPARATION_DEN)) ||
-            (!at_least(info[c + 1U].min_wide, gap, SEPARATION_NUM, SEPARATION_DEN))) {
+        if ((!at_least(info[c].min_wide, gap, GAP_SEPARATION_NUM, GAP_SEPARATION_DEN)) ||
+            (!at_least(info[c + 1U].min_wide, gap, GAP_SEPARATION_NUM, GAP_SEPARATION_DEN))) {
             return false;
         }
         if (!similar_scale(info[c].narrow_sum, info[c + 1U].narrow_sum)) {
@@ -214,7 +225,8 @@ barcode_result_t barcode_push_run(barcode_decoder_t *decoder,
                                   uint16_t ticks,
                                   char *decoded)
 {
-    uint8_t i;
+    uint16_t reversed[BARCODE_ELEMENT_COUNT];
+    uint8_t  i;
 
     if (decoder->count == BARCODE_ELEMENT_COUNT) {
         for (i = 1U; i < BARCODE_ELEMENT_COUNT; i++) {
@@ -229,6 +241,19 @@ barcode_result_t barcode_push_run(barcode_decoder_t *decoder,
         return BARCODE_NO_RESULT;
     }
     if (decode_symbol(decoder->runs, decoded)) {
+        return BARCODE_DECODED;
+    }
+
+    /*
+     * The same symbol scanned from its other end (the car met it from the other
+     * side): its runs arrive in reverse order.  Read backwards '*' is 'P', so a
+     * reversed symbol never passes the forward check above, and decoding it
+     * reversed gives its own letter, never a different one.
+     */
+    for (i = 0U; i < BARCODE_ELEMENT_COUNT; i++) {
+        reversed[i] = decoder->runs[BARCODE_ELEMENT_COUNT - 1U - i];
+    }
+    if (decode_symbol(reversed, decoded)) {
         return BARCODE_DECODED;
     }
     return BARCODE_NO_RESULT;
