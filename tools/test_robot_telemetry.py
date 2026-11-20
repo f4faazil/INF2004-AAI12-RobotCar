@@ -49,6 +49,23 @@ class VectorTests(unittest.TestCase):
         self.assertEqual((hb["uptime_s"], hb["dropped"], hb["reconnects"]), (3661, 3, 2))
         self.assertEqual(t.decode_ack(h("11 09 40"))["result_name"], "REJECTED_RUNNING")
 
+    def test_sensors_vector_from_the_firmware(self):
+        """The bytes tel_encode_sensors produces for the sample record in tests/host/test_telemetry.c."""
+        data = h("063039be90302010402d6903323bbd0cb49c")
+        self.assertEqual(len(data), 18)
+        d = t.decode_sensors(data)
+        self.assertEqual(d["ts10"], 12345)
+        self.assertEqual((d["ir_levels"], d["ir_valid_mask"]), (5, 7))
+        self.assertTrue(d["pair_on_line"])
+        self.assertEqual((d["bars_now"], d["bars_done"], d["decoded"], d["rejected"]), (9, 3, 2, 1))
+        self.assertEqual((d["junctions"], d["executed"], d["map_entries"], d["last_letter"]), (4, 2, 26, 26))
+        self.assertEqual((d["enc_bad_left"], d["enc_bad_right"]), (12, 200))
+        self.assertEqual(d["roll_permille"], -137)
+        self.assertTrue(d["imu_ok"] and d["hump_active"] and not d["lift_latched"])
+        self.assertEqual((d["us_mm"], d["us_valid"], d["servo_aim"]), (406, True, 2))
+        self.assertEqual((d["net_state"], d["link_up"], d["saturated"]), (3, True, 0))
+        self.assertEqual(t.encode_sensors(d), data)
+
     def test_command_vector(self):
         self.assertEqual(t.encode_command({"req_id": 9, "cmd": 2, "param": 0x1234}),
                          h("10 09 21 23 40"))

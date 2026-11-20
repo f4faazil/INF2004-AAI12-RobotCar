@@ -20,6 +20,7 @@ TYPE_EVENT = 0x02
 TYPE_HUMP = 0x03
 TYPE_OBSTACLE = 0x04
 TYPE_HEARTBEAT = 0x05
+TYPE_SENSORS = 0x06
 TYPE_COMMAND = 0x10
 TYPE_ACK = 0x11
 
@@ -207,6 +208,45 @@ def decode_obstacle(data):
             "action": r.get(3), "reason": r.get(3)}
 
 
+SENSOR_FIELDS = [  # (name, bits, kind): the layout of app_program/telemetry.h, type 0x06
+    ("ts10", 16, "u"), ("ir_levels", 3, "u"), ("ir_valid_mask", 3, "u"), ("pair_on_line", 1, "b"),
+    ("junction_armed", 1, "b"), ("bars_now", 4, "u"), ("bars_done", 8, "u"), ("decoded", 8, "u"),
+    ("rejected", 8, "u"), ("junctions", 8, "u"), ("executed", 8, "u"), ("map_entries", 5, "u"),
+    ("last_letter", 5, "u"), ("motion_state", 2, "u"), ("motion_stopped", 1, "b"),
+    ("encoder_fault", 1, "b"), ("enc_bad_left", 8, "u"), ("enc_bad_right", 8, "u"),
+    ("roll_permille", 11, "s"), ("imu_ok", 1, "b"), ("lift_latched", 1, "b"), ("hump_active", 1, "b"),
+    ("us_mm", 13, "u"), ("us_valid", 1, "b"), ("us_obstacle", 1, "b"), ("us_fault", 1, "b"),
+    ("servo_aim", 2, "u"), ("net_state", 3, "u"), ("link_up", 1, "b"), ("saturated", 1, "u")]
+
+
+def encode_sensors(s):
+    w = BitWriter()
+    w.put(TYPE_SENSORS, 8)
+    for name, bits, kind in SENSOR_FIELDS:
+        v = s[name]
+        if kind == "s":
+            w.put_signed(clamp(v, -1000, 1000), bits)
+        elif kind == "b":
+            w.put(1 if v else 0, bits)
+        elif name == "us_mm":
+            w.put(clamp(v, 0, 8190), bits)
+        elif bits == 8 and name != "ts10":
+            w.put(clamp(v, 0, 255), bits)
+        else:
+            w.put(v, bits)
+    return w.to_bytes()
+
+
+def decode_sensors(data):
+    r = BitReader(data)
+    if r.get(8) != TYPE_SENSORS:
+        raise ValueError("not a sensors message")
+    d = {}
+    for name, bits, kind in SENSOR_FIELDS:
+        d[name] = r.get_signed(bits) if kind == "s" else (bool(r.get(bits)) if kind == "b" else r.get(bits))
+    return d
+
+
 def encode_heartbeat(h):
     w = BitWriter()
     w.put(TYPE_HEARTBEAT, 8)
@@ -247,7 +287,7 @@ def decode_ack(data):
 
 DECODERS = {TYPE_STATUS: decode_status, TYPE_EVENT: decode_event,
             TYPE_HUMP: decode_hump, TYPE_OBSTACLE: decode_obstacle,
-            TYPE_HEARTBEAT: decode_heartbeat, TYPE_ACK: decode_ack}
+            TYPE_HEARTBEAT: decode_heartbeat, TYPE_SENSORS: decode_sensors, TYPE_ACK: decode_ack}
 
 
 def decode(data):
