@@ -1305,6 +1305,7 @@ static void net_task(INT stacd, void *exinf)
 
         (void)tk_dly_tsk(20U);
         now = hal_time_ms();
+        robot_net_refresh();                    /* this task alone reads the radio's 2.5 KB status block */
         g_mqtt_state = robot_net_mqtt_state();
         connected = robot_net_link_up() && (g_mqtt_state == ROBOT_MQTT_ONLINE);
 
@@ -1383,6 +1384,7 @@ static void net_task(INT stacd, void *exinf)
 
         (void)tk_dly_tsk(20U);
         now = hal_time_ms();
+        robot_net_refresh();
         mqtt_client_set_link(&client, robot_net_link_up());
         mqtt_client_step(&client, now);
         connected = mqtt_client_state(&client) == MQTT_CONNECTED;
@@ -1561,10 +1563,10 @@ static void diag_task(INT stacd, void *exinf)
 #if TM_WIFI_CYW43
         {
             /* What the radio is doing, once a second: this is what says why the car has not joined. */
-            T_CYW43_UTK_STATUS w;
+            robot_net_info_t w;
             const char *js = "?";
 
-            cyw43_utk_get_status(&w);
+            robot_net_get(&w);
             switch (w.join_state) {
             case CYW43_UTK_JOIN_WAIT_SCAN:      js = "waiting-for-scan"; break;
             case CYW43_UTK_JOIN_JOINING:        js = "joining"; break;
@@ -1576,10 +1578,10 @@ static void diag_task(INT stacd, void *exinf)
             }
             tm_printf((UB *)"[wifi] radio=%s init=%d networks-seen=%u strongest=%ddBm join=%s attempts=%u failed=%u last-rc=%d "
                             "link=%u rssi=%ddBm dhcp=%u ip=%u.%u.%u.%u mqtt=%u\n",
-                      (UB *)(w.ready ? "ready" : "NOT-READY"), (INT)w.init_result, (UINT)w.scan_count, (INT)w.strongest_rssi,
+                      (UB *)(w.ready ? "ready" : "NOT-READY"), (INT)w.init_result, (UINT)w.networks_seen, (INT)w.strongest_dbm,
                       (UB *)js, (UINT)w.join_attempts, (UINT)w.join_failures, (INT)w.join_result,
-                      (UINT)w.link_up, (INT)w.link_rssi, (UINT)w.dhcp_complete,
-                      (UINT)w.dhcp_address[0], (UINT)w.dhcp_address[1], (UINT)w.dhcp_address[2], (UINT)w.dhcp_address[3],
+                      (UINT)w.link_up, (INT)w.rssi_dbm, (UINT)w.dhcp,
+                      (UINT)w.ip[0], (UINT)w.ip[1], (UINT)w.ip[2], (UINT)w.ip[3],
                       (UINT)w.mqtt_state);
         }
 #endif
