@@ -346,8 +346,123 @@ static void test_keepalive_across_clock_wrap(void)
     assert(m.last_len == 2U && m.last[0] == 0xc0U);
 }
 
+typedef struct {
+    unsigned calls;
+    char topic[40];
+    char payload[200];
+    size_t payload_len;
+} rx_log_t;
+
+static void on_message(void *ctx, const uint8_t *topic, size_t tl, const uint8_t *payload, size_t pl)
+{
+    rx_log_t *r = ctx;
+
+    r->calls++;
+    memcpy(r->topic, topic, tl);
+    r->topic[tl] = '\0';
+    memcpy(r->payload, payload, pl);
+    r->payload_len = pl;
+}
+
+/* After CONNACK each subscription is sent in turn, acknowledged by a SUBACK with the matching id, and a later PUBLISH
+ * reaches the handler.  Catches: a SUBSCRIBE never sent; a SUBACK or PUBLISH treated as a protocol error (reconnect loop). */
+static void test_subscribe_and_receive(void)
+{
+    mqtt_session_t s;
+    mock_t m;
+    rx_log_t rx;
+    const uint8_t suback1[] = {0x90U, 0x03U, 0x00U, 0x01U, 0x00U};
+    const uint8_t suback2[] = {0x90U, 0x03U, 0x00U, 0x02U, 0x00U};
+    const uint8_t msg[] = {0x31U, 0x14U, 0x00U, 0x0fU, 'a', 'a', 'i', '1', '2', '/', 'r', 'o', 'b', 'o', 't', '/',
+                           'm', 'a', 'p', 'F', '=', 'U'};
+
+    memset(&rx, 0, sizeof rx);
+    setup(&s, &m);
+    assert(mqtt_session_add_subscription(&s, "aai12/robot/map"));
+    assert(mqtt_session_add_subscription(&s, "aai12/robot/cmd"));
+    assert(!mqtt_session_add_subscription(&s, "third"));
+    mqtt_session_set_message_handler(&s, on_message, &rx);
+    online(&s);
+    mqtt_session_poll(&s, 200U);                        /* first SUBSCRIBE */
+    assert(s.subscribes == 1U && m.last[0] == 0x82U && m.last[3] == 1U);
+    mqtt_session_poll(&s, 210U);                        /* the second does not wait for the first SUBACK */
+    assert(s.subscribes == 2U && m.last[3] == 2U && memcmp(&m.last[6], "aai12/robot/cmd", 15U) == 0);
+    mqtt_session_tcp_received(&s, suback1, sizeof suback1, 220U);
+    mqtt_session_tcp_received(&s, suback2, sizeof suback2, 221U);
+    assert(s.state == MQTT_SESSION_ONLINE && s.subscriptions_acked == 2U);
+    mqtt_session_tcp_received(&s, msg, sizeof msg, 300U);
+    assert(s.state == MQTT_SESSION_ONLINE && rx.calls == 1U && s.messages_received == 1U);
+    assert(strcmp(rx.topic, "aai12/robot/map") == 0 && rx.payload_len == 3U && memcmp(rx.payload, "F=U", 3U) == 0);
+}
+
+/* A refused subscription, a QoS 1 delivery and a SUBACK nobody asked for each restart the session; a broker that never
+ * answers a SUBSCRIBE is given up on. */
+static void test_subscribe_failures(void)
+{
+    mqtt_session_t s;
+    mock_t m;
+    const uint8_t refused[] = {0x90U, 0x03U, 0x00U, 0x01U, 0x80U};
+    const uint8_t stray[] = {0x90U, 0x03U, 0x00U, 0x01U, 0x00U};
+    const uint8_t qos1[] = {0x32U, 0x09U, 0x00U, 0x03U, 'a', '/', 'b', 0x00U, 0x01U, 'x', 'y'};
+
+    setup(&s, &m);
+    assert(mqtt_session_add_subscription(&s, "aai12/robot/map"));
+    online(&s);
+    mqtt_session_poll(&s, 200U);
+    mqtt_session_tcp_received(&s, refused, sizeof refused, 210U);
+    assert(s.state == MQTT_SESSION_BACKOFF);
+
+    setup(&s, &m);
+    online(&s);                                          /* nothing subscribed, so a SUBACK is unexpected */
+    mqtt_session_tcp_received(&s, stray, sizeof stray, 210U);
+    assert(s.state == MQTT_SESSION_BACKOFF);
+
+    setup(&s, &m);
+    online(&s);
+    mqtt_session_tcp_received(&s, qos1, sizeof qos1, 210U);
+    assert(s.state == MQTT_SESSION_BACKOFF);
+
+    setup(&s, &m);
+    assert(mqtt_session_add_subscription(&s, "aai12/robot/map"));
+    online(&s);
+    mqtt_session_poll(&s, 200U);
+    assert(s.subscriptions_sent == 1U);
+    mqtt_session_poll(&s, 200U + (2U * MQTT_SESSION_ACK_TIMEOUT_MS) - 1U);
+    assert(s.state == MQTT_SESSION_ONLINE);
+    mqtt_session_poll(&s, 200U + (2U * MQTT_SESSION_ACK_TIMEOUT_MS));
+    assert(s.state == MQTT_SESSION_BACKOFF);
+}
+
+/* The subscriptions are sent again after a reconnect (the broker forgot them: clean session). */
+static void test_resubscribe_after_reconnect(void)
+{
+    mqtt_session_t s;
+    mock_t m;
+    const uint8_t ack[] = {0x20U, 0x02U, 0x00U, 0x00U};
+    const uint8_t suback[] = {0x90U, 0x03U, 0x00U, 0x01U, 0x00U};
+    const uint32_t t0 = 300U;
+
+    setup(&s, &m);
+    assert(mqtt_session_add_subscription(&s, "aai12/robot/map"));
+    online(&s);
+    mqtt_session_poll(&s, 200U);
+    mqtt_session_tcp_received(&s, suback, sizeof suback, 210U);
+    mqtt_session_tcp_lost(&s, t0);
+    assert(s.state == MQTT_SESSION_BACKOFF);
+    mqtt_session_poll(&s, t0 + MQTT_SESSION_BACKOFF_MS);    /* backoff over: starts the connection */
+    assert(s.state == MQTT_SESSION_CONNECTING);
+    mqtt_session_tcp_connected(&s, t0 + MQTT_SESSION_BACKOFF_MS + 2U);
+    mqtt_session_tcp_received(&s, ack, sizeof ack, t0 + MQTT_SESSION_BACKOFF_MS + 3U);
+    assert(s.state == MQTT_SESSION_ONLINE && s.subscriptions_sent == 0U);
+    mqtt_session_poll(&s, t0 + MQTT_SESSION_BACKOFF_MS + 4U);
+    assert(s.subscribes == 2U);
+}
+
 int main(void)
 {
+    test_subscribe_and_receive();
+    test_subscribe_failures();
+    test_resubscribe_after_reconnect();
     test_validation();
     test_connect_and_fragment();
     test_rejected_ack();
@@ -366,6 +481,6 @@ int main(void)
     test_wraparound();
     test_131_second_timestamp_still_pings();
     test_keepalive_across_clock_wrap();
-    puts("PASS: 18 MQTT session state-machine tests");
+    puts("PASS: 21 MQTT session state-machine tests");
     return 0;
 }

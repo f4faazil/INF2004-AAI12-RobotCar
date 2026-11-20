@@ -27,6 +27,7 @@
 #include "mqtt_lwip.h"
 #include "mqtt_session.h"
 #include "mqtt_heartbeat.h"
+#include "mqtt_mailbox.h"
 #include "telemetry_rtos.h"
 #include "mqtt_test_config.h"
 
@@ -43,6 +44,22 @@ static const uint8_t qualification_message[] = "AAI12_PICO_W_ONLINE";
 static const char robot_telemetry_topic[] = "aai12/robot/telemetry";
 static const char diagnostic_topic[] = "aai12/diagnostic";
 static const char heartbeat_topic[] = "aai12/robot/heartbeat";
+/* PC -> car: the barcode letter map, delivered to the robot through mqtt_mailbox.  Deliberately the ONLY subscription:
+ * there is no remote START/STOP path on this broker, so nothing on the network can make the motors run. */
+#ifndef AAI12_MQTT_SUBSCRIBE
+#define AAI12_MQTT_SUBSCRIBE 1   /* the adapter packet-count host test builds with 0 */
+#endif
+#if AAI12_MQTT_SUBSCRIBE
+static const char subscribe_map_topic[] = "aai12/robot/map";
+#endif
+
+/* An incoming message, on the owner task: copy it into the mailbox and return. */
+static void on_session_message(void *context, const uint8_t *topic, size_t topic_length,
+                               const uint8_t *payload, size_t payload_length)
+{
+    (void)context;
+    (void)mqtt_mailbox_rx_push(topic, (unsigned int)topic_length, payload, (unsigned int)payload_length);
+}
 
 enum {
     MQTT_DIAG_NONE = 0,
@@ -615,6 +632,7 @@ void mqtt_lwip_poll(struct netif *netif)
     uint32_t failures_before;
     uint32_t write_failures_before;
     uint32_t ping_attempts_before;
+    uint32_t subscribes_before;
     uint32_t poll_gap;
     mqtt_session_state_t state_before;
     bool ready;
@@ -628,6 +646,10 @@ void mqtt_lwip_poll(struct netif *netif)
                                AAI12_MQTT_CLIENT_ID)) {
             return;            /* Invalid local configuration; no network */
         }
+#if AAI12_MQTT_SUBSCRIBE
+        (void)mqtt_session_add_subscription(&adapter.session, subscribe_map_topic);
+#endif
+        mqtt_session_set_message_handler(&adapter.session, on_session_message, &adapter);
         /* usermain() must initialize mutex and inbox before tasks start.
          * Do not reset a live queue or lazily create cross-core resources. */
         if (!telemetry_rtos_ready()) return;
@@ -658,6 +680,7 @@ void mqtt_lwip_poll(struct netif *netif)
     failures_before = adapter.session.failures;
     write_failures_before = diagnostics.tcp_write_failures;
     ping_attempts_before = adapter.session.ping_attempts;
+    subscribes_before = adapter.session.subscribes;
     state_before = adapter.session.state;
     mqtt_session_poll(&adapter.session, now);
     if (adapter.session.failures != failures_before) {
@@ -672,6 +695,7 @@ void mqtt_lwip_poll(struct netif *netif)
     /* Keep one MQTT control-packet attempt per owner iteration. A heartbeat
      * remains due and will be retried on the next pass after keepalive work. */
     if (adapter.session.ping_attempts != ping_attempts_before) return;
+    if (adapter.session.subscribes != subscribes_before) return;      /* a SUBSCRIBE went out this pass */
 
     /* Smoke test ONLY: one QoS 0 message after each CONNACK (not real car
      * telemetry, no delivery acknowledgement). Retried if TX is full. */
@@ -709,6 +733,20 @@ void mqtt_lwip_poll(struct netif *netif)
             mqtt_heartbeat_published(&adapter.heartbeat, now);
         }
         return;
+    }
+
+    /* A reply from the robot (the map acknowledgement): one message, sent ahead of ordinary telemetry. */
+    if (adapter.session.state == MQTT_SESSION_ONLINE) {
+        char reply_topic[MQTT_MAILBOX_TOPIC_BYTES + 1U];
+        uint8_t reply[MQTT_MAILBOX_PAYLOAD_BYTES];
+        unsigned int reply_length = 0U;
+
+        if (mqtt_mailbox_tx_peek(reply_topic, reply, &reply_length) != 0U) {
+            if (publish_with_diagnostics(&adapter, reply_topic, reply, reply_length, now)) {
+                mqtt_mailbox_tx_done();
+            }
+            return;
+        }
     }
 
     /* A prior QoS-0 packet may be locally accepted, but removal could have

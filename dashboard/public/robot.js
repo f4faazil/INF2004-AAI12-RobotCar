@@ -173,10 +173,56 @@ function onBroker(e) {
   }
 }
 
+// --- the barcode letter map: A-Z, each unmapped or Left / Right / Straight / U-turn, sent over MQTT
+const ACTIONS = [["", "—"], ["L", "Left"], ["R", "Right"], ["F", "Straight"], ["U", "U-turn"]];
+const mapState = { ws: null, sending: false };
+const mapSelect = letter => $("mapGrid").querySelector(`select[data-letter="${letter}"]`);
+for (let i = 0; i < 26; i++) {
+  const letter = String.fromCharCode(65 + i);
+  const cell = document.createElement("label"), name = document.createElement("b"), select = document.createElement("select");
+  cell.className = "mapcell"; name.textContent = letter; select.dataset.letter = letter;
+  select.setAttribute("aria-label", `Instruction for barcode ${letter}`);
+  for (const [value, label] of ACTIONS) select.append(Object.assign(document.createElement("option"), { value, textContent: label }));
+  select.addEventListener("change", refreshMapText);
+  cell.append(name, select);
+  $("mapGrid").append(cell);
+}
+function mapAsText() {
+  return [...$("mapGrid").querySelectorAll("select")].filter(s => s.value).map(s => `${s.dataset.letter}=${s.value}`).join(",");
+}
+function refreshMapText() {
+  for (const s of $("mapGrid").querySelectorAll("select")) s.parentElement.classList.toggle("set", Boolean(s.value));
+  $("mapText").textContent = mapAsText() || "(nothing set)";
+}
+function loadMapText(text) {
+  for (const s of $("mapGrid").querySelectorAll("select")) s.value = "";
+  for (const pair of text.split(",")) { const [letter, action] = pair.split("="); if (mapSelect(letter)) mapSelect(letter).value = action; }
+  refreshMapText();
+}
+for (const b of document.querySelectorAll("[data-preset]")) b.addEventListener("click", () => loadMapText(b.dataset.preset));
+$("mapClear").addEventListener("click", () => loadMapText(""));
+$("mapSend").addEventListener("click", () => {
+  if (!mapState.ws || mapState.ws.readyState !== WebSocket.OPEN) { set("mapSent", "dashboard link is down: try again", "bad"); return; }
+  const text = mapAsText();
+  mapState.ws.send(JSON.stringify({ type: "send-map", map: text || "CLEAR" }));
+  set("mapSent", "sending…", "warn"); set("mapAck", "waiting for the robot…", "warn");
+});
+function onMapSent(m) {
+  const d = m.data;
+  set("mapSent", `${d.text} · ${clock(m.receivedAt)}${d.deliveredNow === 0 ? " · robot offline: delivered when it connects" : ""}`, d.deliveredNow === 0 ? "warn" : "ok");
+  if (!m.cached) set("mapAck", "waiting for the robot…", "warn");
+  if (m.cached) loadMapText(d.text === "CLEAR" ? "" : d.text);   // a page opened later shows what was last sent
+}
+function onMapAck(m) {
+  const ok = m.data.startsWith("OK");
+  set("mapAck", `${m.data}${ok ? " (letters mapped on the car)" : " (the car refused it and kept its old map)"} · ${clock(m.receivedAt)}`, ok ? "ok" : "bad");
+}
+
 function setPill(id, cls, text, textId) { $(id).className = `pill ${cls}`; if (textId) $(textId).textContent = text; }
 
 function connect() {
   const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/live`);
+  mapState.ws = ws;
   ws.onopen = () => setPill("pillLink", "ok", "connected", "linkText");
   ws.onclose = () => { setPill("pillLink", "bad", "reconnectingâ€¦", "linkText"); setTimeout(connect, 1500); };
   ws.onmessage = event => {
@@ -187,6 +233,9 @@ function connect() {
       setPill("pillMode", state.demo ? "warn" : "ok", state.demo ? "SIMULATION" : "LIVE", "modeText");
     } else if (m.type === "robot-frame") onRobotFrame(m);
     else if (m.type === "broker-event") onBroker(m.data);
+    else if (m.type === "map-sent") onMapSent(m);
+    else if (m.type === "map-ack") onMapAck(m);
+    else if (m.type === "map-result" && !m.ok) { set("mapSent", `refused: ${m.error}`, "bad"); set("mapAck", "—", ""); }
     else if (m.type === "parse-error") logEvent({ name: "BAD RECORD", detail: `${m.topic}: ${m.data.message}` }, m.receivedAt);
   };
 }
@@ -203,5 +252,6 @@ setInterval(() => {
   if (state.lastScanAt) set("scanAge", `${Math.round((now - state.lastScanAt) / 1000)} s ago`);
 }, 500);
 
+loadMapText("A=L,B=R,F=U");                       // the default table: just press Send
 $("clearLog").addEventListener("click", () => { $("events").replaceChildren(Object.assign(document.createElement("li"), { className: "empty", textContent: "No events yet." })); });
 connect();

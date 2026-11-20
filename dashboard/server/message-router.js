@@ -6,6 +6,9 @@ export function routeMqttMessage(topic, payload, topics, now = () => new Date())
   if (topic === topics.test) {
     return { ...base, type: "online-marker", data: payload.toString("utf8") };
   }
+  if (topics.mapAck && topic === topics.mapAck) {
+    return { ...base, type: "map-ack", data: payload.toString("utf8").slice(0, 40) };
+  }
   if (topic === topics.diagnostic) {
     const parsed = parseDiagnostic(payload);
     return { ...base, type: "diagnostic-snapshot", data: parsed.fields, raw: parsed.raw };

@@ -118,8 +118,8 @@ npm start            # website on http://localhost:3000 and an MQTT broker for t
 The dashboard now contains its **own small MQTT broker** (`server/broker.js`, no Mosquitto needed): the robot connects to
 this laptop's address on the hotspot (the address built into the firmware, `AAI12_MQTT_BROKER_IP` in
 `config/mqtt_test_config.h`), and the page shows what it publishes.  Open `http://<laptop-ip>:3000` from any device on the
-hotspot to see it.  The broker covers CONNECT, PUBLISH (QoS 0/1/2 acknowledged), SUBSCRIBE (+ and #), PINGREQ; it has
-no retained messages, wills or login.  To use a real broker instead: `EMBEDDED_BROKER=false` and `MQTT_URL=mqtt://...` in `.env`.
+hotspot to see it.  The broker covers CONNECT, PUBLISH (QoS 0/1/2 acknowledged), SUBSCRIBE (+ and #), PINGREQ and
+retained messages (kept in memory while it runs); it has no wills or login.  To use a real broker instead: `EMBEDDED_BROKER=false` and `MQTT_URL=mqtt://...` in `.env`.
 
 Windows asks once whether Node may accept connections: allow it on the hotspot network (private and public), or the robot
 cannot reach port 1883 / the page cannot be opened from a phone.
@@ -141,6 +141,29 @@ rejoin, barcode Z, U-turn, hump, picked up) through exactly the same decoding.  
 | Network: WiFi link, MQTT session, queue depth, records dropped, the robot's connection and PINGREQ interval seen by the broker | heartbeat + broker |
 | Events: state changes, barcodes, junctions, humps, plans, faults | event records |
 
+## Feeding the barcode instructions to the car
+
+The car has **no built-in barcode table**: until one arrives over MQTT every barcode it reads is rejected. The page's
+**Barcode instructions** card sets what each letter does (Left, Right, Straight, U-turn; “—” leaves it unmapped) and
+**Send to the robot** publishes it, *retained*, on `aai12/robot/map`. The car subscribes to that topic when it connects (so
+it gets the table even if it connects after you sent it) and answers on `aai12/robot/map_ack` (`OK n=3`, or `ERR ...` and
+it keeps its old table). The answer shows on the card.
+
+From a terminal instead (the dashboard must be running):
+
+```sh
+npm run map -- "A=L,B=R,F=U"      # A left, B right, F U-turn   (L left, R right, F straight, U U-turn)
+npm run map -- CLEAR              # forget everything on the car
+curl -X POST --data "A=L,B=R,F=U" http://localhost:3000/api/map
+```
+
+Each send REPLACES the whole table. The dashboard checks the text with the robot's own rules (`server/barcode-map.js`
+mirrors `app_program/barcode_map.c`) and refuses a bad one before it is sent.
+
+This is the only thing the dashboard sends to the car, and it cannot move the motors: the car subscribes to the map topic
+and nothing else, so there is no remote START/STOP over the network. Anything that can reach the dashboard's port or the
+broker can change the table, so keep both on the hotspot.
+
 ## The per-sensor record
 
 `TEL_TYPE_SENSORS` (0x06), 18 bytes, every field with its range and the bits that range needs: see `telemetry.h`.
@@ -150,4 +173,5 @@ rejoin, barcode Z, U-turn, hump, picked up) through exactly the same decoding.  
 ## Tests
 
 `npm test` now also covers the robot-record decoder (against the firmware's bytes), the routing, the replay cache for a newly opened page,
-the demo lap and the built-in broker (connect, publish at QoS 0 and 1, ping, segmented packets, subscribe).
+the demo lap and the built-in broker (connect, publish at QoS 0 and 1, ping, segmented packets, subscribe, retained
+messages), and the barcode map path end to end (`test/map.test.js`: validation, the bytes the car receives, the car's answer).

@@ -2,9 +2,10 @@
 // machine's address on the hotspot and the dashboard reads what it publishes.  Plain Node, no dependencies.
 //
 // It implements what the robot's session uses and what a monitoring tool needs: CONNECT, PUBLISH (QoS 0, 1, 2
-// acknowledged), SUBSCRIBE (+ and # filters, delivered at QoS 0), UNSUBSCRIBE, PINGREQ and DISCONNECT.  Retained
-// messages, wills, authentication, persistent sessions and TLS are NOT implemented: use a real broker (set
-// EMBEDDED_BROKER=false and MQTT_URL) when you need any of them.
+// acknowledged), SUBSCRIBE (+ and # filters, delivered at QoS 0), UNSUBSCRIBE, PINGREQ, DISCONNECT and RETAINED
+// messages (kept in memory while the dashboard runs; a retained message reaches a client right after it subscribes, so
+// the car gets the barcode map even if it connects after the dashboard sent it).  Wills, authentication, persistent
+// sessions and TLS are NOT implemented: use a real broker (set EMBEDDED_BROKER=false and MQTT_URL) when you need any.
 import net from "node:net";
 
 const CONNACK_OK = Buffer.from([0x20, 0x02, 0x00, 0x00]);
@@ -32,14 +33,15 @@ function encodeLength(n) {
   return Buffer.from(out);
 }
 
-function publishPacket(topic, payload) {
+function publishPacket(topic, payload, retain = false) {
   const t = Buffer.from(topic, "utf8");
   const body = Buffer.concat([Buffer.from([t.length >> 8, t.length & 255]), t, payload]);
-  return Buffer.concat([Buffer.from([0x30]), encodeLength(body.length), body]);
+  return Buffer.concat([Buffer.from([retain ? 0x31 : 0x30]), encodeLength(body.length), body]);
 }
 
 export function createBroker({ port = 1883, host = "0.0.0.0", onPublish = () => {}, onEvent = () => {}, now = () => Date.now() } = {}) {
   const clients = new Set();
+  const retained = new Map();                                      // topic -> payload
   const stats = { connects: 0, publishes: 0, pingreqs: 0 };
 
   const server = net.createServer(socket => {
@@ -81,6 +83,9 @@ export function createBroker({ port = 1883, host = "0.0.0.0", onPublish = () => 
         if (qos === 1) send(Buffer.from([0x40, 0x02, packetId >> 8, packetId & 255]));
         if (qos === 2) send(Buffer.from([0x50, 0x02, packetId >> 8, packetId & 255]));
         stats.publishes++;
+        if (flags & 1) {                                             // RETAIN: an empty payload clears it
+          if (payload.length) retained.set(topic, Buffer.from(payload)); else retained.delete(topic);
+        }
         onPublish(topic, Buffer.from(payload), { clientId: client.id, qos });
         for (const other of clients) {
           if (other !== client && other.subscriptions.some(f => topicMatches(f, topic))) {
@@ -92,13 +97,20 @@ export function createBroker({ port = 1883, host = "0.0.0.0", onPublish = () => 
       } else if (type === 8) {                                       // SUBSCRIBE
         const packetId = body.readUInt16BE(0);
         const granted = [];
+        const filters = [];
         for (let pos = 2; pos < body.length;) {
           const len = body.readUInt16BE(pos);
-          client.subscriptions.push(body.toString("utf8", pos + 2, pos + 2 + len));
+          const filter = body.toString("utf8", pos + 2, pos + 2 + len);
+          client.subscriptions.push(filter);
+          filters.push(filter);
           granted.push(0);
           pos += 2 + len + 1;
         }
         send(Buffer.concat([Buffer.from([0x90, 2 + granted.length, packetId >> 8, packetId & 255]), Buffer.from(granted)]));
+        // retained messages follow the SUBACK
+        for (const [topic, payload] of retained) {
+          if (filters.some(f => topicMatches(f, topic))) send(publishPacket(topic, payload, true));
+        }
       } else if (type === 10) {                                      // UNSUBSCRIBE
         const packetId = body.readUInt16BE(0);
         for (let pos = 2; pos < body.length;) {
@@ -160,9 +172,17 @@ export function createBroker({ port = 1883, host = "0.0.0.0", onPublish = () => 
     }),
     close: () => new Promise(resolve => { for (const c of clients) c.socket.destroy(); server.close(() => resolve()); }),
     clientCount: () => [...clients].filter(c => c.connected).length,
-    // Deliver a message to subscribed clients (the dashboard can use this to send commands later).
-    publish(topic, payload) {
-      for (const c of clients) if (c.subscriptions.some(f => topicMatches(f, topic))) c.socket.write(publishPacket(topic, Buffer.from(payload)));
-    }
+    // Deliver a message to subscribed clients.  With { retain: true } it is also kept for clients that subscribe later.
+    // Returns how many connected clients it was delivered to now.
+    publish(topic, payload, { retain = false } = {}) {
+      const bytes = Buffer.from(payload);
+      if (retain) { if (bytes.length) retained.set(topic, bytes); else retained.delete(topic); }
+      let delivered = 0;
+      for (const c of clients) {
+        if (!c.socket.destroyed && c.subscriptions.some(f => topicMatches(f, topic))) { c.socket.write(publishPacket(topic, bytes)); delivered++; }
+      }
+      return delivered;
+    },
+    retained: () => new Map(retained)
   };
 }

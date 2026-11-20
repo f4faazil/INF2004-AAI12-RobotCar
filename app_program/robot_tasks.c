@@ -47,6 +47,7 @@
 #include "safety.h"
 #include "telemetry.h"
 #if TM_WIFI_MQTT
+#include "mqtt_mailbox.h"
 #include "telemetry_tkernel_port.h"
 #endif
 #if TM_WIFI_CYW43
@@ -1321,7 +1322,6 @@ static void net_task(INT stacd, void *exinf)
 
     (void)stacd;
     (void)exinf;
-    (void)on_command;                           /* no application-level client in this build */
     (void)topic_for;
     for (;;) {
         uint32_t now;
@@ -1359,7 +1359,29 @@ static void net_task(INT stacd, void *exinf)
         if (connected && (tel_queue_depth(&g_tel_q) < (TEL_QUEUE_DEPTH / 4U))) {
             fault_clear(&g_faults, FAULT_TELEMETRY_DROP);
         }
-        g_map_ack_len = 0U;                     /* the letter map cannot arrive over MQTT in this build */
+
+        /* The barcode letter map from the PC (aai12/robot/map).  Only the map is acted on: any other topic that reached
+         * the mailbox is dropped, so the network cannot start or stop the motors. */
+        {
+            char topic[MQTT_MAILBOX_TOPIC_BYTES + 1U];
+            uint8_t payload[MQTT_MAILBOX_PAYLOAD_BYTES];
+            unsigned int length = 0U;
+            uint8_t drained;
+
+            for (drained = 0U; drained < 2U; drained++) {
+                if (mqtt_mailbox_rx_pop(topic, payload, &length) == 0U) {
+                    break;
+                }
+                if (topic_is(topic, TOPIC_MAP)) {
+                    on_map(payload, (uint16_t)length);
+                }
+            }
+            /* The reply ("OK n=26" / "ERR ...") goes out through the owner task, which has the session. */
+            if ((g_map_ack_len != 0U) &&
+                (mqtt_mailbox_tx_put(TOPIC_MAP_ACK, (const unsigned char *)g_map_ack, g_map_ack_len) != 0U)) {
+                g_map_ack_len = 0U;
+            }
+        }
 
         if (connected && ((now - last_heartbeat_ms) >= ROBOT_HEARTBEAT_MS)) {
             uint8_t buf[TEL_MAX_MESSAGE];

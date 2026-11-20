@@ -163,3 +163,90 @@ bool mqtt_wire_is_pingresp(const uint8_t *packet, size_t length)
     return packet != NULL && length == 2U &&
            packet[0] == 0xd0U && packet[1] == 0x00U;
 }
+
+size_t mqtt_wire_subscribe(uint8_t *out, size_t capacity, uint16_t packet_id, const char *topic_filter)
+{
+    const size_t n = (topic_filter == NULL) ? 0U : strlen(topic_filter);
+    size_t remaining;
+    size_t header_len;
+    size_t offset;
+
+    if (out == NULL || n == 0U || n > UINT16_MAX || packet_id == 0U) {
+        return 0U;
+    }
+    remaining = 2U + 2U + n + 1U;                       /* packet id, filter length, filter, requested QoS */
+    header_len = 1U + mqtt_remaining_length_size(remaining);
+    if (capacity < header_len + remaining) {
+        return 0U;
+    }
+    out[0] = 0x82U;                                     /* SUBSCRIBE: the reserved flag bits must be 0010 */
+    offset = 1U + mqtt_encode_remaining_length(&out[1], remaining);
+    mqtt_write_u16_be(&out[offset], packet_id);
+    offset += 2U;
+    mqtt_write_u16_be(&out[offset], (uint16_t)n);
+    offset += 2U;
+    memcpy(&out[offset], topic_filter, n);
+    offset += n;
+    out[offset] = 0x00U;                                /* QoS 0 */
+    return offset + 1U;
+}
+
+bool mqtt_wire_parse_suback(const uint8_t *packet, size_t length, uint16_t *packet_id, uint8_t *code)
+{
+    if (packet == NULL || packet_id == NULL || code == NULL || length != 5U ||
+        packet[0] != 0x90U || packet[1] != 0x03U) {
+        return false;
+    }
+    if (!(packet[4] <= 2U || packet[4] == 0x80U)) {
+        return false;
+    }
+    *packet_id = (uint16_t)(((uint16_t)packet[2] << 8) | packet[3]);
+    *code = packet[4];
+    return true;
+}
+
+bool mqtt_wire_parse_publish_qos0(const uint8_t *packet, size_t length,
+                                  const uint8_t **topic, size_t *topic_length,
+                                  const uint8_t **payload, size_t *payload_length)
+{
+    size_t remaining = 0U;
+    size_t multiplier = 1U;
+    size_t i = 1U;
+    size_t topic_len;
+
+    if (packet == NULL || topic == NULL || topic_length == NULL || payload == NULL ||
+        payload_length == NULL || length < 4U) {
+        return false;
+    }
+    if ((packet[0] & 0xf0U) != 0x30U) {
+        return false;
+    }
+    if ((packet[0] & 0x0eU) != 0U) {                    /* DUP or QoS 1/2: we only accept QoS 0 */
+        return false;
+    }
+    for (;;) {
+        uint8_t digit;
+
+        if (i >= length || i > 4U) {
+            return false;
+        }
+        digit = packet[i++];
+        remaining += (size_t)(digit & 0x7fU) * multiplier;
+        multiplier *= 128U;
+        if ((digit & 0x80U) == 0U) {
+            break;
+        }
+    }
+    if (remaining != (length - i) || remaining < 2U) {
+        return false;
+    }
+    topic_len = ((size_t)packet[i] << 8) | packet[i + 1U];
+    if (topic_len == 0U || topic_len > (remaining - 2U)) {
+        return false;
+    }
+    *topic = &packet[i + 2U];
+    *topic_length = topic_len;
+    *payload = &packet[i + 2U + topic_len];
+    *payload_length = remaining - 2U - topic_len;
+    return true;
+}

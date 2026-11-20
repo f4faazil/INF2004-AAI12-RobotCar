@@ -25,6 +25,8 @@ export function loadConfig(env = process.env) {
         event: env.MQTT_EVENT_TOPIC ?? "aai12/robot/event",
         ack: env.MQTT_ACK_TOPIC ?? "aai12/robot/ack",
         status: env.MQTT_STATUS_TOPIC ?? "aai12/robot/status",
+        map: env.MQTT_MAP_TOPIC ?? "aai12/robot/map",                  // dashboard -> car: barcode letter map
+        mapAck: env.MQTT_MAP_ACK_TOPIC ?? "aai12/robot/map_ack",        // car -> dashboard: "OK n=3" or "ERR ..."
         json: env.MQTT_JSON_TOPIC || undefined
       }
     }

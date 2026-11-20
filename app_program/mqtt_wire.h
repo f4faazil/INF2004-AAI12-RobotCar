@@ -32,4 +32,17 @@ bool mqtt_wire_parse_connack(const uint8_t *packet, size_t length,
 
 bool mqtt_wire_is_pingresp(const uint8_t *packet, size_t length);
 
+/* SUBSCRIBE for ONE topic filter at requested QoS 0 (so the broker delivers at QoS 0 at most).  The filter may contain
+ * the + and # wildcards.  0 means encoding failed. */
+size_t mqtt_wire_subscribe(uint8_t *out, size_t capacity, uint16_t packet_id, const char *topic_filter);
+
+/* A complete SUBACK for one filter.  *code is the granted QoS (0..2) or 0x80 for a refusal. */
+bool mqtt_wire_parse_suback(const uint8_t *packet, size_t length, uint16_t *packet_id, uint8_t *code);
+
+/* A complete PUBLISH at QoS 0 (the retain flag is allowed).  The topic and payload point into the packet.
+ * Returns false for QoS 1 or 2, a malformed length or a duplicate flag. */
+bool mqtt_wire_parse_publish_qos0(const uint8_t *packet, size_t length,
+                                  const uint8_t **topic, size_t *topic_length,
+                                  const uint8_t **payload, size_t *payload_length);
+
 #endif

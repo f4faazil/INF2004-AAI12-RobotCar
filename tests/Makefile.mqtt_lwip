@@ -1,10 +1,10 @@
 CC ?= cc
-CFLAGS = -std=c11 -O2 -Wall -Wextra -Werror -pedantic
+CFLAGS = -std=c11 -O2 -Wall -Wextra -Werror -pedantic -DAAI12_MQTT_SUBSCRIBE=0
 INCLUDES = -Imock_pico -Imock_lwip -I../lib/libnet/lwip/include -I../app_program
 SOURCES = test_mqtt_lwip.c ../lib/libnet/lwip/mqtt_lwip.c \
           ../app_program/mqtt_heartbeat.c \
           ../app_program/mqtt_session.c ../app_program/mqtt_stream.c \
-          ../app_program/mqtt_wire.c \
+          ../app_program/mqtt_wire.c ../app_program/mqtt_mailbox.c \
           ../app_program/telemetry_hump_demo.c \
           ../app_program/telemetry_bits.c \
           ../app_program/telemetry_queue.c ../app_program/telemetry_inbox.c \

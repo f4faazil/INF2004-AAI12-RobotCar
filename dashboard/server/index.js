@@ -11,6 +11,7 @@ import { createRobotSimulator } from "./robot-simulator.js";
 import { createBroker } from "./broker.js";
 import { routeMqttMessage } from "./message-router.js";
 import { LatestPicoState } from "./latest-state.js";
+import { parseMap } from "./barcode-map.js";
 
 const config = loadConfig();
 const publicDir = fileURLToPath(new URL("../public/", import.meta.url));
@@ -19,7 +20,51 @@ let mqttClient;
 let mqttState = config.demoMode ? "demo" : "connecting";
 const latestPicoState = new LatestPicoState();
 
+// Feed the barcode letter map to the robot: validated here (same rules as the robot), published RETAINED on
+// aai12/robot/map so the car gets it whenever it connects, and answered by the car on aai12/robot/map_ack.
+function sendMap(input) {
+  const parsed = parseMap(input);
+  if (!parsed.ok) return parsed;
+  const topic = config.mqtt.topics.map;
+  let delivered = null;
+  if (config.demoMode) {
+    delivered = 0;
+  } else if (broker) {
+    delivered = broker.publish(topic, Buffer.from(parsed.text), { retain: true });
+  } else if (mqttClient?.connected) {
+    mqttClient.publish(topic, parsed.text, { qos: 0, retain: true });
+  } else {
+    return { ok: false, error: "the dashboard is not connected to a broker" };
+  }
+  publishPicoMessage({ type: "map-sent", receivedAt: new Date().toISOString(), data: { text: parsed.text, entries: parsed.entries, deliveredNow: delivered } });
+  if (config.demoMode) setTimeout(() => publishPicoMessage({ type: "map-ack", receivedAt: new Date().toISOString(), data: parsed.text === "CLEAR" ? "OK n=0" : `OK n=${parsed.entries.length}` }), 600);
+  return { ok: true, text: parsed.text, entries: parsed.entries, deliveredNow: delivered };
+}
+
+const readBody = req => new Promise((resolve, reject) => {
+  let size = 0;
+  const chunks = [];
+  req.on("data", chunk => { size += chunk.length; if (size > 2048) { reject(new Error("too large")); req.destroy(); } else chunks.push(chunk); });
+  req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+  req.on("error", reject);
+});
+
 const server = http.createServer(async (req, res) => {
+  if (req.method === "POST" && req.url.split("?")[0] === "/api/map") {
+    // body: the map as plain text ("A=L,B=R,F=U") or JSON {"map": "..."}
+    try {
+      const raw = await readBody(req);
+      let text = raw;
+      if (raw.trim().startsWith("{")) text = JSON.parse(raw).map;
+      const result = sendMap(text);
+      res.writeHead(result.ok ? 200 : 400, { "content-type": "application/json" });
+      res.end(JSON.stringify(result));
+    } catch (error) {
+      res.writeHead(400, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: false, error: error.message }));
+    }
+    return;
+  }
   // "/" is the robot dashboard; the WiFi / MQTT diagnostics page is at /network.
   const path = req.url.split("?")[0];
   const requested = path === "/" ? "robot.html" : path === "/network" ? "index.html" : path.slice(1);
@@ -34,7 +79,7 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-const sockets = new WebSocketServer({ server, path: "/live" });
+const sockets = new WebSocketServer({ server, path: "/live", maxPayload: 4096 });
 const broadcast = message => {
   const encoded = JSON.stringify(message);
   for (const socket of sockets.clients) if (socket.readyState === WebSocket.OPEN) socket.send(encoded);
@@ -48,6 +93,14 @@ const status = detail => broadcast({ type: "status", mode: config.demoMode ? "de
 sockets.on("connection", socket => {
   socket.send(JSON.stringify({ type: "status", mode: config.demoMode ? "demo" : "live", mqtt: mqttState, receivedAt: new Date().toISOString() }));
   for (const message of latestPicoState.replay()) socket.send(JSON.stringify(message));
+  socket.on("message", data => {
+    try {
+      const request = JSON.parse(data.toString("utf8"));
+      if (request?.type === "send-map") socket.send(JSON.stringify({ type: "map-result", ...sendMap(request.map) }));
+    } catch {
+      socket.send(JSON.stringify({ type: "map-result", ok: false, error: "unreadable request" }));
+    }
+  });
 });
 
 // One place turns an MQTT message (from the built-in broker or an external one) into what the browser gets.
@@ -83,7 +136,7 @@ if (config.demoMode) {
   });
   mqttClient.on("connect", () => {
     mqttState = "connected";
-    const topics = Object.values(config.mqtt.topics).filter(Boolean);
+    const topics = Object.entries(config.mqtt.topics).filter(([name, topic]) => topic && name !== "map").map(([, topic]) => topic);
     mqttClient.subscribe(topics, { qos: 0 }, error => status(error ? `Subscribe failed: ${error.message}` : `Subscribed to ${topics.length} topics`));
   });
   mqttClient.on("reconnect", () => { mqttState = "reconnecting"; status(); });

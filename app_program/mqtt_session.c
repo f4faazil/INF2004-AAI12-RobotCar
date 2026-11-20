@@ -109,6 +109,28 @@ void mqtt_session_poll(mqtt_session_t *session, uint32_t now_ms)
     }
     if (session->state != MQTT_SESSION_ONLINE) return;
 
+    /* One SUBSCRIBE per poll until all are sent; a refusal or a silent broker restarts the session. */
+    if (session->subscriptions_sent < session->subscription_count) {
+        packet_length = mqtt_wire_subscribe(session->tx, sizeof(session->tx),
+                                            (uint16_t)(session->subscriptions_sent + 1U),
+                                            session->subscriptions[session->subscriptions_sent]);
+        write_result = packet_length == 0U ? MQTT_SESSION_WRITE_FATAL :
+                session->transport.write_tcp(session->context, session->tx, packet_length);
+        if (write_result == MQTT_SESSION_WRITE_ACCEPTED) {
+            session->last_tx_ms = now_ms;
+            session->subscriptions_sent++;
+            session->subscribes++;
+        } else if (write_result == MQTT_SESSION_WRITE_FATAL) {
+            enter_backoff(session, now_ms, true);
+        }
+        return;
+    }
+    if (session->subscriptions_acked < session->subscriptions_sent &&
+        (uint32_t)(now_ms - session->last_tx_ms) >= (2U * MQTT_SESSION_ACK_TIMEOUT_MS)) {
+        enter_backoff(session, now_ms, true);
+        return;
+    }
+
     if (session->waiting_pingresp) {
         if ((uint32_t)(now_ms - session->ping_since_ms) >=
             MQTT_SESSION_PING_TIMEOUT_MS) {
@@ -188,9 +210,37 @@ static bool received_packet(mqtt_session_t *session,
         session->state = MQTT_SESSION_ONLINE;
         session->state_since_ms = now_ms;
         session->sessions_online++;
+        session->subscriptions_sent = 0U;
+        session->subscriptions_acked = 0U;
         return true;
     }
     if (session->state == MQTT_SESSION_ONLINE) {
+        uint16_t packet_id;
+        uint8_t code;
+
+        if (length >= 1U && (packet[0] & 0xf0U) == 0x90U) {            /* SUBACK */
+            if (!mqtt_wire_parse_suback(packet, length, &packet_id, &code) ||
+                code == 0x80U ||
+                session->subscriptions_acked >= session->subscriptions_sent ||
+                packet_id != (uint16_t)(session->subscriptions_acked + 1U)) return false;
+            session->subscriptions_acked++;
+            return true;
+        }
+        if (length >= 1U && (packet[0] & 0xf0U) == 0x30U) {            /* PUBLISH */
+            const uint8_t *topic;
+            const uint8_t *payload;
+            size_t topic_length;
+            size_t payload_length;
+
+            if (!mqtt_wire_parse_publish_qos0(packet, length, &topic, &topic_length,
+                                              &payload, &payload_length)) return false;
+            session->messages_received++;
+            if (session->on_message != NULL) {
+                session->on_message(session->message_context, topic, topic_length,
+                                    payload, payload_length);
+            }
+            return true;
+        }
         if (!session->waiting_pingresp ||
             !mqtt_wire_is_pingresp(packet, length)) return false;
         session->waiting_pingresp = false;
@@ -233,6 +283,23 @@ void mqtt_session_tcp_received(mqtt_session_t *session,
             break;
         }
     }
+}
+
+bool mqtt_session_add_subscription(mqtt_session_t *session, const char *topic_filter)
+{
+    if (session == NULL || topic_filter == NULL || topic_filter[0] == '\0' ||
+        session->subscription_count >= MQTT_SESSION_MAX_SUBSCRIPTIONS) {
+        return false;
+    }
+    session->subscriptions[session->subscription_count++] = topic_filter;
+    return true;
+}
+
+void mqtt_session_set_message_handler(mqtt_session_t *session, mqtt_session_message_fn handler, void *context)
+{
+    if (session == NULL) return;
+    session->on_message = handler;
+    session->message_context = context;
 }
 
 bool mqtt_session_publish(mqtt_session_t *session, const char *topic,

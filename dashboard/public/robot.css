@@ -71,5 +71,15 @@ button { background: var(--panel2); color: var(--text); border: 1px solid var(--
 ol#events { list-style: none; margin: 10px 0 0; padding: 0; max-height: 280px; overflow: auto; font-size: 13px; }
 ol#events li { display: grid; grid-template-columns: 78px 130px 1fr; gap: 10px; padding: 5px 0; border-top: 1px solid var(--line); } ol#events li.empty { display: block; color: var(--muted); }
 .t { color: var(--muted); font-variant-numeric: tabular-nums; } .n { font-weight: 600; } .n.fault { color: var(--bad); } .n.st { color: var(--info); } .n.barcode { color: var(--violet); } .n.hump { color: var(--warn); }
+.mapgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 8px; margin-bottom: 12px; }
+.mapcell { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel2); }
+.mapcell.set { border-color: var(--violet); }
+.mapcell b { font-size: 20px; color: var(--violet); width: 18px; text-align: center; }
+.mapcell select { flex: 1; min-width: 0; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 3px 4px; font: inherit; font-size: 13px; }
+.maprow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
+.maprow code { flex: 1; min-width: 160px; padding: 6px 10px; border-radius: 8px; background: var(--panel2); border: 1px solid var(--line); color: var(--violet); overflow-wrap: anywhere; }
+button.primary { background: #2b6cf0; border-color: #2b6cf0; color: #fff; font-weight: 600; padding: 6px 16px; } button.primary:hover { background: #4a82f5; border-color: #4a82f5; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+.hint { margin: 10px 0 0; color: var(--muted); font-size: 12px; }
 footer { display: flex; justify-content: space-between; gap: 12px; padding: 14px 20px; color: var(--muted); font-size: 12px; border-top: 1px solid var(--line); }
 @media (max-width: 760px) { .hero { grid-template-columns: 1fr; } .wide { grid-column: auto; } .scanrow { grid-template-columns: 1fr; } .state { font-size: 30px; } main { padding: 12px; } header { padding: 12px; } }
