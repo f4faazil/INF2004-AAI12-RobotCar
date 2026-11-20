@@ -152,6 +152,24 @@ uint32_t hal_time_us(void)
     return in_w(TIMER_TIMERAWL);
 }
 
+#if !TM_WIFI_CYW43
+/*
+ * The telemetry modules (telemetry_rtos.c, telemetry_crosscore_demo.c) are compiled into every build and call the
+ * SDK's time_us_64().  The radio build gets it from lib/libwifi/.../cyw43_utk_compat.c; without the radio this is it.
+ */
+uint64_t time_us_64(void)
+{
+    uint32_t hi;
+    uint32_t lo;
+
+    do {
+        hi = in_w(TIMER_TIMERAWH);
+        lo = in_w(TIMER_TIMERAWL);
+    } while (hi != in_w(TIMER_TIMERAWH));
+    return ((uint64_t)hi << 32) | lo;
+}
+#endif
+
 void hal_delay_us(uint32_t us)
 {
     uint32_t start = hal_time_us();
