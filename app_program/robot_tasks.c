@@ -1360,8 +1360,9 @@ static void net_task(INT stacd, void *exinf)
             fault_clear(&g_faults, FAULT_TELEMETRY_DROP);
         }
 
-        /* The barcode letter map from the PC (aai12/robot/map).  Only the map is acted on: any other topic that reached
-         * the mailbox is dropped, so the network cannot start or stop the motors. */
+        /* From the PC: the barcode letter map (aai12/robot/map) and START / STOP (aai12/robot/cmd).  Any other topic
+         * that reached the mailbox is dropped.  A command goes through the same policy as the physical button and the
+         * IMU lift stop: refused while the car is picked up, START refused while running. */
         {
             char topic[MQTT_MAILBOX_TOPIC_BYTES + 1U];
             uint8_t payload[MQTT_MAILBOX_PAYLOAD_BYTES];
@@ -1372,8 +1373,8 @@ static void net_task(INT stacd, void *exinf)
                 if (mqtt_mailbox_rx_pop(topic, payload, &length) == 0U) {
                     break;
                 }
-                if (topic_is(topic, TOPIC_MAP)) {
-                    on_map(payload, (uint16_t)length);
+                if (topic_is(topic, TOPIC_MAP) || topic_is(topic, TOPIC_CMD)) {
+                    on_command((void *)0, topic, payload, (uint16_t)length);
                 }
             }
             /* The reply ("OK n=26" / "ERR ...") goes out through the owner task, which has the session. */

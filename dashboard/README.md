@@ -160,9 +160,25 @@ curl -X POST --data "A=L,B=R,F=U" http://localhost:3000/api/map
 Each send REPLACES the whole table. The dashboard checks the text with the robot's own rules (`server/barcode-map.js`
 mirrors `app_program/barcode_map.c`) and refuses a bad one before it is sent.
 
-This is the only thing the dashboard sends to the car, and it cannot move the motors: the car subscribes to the map topic
-and nothing else, so there is no remote START/STOP over the network. Anything that can reach the dashboard's port or the
-broker can change the table, so keep both on the hotspot.
+Anything that can reach the dashboard's port or the broker can change the table, so keep both on the hotspot.
+
+## START and STOP from the page
+
+The **START / STOP** card at the top sends the car's own command record (`TEL_TYPE_COMMAND`, `server/commands.js`) on
+`aai12/robot/cmd`. START does what the GP20 button does (calibrate, then follow the line); STOP stops the motors. The car
+answers with an ACK record carrying the same request id: RECEIVED, then COMPLETED when its vehicle controller has acted
+on it, or REFUSED when its own policy says no (picked up by the IMU lift stop, or START while already running).
+
+Safety, in layers:
+- START is greyed out until you tick "I am next to the car and its wheels are clear", and the tick is used up by one START.
+- A command is never retained and never queued: with no car connected the dashboard says so and sends nothing, and a car
+  that reconnects is not given an old START.
+- The page's WebSocket must come from this dashboard's own address (a page served by another site cannot send commands).
+- The car still refuses START while picked up, and its physical stop conditions (lift, faults) still win.
+
+The dashboard's port and the broker have no login: anyone who can reach them on the hotspot can press START. Keep the
+hotspot to your team, and keep the car's wheels off the floor for the first tries.
+
 
 ## The per-sensor record
 

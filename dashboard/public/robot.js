@@ -161,6 +161,7 @@ function onRobotFrame(m) {
   else if (m.kind === "obstacle") onObstacle(d, m.receivedAt);
   else if (m.kind === "heartbeat") onHeartbeat(d);
   else if (m.kind === "event") logEvent(d, m.receivedAt);
+  else if (m.kind === "ack") onAck(d);
 }
 
 function onBroker(e) {
@@ -218,6 +219,38 @@ function onMapAck(m) {
   set("mapAck", `${m.data}${ok ? " (letters mapped on the car)" : " (the car refused it and kept its old map)"} · ${clock(m.receivedAt)}`, ok ? "ok" : "bad");
 }
 
+// --- START / STOP: sent over MQTT to the car, which answers with an ACK record carrying the same request id
+const ACK_TEXT = {
+  "RECEIVED": ["the car accepted it", "warn"],
+  "COMPLETED": ["done: the vehicle controller acted on it", "ok"],
+  "REJECTED RUNNING": ["REFUSED: the car is already running, or it is picked up", "bad"],
+  "INVALID": ["REFUSED: the car did not understand it", "bad"]
+};
+const control = { pending: null };
+$("armCheck").addEventListener("change", () => { $("btnStart").disabled = !$("armCheck").checked; });
+function sendCommand(command) {
+  if (!mapState.ws || mapState.ws.readyState !== WebSocket.OPEN) { set("cmdSent", "dashboard link is down: not sent", "bad"); return; }
+  mapState.ws.send(JSON.stringify({ type: "send-command", command }));
+  set("cmdSent", `${command.toUpperCase()}: sending…`, "warn"); set("cmdAck", "waiting for the car…", "warn");
+}
+$("btnStart").addEventListener("click", () => {
+  if (!$("armCheck").checked) return;
+  sendCommand("start");
+  $("armCheck").checked = false; $("btnStart").disabled = true;      // armed for one START at a time
+});
+$("btnStop").addEventListener("click", () => sendCommand("stop"));
+function onCommandResult(m) {
+  if (!m.ok) { set("cmdSent", `not sent: ${m.error}`, "bad"); set("cmdAck", "—", ""); control.pending = null; return; }
+  control.pending = m.reqId;
+  set("cmdSent", `${m.command.toUpperCase()} · request ${m.reqId} · ${clock(new Date().toISOString())}`, "ok");
+}
+function onAck(d) {
+  if (control.pending === null || d.reqId !== control.pending) return;
+  const [text, cls] = ACK_TEXT[d.resultName] ?? [d.resultName, ""];
+  set("cmdAck", `${d.resultName}: ${text}`, cls);
+  if (d.resultName !== "RECEIVED") control.pending = null;
+}
+
 function setPill(id, cls, text, textId) { $(id).className = `pill ${cls}`; if (textId) $(textId).textContent = text; }
 
 function connect() {
@@ -234,6 +267,7 @@ function connect() {
     } else if (m.type === "robot-frame") onRobotFrame(m);
     else if (m.type === "broker-event") onBroker(m.data);
     else if (m.type === "map-sent") onMapSent(m);
+    else if (m.type === "command-result") onCommandResult(m);
     else if (m.type === "map-ack") onMapAck(m);
     else if (m.type === "map-result" && !m.ok) { set("mapSent", `refused: ${m.error}`, "bad"); set("mapAck", "—", ""); }
     else if (m.type === "parse-error") logEvent({ name: "BAD RECORD", detail: `${m.topic}: ${m.data.message}` }, m.receivedAt);

@@ -12,6 +12,7 @@ import { createBroker } from "./broker.js";
 import { routeMqttMessage } from "./message-router.js";
 import { LatestPicoState } from "./latest-state.js";
 import { parseMap } from "./barcode-map.js";
+import { encodeCommand, sameOrigin, createRequestIds } from "./commands.js";
 
 const config = loadConfig();
 const publicDir = fileURLToPath(new URL("../public/", import.meta.url));
@@ -39,6 +40,31 @@ function sendMap(input) {
   publishPicoMessage({ type: "map-sent", receivedAt: new Date().toISOString(), data: { text: parsed.text, entries: parsed.entries, deliveredNow: delivered } });
   if (config.demoMode) setTimeout(() => publishPicoMessage({ type: "map-ack", receivedAt: new Date().toISOString(), data: parsed.text === "CLEAR" ? "OK n=0" : `OK n=${parsed.entries.length}` }), 600);
   return { ok: true, text: parsed.text, entries: parsed.entries, deliveredNow: delivered };
+}
+
+// START / STOP.  Published WITHOUT retain (a retained START would replay when the car reconnects), and refused with a
+// message when the car is not connected, so a click is never queued to run the motors later.
+const nextRequestId = createRequestIds();
+function sendCommand(name) {
+  let bytes;
+  const reqId = nextRequestId();
+  try { bytes = encodeCommand(name, reqId); } catch (error) { return { ok: false, error: error.message }; }
+  const topic = config.mqtt.topics.cmd;
+  let delivered = null;
+  if (config.demoMode) {
+    delivered = 1;
+    setTimeout(() => publishPicoMessage({ type: "robot-frame", kind: "ack", receivedAt: new Date().toISOString(), topic, source: "demo",
+      data: { reqId, result: 0, resultName: "RECEIVED" } }), 150);
+  } else if (broker) {
+    delivered = broker.publish(topic, bytes);                    // no { retain }
+    if (delivered === 0) return { ok: false, error: "the car is not connected to the broker: nothing was sent" };
+  } else if (mqttClient?.connected) {
+    mqttClient.publish(topic, bytes, { qos: 0, retain: false });
+  } else {
+    return { ok: false, error: "the dashboard is not connected to a broker" };
+  }
+  console.log(`command ${name.toUpperCase()} sent (request ${reqId}) to ${delivered ?? "?"} client(s)`);
+  return { ok: true, command: name, reqId };
 }
 
 const readBody = req => new Promise((resolve, reject) => {
@@ -90,13 +116,17 @@ const publishPicoMessage = message => {
 };
 const status = detail => broadcast({ type: "status", mode: config.demoMode ? "demo" : "live", mqtt: mqttState, detail, receivedAt: new Date().toISOString() });
 
-sockets.on("connection", socket => {
+sockets.on("connection", (socket, request) => {
+  const trusted = sameOrigin(request.headers.origin, request.headers.host);
   socket.send(JSON.stringify({ type: "status", mode: config.demoMode ? "demo" : "live", mqtt: mqttState, receivedAt: new Date().toISOString() }));
   for (const message of latestPicoState.replay()) socket.send(JSON.stringify(message));
   socket.on("message", data => {
     try {
       const request = JSON.parse(data.toString("utf8"));
       if (request?.type === "send-map") socket.send(JSON.stringify({ type: "map-result", ...sendMap(request.map) }));
+      else if (request?.type === "send-command") {
+        socket.send(JSON.stringify({ type: "command-result", ...(trusted ? sendCommand(String(request.command)) : { ok: false, error: "refused: the page was not served by this dashboard" }) }));
+      }
     } catch {
       socket.send(JSON.stringify({ type: "map-result", ok: false, error: "unreadable request" }));
     }
@@ -136,7 +166,7 @@ if (config.demoMode) {
   });
   mqttClient.on("connect", () => {
     mqttState = "connected";
-    const topics = Object.entries(config.mqtt.topics).filter(([name, topic]) => topic && name !== "map").map(([, topic]) => topic);
+    const topics = Object.entries(config.mqtt.topics).filter(([name, topic]) => topic && name !== "map" && name !== "cmd").map(([, topic]) => topic);
     mqttClient.subscribe(topics, { qos: 0 }, error => status(error ? `Subscribe failed: ${error.message}` : `Subscribed to ${topics.length} topics`));
   });
   mqttClient.on("reconnect", () => { mqttState = "reconnecting"; status(); });

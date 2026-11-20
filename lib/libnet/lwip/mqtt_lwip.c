@@ -44,13 +44,15 @@ static const uint8_t qualification_message[] = "AAI12_PICO_W_ONLINE";
 static const char robot_telemetry_topic[] = "aai12/robot/telemetry";
 static const char diagnostic_topic[] = "aai12/diagnostic";
 static const char heartbeat_topic[] = "aai12/robot/heartbeat";
-/* PC -> car: the barcode letter map, delivered to the robot through mqtt_mailbox.  Deliberately the ONLY subscription:
- * there is no remote START/STOP path on this broker, so nothing on the network can make the motors run. */
+/* PC -> car: the barcode letter map and the operator's START / STOP, delivered to the robot through mqtt_mailbox.
+ * The robot applies its own policy to a command (refused while picked up, START refused while running).  Commands are
+ * published by the dashboard WITHOUT the retain flag, so a command is never replayed when the car reconnects. */
 #ifndef AAI12_MQTT_SUBSCRIBE
 #define AAI12_MQTT_SUBSCRIBE 1   /* the adapter packet-count host test builds with 0 */
 #endif
 #if AAI12_MQTT_SUBSCRIBE
 static const char subscribe_map_topic[] = "aai12/robot/map";
+static const char subscribe_cmd_topic[] = "aai12/robot/cmd";
 #endif
 
 /* An incoming message, on the owner task: copy it into the mailbox and return. */
@@ -648,6 +650,7 @@ void mqtt_lwip_poll(struct netif *netif)
         }
 #if AAI12_MQTT_SUBSCRIBE
         (void)mqtt_session_add_subscription(&adapter.session, subscribe_map_topic);
+        (void)mqtt_session_add_subscription(&adapter.session, subscribe_cmd_topic);
 #endif
         mqtt_session_set_message_handler(&adapter.session, on_session_message, &adapter);
         /* usermain() must initialize mutex and inbox before tasks start.

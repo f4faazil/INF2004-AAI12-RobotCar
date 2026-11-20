@@ -39,6 +39,21 @@
     </div>
   </section>
 
+  <section class="card control" id="controlCard">
+    <div class="ctlbtns">
+      <button type="button" id="btnStart" class="go" disabled>START</button>
+      <button type="button" id="btnStop" class="halt">STOP</button>
+    </div>
+    <div class="ctlinfo">
+      <label class="arm"><input type="checkbox" id="armCheck"> I am next to the car and its wheels are clear</label>
+      <dl>
+        <div><dt>Last command</dt><dd id="cmdSent">none yet</dd></div>
+        <div><dt>Car says</dt><dd id="cmdAck">—</dd></div>
+      </dl>
+      <p class="hint">START does what the GP20 button does: calibrate, then follow the line. STOP stops the motors at once. The car refuses START while it is picked up or already running. Commands are never queued: if the car is offline nothing is sent.</p>
+    </div>
+  </section>
+
   <section class="grid">
 
     <article class="card">

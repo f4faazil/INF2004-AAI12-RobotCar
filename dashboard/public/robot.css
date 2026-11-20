@@ -81,5 +81,13 @@ ol#events li { display: grid; grid-template-columns: 78px 130px 1fr; gap: 10px; 
 button.primary { background: #2b6cf0; border-color: #2b6cf0; color: #fff; font-weight: 600; padding: 6px 16px; } button.primary:hover { background: #4a82f5; border-color: #4a82f5; }
 button:disabled { opacity: .5; cursor: not-allowed; }
 .hint { margin: 10px 0 0; color: var(--muted); font-size: 12px; }
+.control { display: grid; grid-template-columns: auto 1fr; gap: 18px; align-items: center; margin-bottom: 16px; }
+.ctlbtns { display: flex; gap: 12px; }
+.ctlbtns button { font-size: 22px; font-weight: 800; letter-spacing: 1px; padding: 18px 34px; border-radius: 12px; border: 2px solid; color: #fff; }
+button.go { background: #1c8a5a; border-color: #3ddc97; } button.go:hover:not(:disabled) { background: #22a56c; border-color: #3ddc97; }
+button.halt { background: #b0283a; border-color: #ff5c6c; } button.halt:hover { background: #cf3347; border-color: #ff5c6c; }
+.arm { display: flex; gap: 8px; align-items: center; cursor: pointer; font-weight: 600; } .arm input { width: 18px; height: 18px; }
+.ctlinfo dl { margin-top: 8px; }
+@media (max-width: 760px) { .control { grid-template-columns: 1fr; } .ctlbtns button { flex: 1; padding: 16px 10px; } }
 footer { display: flex; justify-content: space-between; gap: 12px; padding: 14px 20px; color: var(--muted); font-size: 12px; border-top: 1px solid var(--line); }
 @media (max-width: 760px) { .hero { grid-template-columns: 1fr; } .wide { grid-column: auto; } .scanrow { grid-template-columns: 1fr; } .state { font-size: 30px; } main { padding: 12px; } header { padding: 12px; } }
