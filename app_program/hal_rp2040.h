@@ -33,6 +33,7 @@
 #define HAL_TICK_MOTION     (1U << 0)       /* every 5 ms */
 #define HAL_TICK_CONTROL    (1U << 1)       /* every 10 ms */
 #define HAL_TICK_IMU        (1U << 2)       /* every 20 ms */
+#define HAL_TICK_VEHICLE    (1U << 3)       /* every 10 ms, with HAL_TICK_CONTROL */
 
 typedef struct {
     uint16_t adc[3];                        /* left, centre, right (line_sensor order) */

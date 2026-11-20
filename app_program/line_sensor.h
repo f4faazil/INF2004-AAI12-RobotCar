@@ -111,4 +111,16 @@ bool run_extractor_push(run_extractor_t *extractor,
                         bool *run_is_bar,
                         uint16_t *run_ticks);
 
+/*
+ * The same, but each sample counts for 'weight' instead of 1.  With the weight
+ * set to the distance the car travelled during the sample, run widths are
+ * distances, so a car that accelerates, stutters or stops mid-barcode still
+ * gives bars in the right proportion.  A weight of 0 (not moving) adds nothing.
+ */
+bool run_extractor_push_w(run_extractor_t *extractor,
+                          uint16_t blackness,
+                          uint16_t weight,
+                          bool *run_is_bar,
+                          uint16_t *run_ticks);
+
 #endif /* LINE_SENSOR_H */

@@ -205,6 +205,8 @@ static line_nav_config_t make_cfg(const layout_t *lay)
     c.fixed_black = 0U;
     c.fixed_mask = 0U;
     c.smooth_shift = (uint8_t)lay->smooth;
+    c.barcode_bars = 0U;
+    c.barcode_min_bar = 0U;
     return c;
 }
 

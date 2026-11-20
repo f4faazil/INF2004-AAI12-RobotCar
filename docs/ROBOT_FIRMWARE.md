@@ -96,10 +96,10 @@ make -j8                      # single-core, UART console: the default
 Console: USB CDC (build with `CONSOLE=usb_cdc`), because UART0's GP0/GP1 are the right encoder; 115200 8N1. One status line per second (the values below are only an illustration of the format):
 
 ```
-[robot] st=3 f=0000 pos=2 v=150/149 d=412mm enc=1940/1931 bad=0/0 ir=8123 do=110 edges=12/0/30 vm=7 bc=A ovf=0 drop=0 net=0 us(m/l/v/isr)=410/880/260/38 ovr=0/0
+[robot] st=3 f=0000 pos=2 v=150/149 d=412mm enc=1940/1931 bad=0/0 ir=8123 do=110 edges=12/0/30 vm=7 bc=A bar=1/0 jn=1/1 ex=1 ovf=0 drop=0 net=0 us(m/l/v/isr)=410/880/260/38 ovr=0/0/0
 ```
 
-(`st` = vehicle state, `f` = fault mask, `enc` = raw encoder counts and `bad` = illegal (missed-edge) transitions per wheel, `us(...)` = worst-case microseconds of the Motion, Line and Vehicle tasks and the tick interrupt, `do` = raw IR DO levels (left, centre, right; 1 = pin high), `edges` = DO transitions per sensor, `vm` = sensors calibration trusts (bit 0 left, 1 centre, 2 right; 0 before the first calibration), `bc` = stored barcode letter or `-`, `ovr` = ticks that arrived before the previous one was handled. This is the loop-timing evidence the Tribunal asks for.)
+(`st` = vehicle state, `f` = fault mask, `enc` = raw encoder counts and `bad` = illegal (missed-edge) transitions per wheel, `us(...)` = worst-case microseconds of the Motion, Line and Vehicle tasks and the tick interrupt, `do` = raw IR DO levels (left, centre, right; 1 = pin high), `edges` = DO transitions per sensor, `vm` = sensors calibration trusts (bit 0 left, 1 centre, 2 right; 0 before the first calibration), `bc` = stored barcode letter or `-`, `bar` = barcodes stored / rejected, `jn` = junctions reported by the Line task / seen by the Vehicle Controller, `ex` = barcode commands executed at a junction, `ovr` = ticks that arrived (Motion / Line / Vehicle) before the previous one was handled. This is the loop-timing evidence the Tribunal asks for.)
 
 To go back to the lecturer's original demo, set `ROBOT_FIRMWARE` to 0 in `app_program/robot_config.h`.
 
@@ -139,7 +139,23 @@ make sim                                                    # barcode decode-rat
 
 ### Barcode instructions (Line → Vehicle)
 
-A decoded Code 39 letter is mapped to a command by `ROBOT_BARCODE_MAP` and **stored**; it is executed once at the next junction (advance to put the wheels over it, turn, reacquire the line). It expires after 20 s, a newer barcode replaces it, and an IR-ring overflow voids a barcode in progress. A letter not in the table is rejected and reported, never guessed.
+A decoded Code 39 letter is mapped to a command by the mapping the PC sent over MQTT (see *MQTT mapping* below) and **stored**; it is executed once at the next junction (advance to put the wheels over it, turn, reacquire the line). It expires after 20 s, a newer barcode replaces it, and an IR-ring overflow voids a barcode in progress. A letter that is not in the mapping (or any letter, before a mapping has arrived) is rejected and reported, never guessed.
+
+### MQTT mapping
+
+The car has **no built-in letter-to-movement mapping**. The PC publishes it to `aai12/robot/map` (`ROBOT_MQTT_BASE "/map"`); the car subscribes to that topic after connecting, so a **retained** message is applied again after every reboot or reconnect. Each message replaces the whole mapping; a message with any error is rejected whole and the old mapping is kept. The car answers on `aai12/robot/map_ack` with `OK n=<entries>` or `ERR empty|syntax|letter|action|duplicate`.
+
+Payload (text, at most 128 bytes, case-insensitive; entries separated by comma, semicolon, space, tab or newline; no spaces around `=`):
+
+| Form | Example |
+|---|---|
+| `letter=action` pairs (`=` or `:`) | `A=L,B=R,C=F,D=U,E=L,...` |
+| 26 action letters, A to Z in order | `LRFULRFULRFULRFULRFULRFULU` |
+| remove every mapping | `CLEAR` |
+
+Actions: `L`/`LEFT`, `R`/`RIGHT`, `F`/`FWD`/`FORWARD`/`S`/`STRAIGHT` (go straight on), `U`/`UTURN`/`U-TURN` (U-turn to the right).
+
+Example from a PC with mosquitto: `mosquitto_pub -h <broker> -t aai12/robot/map -r -m "A=L,B=R,C=F,D=U"`. The status line shows `map=<entries>/<rejected messages>`.
 
 ### Telemetry: the data representation table (minimum-bit change)
 
@@ -194,7 +210,7 @@ So a sensor pair must be spaced closer than the line is wide (about 16 mm), and 
 
 **5. Obstacle-to-stop timing.** With a 70 ms HC-SR04 period the normal path (median of 3, two confirming readings) can take 140-210 ms. A single valid reading closer than half the stop distance now declares the obstacle at once (worst case roughly 70 + 10 + 5 ms plus braking), but **no end-to-end time has been measured**.
 
-**6. The letter-to-command mapping is not specified by the course.** The team chose A = left, F = right, Z = U-turn in `ROBOT_BARCODE_MAP`; a turn runs only at a junction, and a junction with no stored instruction goes straight. Confirm with the lecturer.
+**6. The letter-to-command mapping is not specified by the course.** It is sent from the PC over MQTT and is not built into the firmware (see *MQTT mapping*). A turn runs only at a junction, and a junction with no stored instruction goes straight.
 
 ---
 

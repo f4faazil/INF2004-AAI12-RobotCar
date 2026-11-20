@@ -6,7 +6,7 @@
  *
  * The decoder is fed the widths of alternating bars and spaces, as measured
  * by the line sensor, and reports a character when a whole "*X*" symbol has
- * been seen.  It works on width ratios only, so it needs no knowledge of the
+ * been seen, scanned in either direction.  It works on width ratios only, so it needs no knowledge of the
  * car's speed or the printed scale.  It has no kernel or hardware
  * dependencies.
  */

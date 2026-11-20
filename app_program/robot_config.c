@@ -7,25 +7,17 @@
  */
 #include "robot_config.h"
 
+#include <stddef.h>
+
 #include "imu.h"
 #include "pid.h"
 #include "ultrasonic.h"
 
 /*
- * Letter -> command table, as decided by the team: A turns left, F turns
- * right, Z makes a U-turn.  A turn runs only when the car reaches a junction;
- * a junction with no stored instruction goes straight, so there is no letter
- * for straight.  A decoded letter that is not listed is rejected and reported,
- * never guessed at.
+ * There is no built-in letter -> movement mapping.  The PC sends it over MQTT
+ * (topic <base>/map, see barcode_map.h) and the Line task applies it; until one
+ * arrives every decoded letter is rejected and the car goes straight at a junction.
  */
-#define ROBOT_BARCODE_MAP_COUNT (3U)
-const nav_map_entry_t ROBOT_BARCODE_MAP[ROBOT_BARCODE_MAP_COUNT] = {
-    { 'A', NAV_CMD_LEFT },
-    { 'F', NAV_CMD_RIGHT },
-    { 'Z', NAV_CMD_UTURN }
-};
-const uint8_t ROBOT_BARCODE_MAP_LEN = (uint8_t)(sizeof(ROBOT_BARCODE_MAP) /
-                                                sizeof(ROBOT_BARCODE_MAP[0]));
 
 /*
  * Motion.  PLACEHOLDER: wheel diameter, track width and counts per revolution
@@ -72,7 +64,7 @@ const line_nav_config_t ROBOT_LINE_NAV_CFG = {
     .found_frames = 3U,
     .junction_min_mm = (ROBOT_BARCODE_WIDE_MM + ROBOT_LINE_WIDTH_MM) / 2U,     /* 13 */
     .junction_merge_ms = 30U,
-    .barcode_quiet_ms = 250U,
+    .barcode_quiet_ms = 600U,
     .instruction_ttl_ms = 20000U,       /* PLACEHOLDER: stale instruction expires */
     .hump_suppress_max_ms = 1000U,      /* Tribunal: at most about 1 s */
     .hump_fresh_ms = 100U,
@@ -80,8 +72,8 @@ const line_nav_config_t ROBOT_LINE_NAV_CFG = {
     .steer_kp_mm_s = 13 * ROBOT_TRACK_REF_MM,
     .steer_td_ms = 30U,                 /* light derivative: the position is smoothed, see smooth_shift */
     .steer_limit_mm_s = 150,
-    .map = ROBOT_BARCODE_MAP,
-    .map_len = ROBOT_BARCODE_MAP_COUNT,
+    .map = NULL,                        /* set at run time over MQTT: line_nav_set_map() */
+    .map_len = 0U,
     .channel_pos_permille = {
         [LINE_CHANNEL_LEFT] = POS_OF(ROBOT_SENSOR_MM_LEFT),
         [LINE_CHANNEL_CENTRE] = POS_OF(ROBOT_SENSOR_MM_CENTRE),
@@ -97,7 +89,9 @@ const line_nav_config_t ROBOT_LINE_NAV_CFG = {
     .fixed_white = ROBOT_IR_COUNTS_WHITE,       /* DO sensors: nothing for a sweep to learn */
     .fixed_black = ROBOT_IR_COUNTS_BLACK,
     .fixed_mask = ROBOT_IR_FIXED_MASK,
-    .smooth_shift = 2U                          /* digital sensors: gain 1/4 per 10 ms step, about 35 ms */
+    .smooth_shift = 2U,                         /* digital sensors: gain 1/4 per 10 ms step, about 35 ms */
+    .barcode_bars = 15U,                        /* "*X*" always has 15 bars: after them the next black is the junction */
+    .barcode_min_bar = 24U                      /* quarter encoder counts: shorter is a glitch, not a bar */
 };
 
 const hump_config_t ROBOT_HUMP_CFG = {
@@ -145,13 +139,16 @@ const obstacle_config_t ROBOT_OBSTACLE_CFG = {
 };
 
 const vehicle_config_t ROBOT_VEHICLE_CFG = {
-    .cruise_mm_s = 150,                 /* course range is 0.10 - 0.20 m/s */
-    .curve_mm_s = 90,
-    .hump_mm_s = 110,
-    .creep_mm_s = 60,
+    .cruise_mm_s = 80,                  /* DEBUG: slow. Course range is 0.10 - 0.20 m/s; restore 150 for the mission */
+    .curve_mm_s = 60,                   /* DEBUG: slow (was 90) */
+    .hump_mm_s = 70,                    /* DEBUG: must stay below cruise (was 110) */
+    .creep_mm_s = 55,
+    .approach_mm_s = 55,                /* after a barcode, until its junction: 18 mm of arm lasts 0.3 s */
     .junction_advance_mm = 70,          /* PLACEHOLDER: sensor bar to axle, less crossing offset */
     .turn_deg = 90,
-    .uturn_deg = 180,
+    .uturn_deg = -180,                  /* U-turn towards the right */
+    .turn_spin_mm_s = 60,               /* slow enough to stop on an 18 mm line */
+    .turn_spin_timeout_ms = 10000U,
     .cal_sweep_deg = { 25, -50, 25 },
     .search_sweep_deg = { 30, -60, 90, -120 },
     .search_sweep_count = 4U,

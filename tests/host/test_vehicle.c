@@ -64,9 +64,12 @@ static vehicle_config_t make_cfg(void)
     c.curve_mm_s = 80;
     c.hump_mm_s = 100;
     c.creep_mm_s = 60;
+    c.approach_mm_s = 60;
     c.junction_advance_mm = 70;
     c.turn_deg = 90;
-    c.uturn_deg = 180;
+    c.uturn_deg = -180;
+    c.turn_spin_mm_s = 60;
+    c.turn_spin_timeout_ms = 8000U;
     c.cal_sweep_deg[0] = 25;
     c.cal_sweep_deg[1] = -50;
     c.cal_sweep_deg[2] = 25;
@@ -277,6 +280,32 @@ static bool saw_event(const h_t *h, uint8_t code, uint16_t arg)
     return false;
 }
 
+/* Spins on the spot that the log holds: a DRIVE with no forward speed. */
+static int count_spins(const h_t *h)
+{
+    int i;
+    int n = 0;
+
+    for (i = 0; i < h->log_n; i++) {
+        if ((h->log[i].type == MOTION_CMD_DRIVE) && (h->log[i].speed_mm_s == 0) &&
+            (h->log[i].diff_mm_s != 0)) {
+            n++;
+        }
+    }
+    return n;
+}
+
+/* The tracking pair sweeps off every line and then on to the next one. */
+static void spin_past_a_line(h_t *h)
+{
+    line_gone(h);
+    h->in.line.pair_on_line = false;
+    cycles(h, 3);
+    line_ok(h, 0, 0);
+    h->in.line.pair_on_line = true;
+    h_cycle(h);
+}
+
 static void junction(h_t *h, uint8_t mask)
 {
     h->in.line.events = NAV_EVENT_JUNCTION;
@@ -390,6 +419,64 @@ static void test_follow_refreshes_one_drive_command_and_slows_in_curves(void)
     CHECK_INT(drives_before, count_type(&h, MOTION_CMD_DRIVE));
 }
 
+/* While a barcode is being read the speed is held where it was: the decoder
+ * reads bar widths, so a speed change in the middle of a symbol misreads it.
+ * Steering still follows the line, and the speed schedule resumes afterwards.
+ * Catches: the car slowing and speeding up across a barcode. */
+static void test_follow_holds_the_speed_while_a_barcode_is_read(void)
+{
+    h_t h;
+
+    h_init(&h);
+    to_follow(&h);
+    line_ok(&h, 0, 20);
+    cycles(&h, 5);
+    CHECK_INT(150, h.out.cmd.speed_mm_s);
+
+    h.in.line.barcode_lanes_active = 1U;
+    line_ok(&h, 1000, -150);                            /* would normally slow to 80 */
+    cycles(&h, 5);
+    CHECK_INT(150, h.out.cmd.speed_mm_s);
+    CHECK_INT(-150, h.out.cmd.diff_mm_s);               /* still steering */
+
+    h.in.line.barcode_lanes_active = 0U;
+    cycles(&h, 2);
+    CHECK_INT(80, h.out.cmd.speed_mm_s);
+}
+
+/* With a barcode waiting for its junction the car slows to the approach speed,
+ * so it spends longer on the junction's arm; the normal speed schedule returns
+ * once the instruction is used.  Steering is unaffected.  Catches: no slowing
+ * after a barcode, or a car that stays slow after the junction. */
+static void test_follow_slows_while_a_barcode_waits_for_its_junction(void)
+{
+    h_t h;
+
+    h_init(&h);
+    to_follow(&h);
+    line_ok(&h, 0, 20);
+    cycles(&h, 5);
+    CHECK_INT(150, h.out.cmd.speed_mm_s);
+
+    h.in.instruction_valid = true;
+    h.in.instruction = instr('Z', NAV_CMD_UTURN, 2U);
+    cycles(&h, 5);
+    CHECK_INT(60, h.out.cmd.speed_mm_s);
+    CHECK_INT(20, h.out.cmd.diff_mm_s);                 /* still steering */
+
+    h.in.instruction_valid = false;                     /* used at the junction */
+    cycles(&h, 5);
+    CHECK_INT(150, h.out.cmd.speed_mm_s);
+
+    /* 15 bars counted but no letter decoded: the junction is still armed, so slow too */
+    h.in.line.junction_armed = true;
+    cycles(&h, 5);
+    CHECK_INT(60, h.out.cmd.speed_mm_s);
+    h.in.line.junction_armed = false;
+    cycles(&h, 5);
+    CHECK_INT(150, h.out.cmd.speed_mm_s);
+}
+
 /* A momentary loss of the line position (not yet "lost") slows the car and
  * holds it straight instead of steering on nothing. */
 static void test_follow_without_a_position_goes_slow_and_straight(void)
@@ -423,24 +510,25 @@ static void test_stale_line_data_stops_the_car(void)
 /* ---- junctions and barcode instructions ------------------------------ */
 
 /* A LEFT instruction executes at the junction: advance to put the wheels over
- * it, turn +90, reacquire the line, resume.  It is consumed exactly once, and
- * a stale copy of it showing up again does not re-execute.  Catches: a turn
- * at the barcode instead of the junction, a wrong direction, and duplicate
- * execution (Tribunal rules). */
+ * it, spin left on the spot until the tracking pair is on the next line,
+ * reacquire, resume.  It is consumed exactly once, and a stale copy of it
+ * showing up again does not re-execute.  Catches: a turn at the barcode
+ * instead of the junction, a wrong direction, and duplicate execution
+ * (Tribunal rules). */
 static void test_left_instruction_executes_once_at_the_junction(void)
 {
     h_t h;
-    int turns_before;
+    int spins_before;
 
     h_init(&h);
     to_follow(&h);
-    turns_before = count_type(&h, MOTION_CMD_TURN);
+    spins_before = count_spins(&h);
     h.in.instruction_valid = true;
     h.in.instruction = instr('A', NAV_CMD_LEFT, 3U);
 
     cycles(&h, 5);                                       /* barcode seen, no junction yet */
     CHECK_INT(VC_FOLLOW, h.out.state);
-    CHECK_INT(turns_before, count_type(&h, MOTION_CMD_TURN));
+    CHECK_INT(spins_before, count_spins(&h));
     CHECK_INT(0, h.consumes);
 
     junction(&h, NAV_JUNCTION_LEFT | NAV_JUNCTION_RIGHT);
@@ -452,15 +540,17 @@ static void test_left_instruction_executes_once_at_the_junction(void)
     CHECK_INT(70, h.log[h.log_n - 1].distance_mm);
 
     CHECK(until(&h, VC_JUNCTION_TURN, 100));
-    CHECK_INT(MOTION_CMD_TURN, h.log[h.log_n - 1].type);
-    CHECK_INT(90, h.log[h.log_n - 1].angle_deg);
+    CHECK_INT(MOTION_CMD_DRIVE, h.log[h.log_n - 1].type);   /* spin left on the spot */
+    CHECK_INT(0, h.log[h.log_n - 1].speed_mm_s);
+    CHECK_INT(120, h.log[h.log_n - 1].diff_mm_s);
 
-    line_gone(&h);
-    CHECK(until(&h, VC_REACQUIRE, 100));
+    cycles(&h, 5);                                       /* still on the old line: keep spinning */
+    CHECK_INT(VC_JUNCTION_TURN, h.out.state);
+    spin_past_a_line(&h);
+    CHECK_INT(VC_REACQUIRE, h.out.state);
     CHECK_INT(MOTION_CMD_DRIVE, h.log[h.log_n - 1].type);
     CHECK_INT(60, h.log[h.log_n - 1].speed_mm_s);        /* creep */
 
-    line_ok(&h, 0, 0);
     CHECK(until(&h, VC_FOLLOW, 20));
     CHECK(saw_event(&h, TEL_EVT_NAV_EXEC, NAV_CMD_LEFT));
 
@@ -471,20 +561,24 @@ static void test_left_instruction_executes_once_at_the_junction(void)
     h_cycle(&h);
     CHECK_INT(VC_JUNCTION_ADVANCE, h.out.state);  /* crosses the junction blind... */
     CHECK(until(&h, VC_FOLLOW, 100));          /* ...and carries on */
-    CHECK_INT(1, count_type(&h, MOTION_CMD_TURN) - turns_before);
+    CHECK_INT(1, count_spins(&h) - spins_before);
     CHECK_INT(1, h.consumes);
 }
 
-/* RIGHT turns -90; UTURN turns 180. */
-static void test_right_and_uturn_instructions_turn_the_right_angle(void)
+/* RIGHT spins right and stops on the first line.  The U-turn spins right too,
+ * passes the right branch of the crossroads and stops on the second line, the
+ * one it came in on.  Catches: a U-turn to the left, or a U-turn that stops on
+ * the right branch. */
+static void test_right_and_uturn_spin_right_to_the_right_line(void)
 {
-    static const struct { nav_command_t cmd; int16_t deg; } CASES[] = {
-        { NAV_CMD_RIGHT, -90 }, { NAV_CMD_UTURN, 180 }
+    static const struct { nav_command_t cmd; int lines; } CASES[] = {
+        { NAV_CMD_RIGHT, 1 }, { NAV_CMD_UTURN, 2 }
     };
     size_t i;
 
     for (i = 0U; i < 2U; i++) {
         h_t h;
+        int l;
 
         h_init(&h);
         to_follow(&h);
@@ -493,9 +587,35 @@ static void test_right_and_uturn_instructions_turn_the_right_angle(void)
         junction(&h, NAV_JUNCTION_LEFT | NAV_JUNCTION_RIGHT);
         h_cycle(&h);
         CHECK(until(&h, VC_JUNCTION_TURN, 100));
-        CHECK_INT(MOTION_CMD_TURN, h.log[h.log_n - 1].type);
-        CHECK_INT(CASES[i].deg, h.log[h.log_n - 1].angle_deg);
+        CHECK_INT(0, h.log[h.log_n - 1].speed_mm_s);
+        CHECK_INT(-120, h.log[h.log_n - 1].diff_mm_s);  /* towards the right */
+
+        for (l = 1; l < CASES[i].lines; l++) {
+            spin_past_a_line(&h);
+            CHECK_INT(VC_JUNCTION_TURN, h.out.state);    /* a branch: keep spinning */
+        }
+        spin_past_a_line(&h);
+        CHECK_INT(VC_REACQUIRE, h.out.state);
+        CHECK(until(&h, VC_FOLLOW, 20));
     }
+}
+
+/* Spinning that never finds a line (none there, or a sensor fault) gives up
+ * after the time limit and searches instead of turning for ever. */
+static void test_junction_spin_without_a_line_searches(void)
+{
+    h_t h;
+
+    h_init(&h);
+    to_follow(&h);
+    h.in.instruction_valid = true;
+    h.in.instruction = instr('Z', NAV_CMD_UTURN, 1U);
+    junction(&h, NAV_JUNCTION_LEFT | NAV_JUNCTION_RIGHT);
+    h_cycle(&h);
+    CHECK(until(&h, VC_JUNCTION_TURN, 100));
+    line_gone(&h);
+    h.in.line.pair_on_line = false;
+    CHECK(until(&h, VC_SEARCH_LINE, 900));
 }
 
 /* STRAIGHT is consumed and the car crosses the junction blind (advance only,
@@ -1060,10 +1180,13 @@ int main(void)
     RUN(test_start_sweeps_calibrates_then_follows);
     RUN(test_calibration_failure_stops_with_a_fault);
     RUN(test_follow_refreshes_one_drive_command_and_slows_in_curves);
+    RUN(test_follow_holds_the_speed_while_a_barcode_is_read);
+    RUN(test_follow_slows_while_a_barcode_waits_for_its_junction);
     RUN(test_follow_without_a_position_goes_slow_and_straight);
     RUN(test_stale_line_data_stops_the_car);
     RUN(test_left_instruction_executes_once_at_the_junction);
-    RUN(test_right_and_uturn_instructions_turn_the_right_angle);
+    RUN(test_right_and_uturn_spin_right_to_the_right_line);
+    RUN(test_junction_spin_without_a_line_searches);
     RUN(test_straight_instruction_crosses_without_turning);
     RUN(test_junction_without_an_instruction_goes_straight);
     RUN(test_lost_line_is_searched_for_and_resumed);
