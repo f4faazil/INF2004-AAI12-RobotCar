@@ -152,6 +152,9 @@ static nav_map_entry_t g_map_stage[BMAP_MAX];
 static volatile uint8_t g_map_stage_len;
 static volatile uint32_t g_map_seq;             /* bumped for every accepted mapping */
 static volatile uint32_t g_map_applied;         /* mappings the Line task has applied */
+static volatile int16_t g_imu_roll_permille;   /* the IMU task's latest sideways tilt, for the sensor record */
+static volatile bool g_imu_lift;                /* the lift detector has latched */
+static volatile bool g_imu_cal_done;            /* the rest attitude is calibrated */
 static volatile uint8_t g_map_len;              /* entries in the mapping now in use */
 static volatile uint32_t g_map_rejected;        /* mapping messages refused */
 static volatile uint8_t g_remote_req[4];        /* req_id + 1 per VC_REMOTE_* bit; 0 = none */
@@ -616,12 +619,57 @@ static void push_status(const vehicle_in_t *in, const line_share_t *line,
     tel_submit(buf, tel_encode_status(&s, buf, sizeof(buf)));
 }
 
+/* The per-sensor detail record (see telemetry.h for the fields and their widths). */
+static void push_sensors(const vehicle_in_t *in, const line_share_t *line, const obstacle_share_t *obs,
+                         const imu_share_t *imu, bool encoder_fault, uint8_t last_letter)
+{
+    uint8_t buf[TEL_MAX_MESSAGE];
+    tel_sensors_t s;
+    encoder_snapshot_t enc_l;
+    encoder_snapshot_t enc_r;
+
+    hal_encoders_snapshot(&enc_l, &enc_r);
+    s.ts10 = ts10_now();
+    s.ir_levels = (uint8_t)(hal_ir_levels() & 7U);
+    s.ir_valid_mask = (uint8_t)(line->out.valid_mask & 7U);
+    s.pair_on_line = line->out.pair_on_line;
+    s.junction_armed = line->out.junction_armed;
+    s.bars_now = (g_bars_now > 15U) ? 15U : (uint8_t)g_bars_now;
+    s.bars_done = g_bars_done;
+    s.decoded = g_bar_decoded;
+    s.rejected = g_bar_rejected;
+    s.junctions = g_junctions_seen;
+    s.executed = g_nav_executed;
+    s.map_entries = (g_map_len > 26U) ? 26U : g_map_len;
+    s.last_letter = last_letter;
+    s.motion_state = (uint8_t)in->motion.state & 3U;
+    s.motion_stopped = (in->motion.flags & MOTION_FLAG_STOPPED) != 0U;
+    s.encoder_fault = encoder_fault;
+    s.enc_bad_left = enc_l.illegal;
+    s.enc_bad_right = enc_r.illegal;
+    s.roll_permille = g_imu_roll_permille;
+    s.imu_ok = g_imu_cal_done && !imu->read_failed;
+    s.lift_latched = g_imu_lift;
+    s.hump_active = imu->in_progress;
+    s.us_mm = obs->distance_mm;
+    s.us_valid = obs->distance_valid;
+    s.us_obstacle = obs->obstacle;
+    s.us_fault = obs->sensor_fault;
+    s.servo_aim = (obs->aim > 0) ? (uint8_t)TEL_AIM_LEFT : ((obs->aim < 0) ? (uint8_t)TEL_AIM_RIGHT : (uint8_t)TEL_AIM_AHEAD);
+    s.net_state = (uint8_t)(g_mqtt_state & 7U);
+    s.link_up = robot_net_link_up();
+    s.saturated = 0U;
+    tel_submit(buf, tel_encode_sensors(&s, buf, sizeof(buf)));
+}
+
 static void vehicle_task(INT stacd, void *exinf)
 {
     static vehicle_t vc;
     static debounce_t start_btn;
     static debounce_t stop_btn;
     static uint32_t last_status_ms;
+    static uint32_t last_sensors_ms;
+    static uint8_t last_letter;
     static uint32_t last_junction_ms;
     static uint8_t last_junction_mask;
     static vehicle_in_t in;
@@ -769,6 +817,13 @@ static void vehicle_task(INT stacd, void *exinf)
             last_status_ms = now;
             push_status(&in, &line, &obs, &imu, out.state,
                         ((now - last_junction_ms) < ROBOT_JUNCTION_HOLD_MS) ? last_junction_mask : 0U);
+        }
+        if (line.instruction_valid && (line.instruction.letter >= 'A') && (line.instruction.letter <= 'Z')) {
+            last_letter = (uint8_t)(line.instruction.letter - 'A' + 1);     /* 1..26, held until the next barcode */
+        }
+        if ((now - last_sensors_ms) >= ROBOT_SENSORS_PERIOD_MS) {
+            last_sensors_ms = now;
+            push_sensors(&in, &line, &obs, &imu, motion.encoder_fault, last_letter);
         }
         note_max(&g_max_vehicle_us, hal_time_us() - start);
     }
@@ -1047,6 +1102,7 @@ static void imu_task(INT stacd, void *exinf)
             imu_vec3_t g;
 
             imu_decode_accel(variant, raw, &g);
+            g_imu_cal_done = (cal.state == IMU_CAL_DONE);
             if (cal.state != IMU_CAL_DONE) {
                 if (imu_cal_feed(&cal, &g) == IMU_CAL_FAILED_MOVING) {
                     imu_cal_init(&cal, ROBOT_IMU_FORWARD_AXIS, ROBOT_IMU_FORWARD_SIGN,
@@ -1061,6 +1117,7 @@ static void imu_task(INT stacd, void *exinf)
                                 ROBOT_LIFT_FREEFALL_MG, ROBOT_LIFT_HOLD_MS)) {
                 fault_set(&g_faults, FAULT_IMU_LIFT);
             }
+            g_imu_lift = lift.latched;
             if (lift.latched) {
                 publish_imu(&hump, false, false, now);
                 continue;
@@ -1088,6 +1145,7 @@ static void imu_task(INT stacd, void *exinf)
                 gf.y = (int16_t)(filt[1] / 16);
                 gf.z = (int16_t)(filt[2] / 16);
                 hin.roll_permille = imu_roll_permille(&cal, &gf);
+                g_imu_roll_permille = hin.roll_permille;
                 hin.distance_mm = motion.status.distance_mm;
                 hin.distance_valid = ((now - motion.status.timestamp_ms) <= ROBOT_MOTION_FRESH_MS) &&
                                      !motion.encoder_fault;

@@ -195,6 +195,7 @@
 #define ROBOT_IMU_PERIOD_MS     (20U)
 #define ROBOT_STATUS_PERIOD_MS  (100U)
 #define ROBOT_HEARTBEAT_MS      (1000U)
+#define ROBOT_SENSORS_PERIOD_MS (500U)      /* the per-sensor detail record */
 #define ROBOT_US_PERIOD_MS      (70U)       /* HC-SR04 needs >= 60 ms */
 #define ROBOT_US_ECHO_TIMEOUT_US (30000U)
 /* Geometry measured by Buddy 5: the sensor's front face is 80 mm behind the car's front

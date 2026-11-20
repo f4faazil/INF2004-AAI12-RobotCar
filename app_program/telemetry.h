@@ -60,6 +60,7 @@ int32_t  bitr_get_signed(bitr_t *r, uint8_t width);
 #define TEL_TYPE_HUMP       (0x03U)
 #define TEL_TYPE_OBSTACLE   (0x04U)
 #define TEL_TYPE_HEARTBEAT  (0x05U)
+#define TEL_TYPE_SENSORS    (0x06U)     /* the per-sensor detail record */
 #define TEL_TYPE_COMMAND    (0x10U)     /* laptop -> robot */
 #define TEL_TYPE_ACK        (0x11U)     /* robot -> laptop */
 
@@ -152,6 +153,66 @@ typedef struct {
     uint8_t  reason;                /* plan_reason_t */
 } tel_obstacle_t;
 
+/*
+ * The per-sensor detail record: everything the dashboard shows beyond the main status record, each field
+ * with its range and the bits that range needs (the data representation table):
+ *   line / IR      ir_levels 3, valid_mask 3, pair 1, armed 1
+ *   barcode        bars_now 4 (0..15), bars_done 8, decoded 8, rejected 8, junctions 8, executed 8,
+ *                  map_entries 5 (0..26), last_letter 5 (0 none, 1..26 = A..Z)
+ *   motors         motion_state 2, stopped 1, encoder_fault 1, enc_bad_left 8, enc_bad_right 8
+ *   IMU            roll_permille 11 signed (sin of the sideways tilt x 1000), imu_ok 1, lift 1, hump_active 1
+ *   ultrasonic     us_mm 13 (0..8190, 8191 reserved), us_valid 1, us_obstacle 1, us_fault 1, servo_aim 2
+ *   network        net_state 3 (mqtt_lwip.c state), link_up 1
+ *   counters 8 bits wide saturate at 255 and set `saturated`.
+ * 143 bits: 18 bytes.
+ */
+#define TEL_IR_BITS         (3U)
+#define TEL_BARS_BITS       (4U)
+#define TEL_COUNT_BITS      (8U)
+#define TEL_MAP_BITS        (5U)
+#define TEL_LETTER_BITS     (5U)
+#define TEL_ROLL_BITS       (11U)
+#define TEL_US_MM_BITS      (13U)
+#define TEL_NETSTATE_BITS   (3U)
+#define TEL_COUNT_MAX       (255U)
+#define TEL_US_MM_MAX       (8190U)
+#define TEL_AIM_AHEAD       (0U)
+#define TEL_AIM_LEFT        (1U)
+#define TEL_AIM_RIGHT       (2U)
+
+typedef struct {
+    uint16_t ts10;
+    uint8_t  ir_levels;             /* bit0 left, bit1 centre, bit2 right; 1 = black */
+    uint8_t  ir_valid_mask;
+    bool     pair_on_line;
+    bool     junction_armed;
+    uint8_t  bars_now;
+    uint32_t bars_done;
+    uint32_t decoded;
+    uint32_t rejected;
+    uint32_t junctions;
+    uint32_t executed;
+    uint8_t  map_entries;
+    uint8_t  last_letter;
+    uint8_t  motion_state;          /* motion_state_t: idle / running / done */
+    bool     motion_stopped;
+    bool     encoder_fault;
+    uint32_t enc_bad_left;
+    uint32_t enc_bad_right;
+    int16_t  roll_permille;
+    bool     imu_ok;                /* the accelerometer answers and the rest attitude is calibrated */
+    bool     lift_latched;
+    bool     hump_active;
+    uint16_t us_mm;
+    bool     us_valid;
+    bool     us_obstacle;
+    bool     us_fault;
+    uint8_t  servo_aim;
+    uint8_t  net_state;
+    bool     link_up;
+    uint8_t  saturated;             /* set by encode: a counter or distance was clipped */
+} tel_sensors_t;
+
 typedef struct {
     uint32_t uptime_s;
     uint16_t dropped;               /* telemetry records dropped (queue full) */
@@ -206,6 +267,9 @@ bool     tel_decode_hump(const uint8_t *in, uint16_t len, tel_hump_t *h);
 
 uint16_t tel_encode_obstacle(const tel_obstacle_t *o, uint8_t *out, uint16_t cap);
 bool     tel_decode_obstacle(const uint8_t *in, uint16_t len, tel_obstacle_t *o);
+
+uint16_t tel_encode_sensors(tel_sensors_t *s, uint8_t *out, uint16_t cap);
+bool     tel_decode_sensors(const uint8_t *in, uint16_t len, tel_sensors_t *s);
 
 uint16_t tel_encode_heartbeat(const tel_heartbeat_t *h, uint8_t *out, uint16_t cap);
 bool     tel_decode_heartbeat(const uint8_t *in, uint16_t len, tel_heartbeat_t *h);
