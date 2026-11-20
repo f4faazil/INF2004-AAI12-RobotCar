@@ -10,6 +10,8 @@ export class LatestPicoState {
     this.diagnostics = new Map();
     this.diagnosticBootNonce = null;
     this.heartbeat = null;
+    this.robot = new Map();             // the latest robot record of each kind
+    this.robotEvents = [];              // and the last few events, so a new page can show what just happened
   }
 
   record(message) {
@@ -19,6 +21,15 @@ export class LatestPicoState {
     }
     if (message?.type === "heartbeat") {
       this.heartbeat = structuredClone(message);
+      return;
+    }
+    if (message?.type === "robot-frame") {
+      if (message.kind === "event") {
+        this.robotEvents.push(structuredClone(message));
+        if (this.robotEvents.length > 40) this.robotEvents.shift();
+      } else {
+        this.robot.set(message.kind, structuredClone(message));
+      }
       return;
     }
     if (message?.type !== "diagnostic-snapshot") return;
@@ -35,7 +46,7 @@ export class LatestPicoState {
 
   replay(now = new Date()) {
     const replayedAt = now.toISOString();
-    return [this.onlineMarker, ...this.diagnostics.values(), this.heartbeat]
+    return [this.onlineMarker, ...this.diagnostics.values(), this.heartbeat, ...this.robot.values(), ...this.robotEvents]
       .filter(Boolean)
       .sort((a, b) => Date.parse(a.receivedAt) - Date.parse(b.receivedAt))
       .map(message => ({ ...structuredClone(message), cached: true, replayedAt }));

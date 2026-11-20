@@ -99,3 +99,55 @@ npm test
 ```
 
 Tests cover configuration, compact diagnostic parsing, real-topic routing, preservation of raw snapshot evidence, provisional binary decoding, unknown-payload handling and the future JSON boundary.
+
+---
+
+# Robot telemetry page (added when the robot firmware was integrated)
+
+`/` is now the **robot dashboard**: every sensor the car has, decoded from the robot's own bit-packed records
+(`app_program/telemetry.h`).  The WiFi / MQTT diagnostics page described above is still here, at `/network`.
+
+## Run it on the laptop that hosts the website
+
+```sh
+cd dashboard
+npm install          # once
+npm start            # website on http://localhost:3000 and an MQTT broker for the robot on port 1883
+```
+
+The dashboard now contains its **own small MQTT broker** (`server/broker.js`, no Mosquitto needed): the robot connects to
+this laptop's address on the hotspot (the address built into the firmware, `AAI12_MQTT_BROKER_IP` in
+`config/mqtt_test_config.h`), and the page shows what it publishes.  Open `http://<laptop-ip>:3000` from any device on the
+hotspot to see it.  The broker covers CONNECT, PUBLISH (QoS 0/1/2 acknowledged), SUBSCRIBE (+ and #), PINGREQ; it has
+no retained messages, wills or login.  To use a real broker instead: `EMBEDDED_BROKER=false` and `MQTT_URL=mqtt://...` in `.env`.
+
+Windows asks once whether Node may accept connections: allow it on the hotspot network (private and public), or the robot
+cannot reach port 1883 / the page cannot be opened from a phone.
+
+Try the page without the robot: `DEMO_MODE=true npm start` plays a scripted lap (follow the line, meet a box, scan, bypass,
+rejoin, barcode Z, U-turn, hump, picked up) through exactly the same decoding.  The page is marked SIMULATION.
+
+## What the page shows
+
+| Card | From |
+|---|---|
+| Vehicle state, faults (stop faults in red), distance run, robot uptime, records per second | status record, 10 Hz; heartbeat, 1 Hz |
+| Line and IR sensors: the three digital levels, which are trusted, line position, line state, junction seen/armed | status + sensor records |
+| Barcode: bars counted (of 15), last letter, instruction pending, decoded/rejected, barcodes completed, junctions/executed, letters mapped | sensor record, 2 Hz |
+| Motors and encoders: left/right speed with a chart, motion state, wheels stopped, encoder faults and bad transitions | status + sensor records |
+| IMU: sideways tilt, lift/pick-up latched, hump now, last hump height, highest hump | sensor + status + hump records |
+| Ultrasonic and servo: distance with a chart, valid, obstacle flag, fault, where the sonar points | sensor record |
+| Last obstacle scan: closest, width, centre, clear left/right, the plan and why, with a top-down picture | obstacle record |
+| Network: WiFi link, MQTT session, queue depth, records dropped, the robot's connection and PINGREQ interval seen by the broker | heartbeat + broker |
+| Events: state changes, barcodes, junctions, humps, plans, faults | event records |
+
+## The per-sensor record
+
+`TEL_TYPE_SENSORS` (0x06), 18 bytes, every field with its range and the bits that range needs: see `telemetry.h`.
+`server/robot-frames.js` decodes it and is checked against bytes produced by the C encoder (`test/robot-frames.test.js`);
+`tools/robot_telemetry.py` is the Python decoder of the same layout.
+
+## Tests
+
+`npm test` now also covers the robot-record decoder (against the firmware's bytes), the routing, the replay cache for a newly opened page,
+the demo lap and the built-in broker (connect, publish at QoS 0 and 1, ping, segmented packets, subscribe).

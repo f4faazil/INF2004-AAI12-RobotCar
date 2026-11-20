@@ -7,6 +7,8 @@ import mqtt from "mqtt";
 import { WebSocketServer, WebSocket } from "ws";
 import { loadConfig } from "./config.js";
 import { createSimulator } from "./simulator.js";
+import { createRobotSimulator } from "./robot-simulator.js";
+import { createBroker } from "./broker.js";
 import { routeMqttMessage } from "./message-router.js";
 import { LatestPicoState } from "./latest-state.js";
 
@@ -18,7 +20,9 @@ let mqttState = config.demoMode ? "demo" : "connecting";
 const latestPicoState = new LatestPicoState();
 
 const server = http.createServer(async (req, res) => {
-  const requested = req.url === "/" ? "index.html" : req.url.split("?")[0].slice(1);
+  // "/" is the robot dashboard; the WiFi / MQTT diagnostics page is at /network.
+  const path = req.url.split("?")[0];
+  const requested = path === "/" ? "robot.html" : path === "/network" ? "index.html" : path.slice(1);
   const safePath = normalize(requested).replace(/^(\.\.[/\\])+/, "");
   try {
     const body = await readFile(join(publicDir, safePath));
@@ -46,8 +50,32 @@ sockets.on("connection", socket => {
   for (const message of latestPicoState.replay()) socket.send(JSON.stringify(message));
 });
 
+// One place turns an MQTT message (from the built-in broker or an external one) into what the browser gets.
+function handleMqtt(topic, payload) {
+  try {
+    const message = routeMqttMessage(topic, payload, config.mqtt.topics);
+    if (message) publishPicoMessage(message);
+  } catch (error) {
+    const base = { receivedAt: new Date().toISOString(), topic, source: "firmware-confirmed" };
+    broadcast({ ...base, type: "parse-error", data: { message: error.message, preview: payload.toString("hex").slice(0, 80) } });
+  }
+}
+
+let broker;
 if (config.demoMode) {
   createSimulator(publishPicoMessage);
+  createRobotSimulator(publishPicoMessage);
+} else if (config.embeddedBroker) {
+  mqttState = "connected";
+  broker = createBroker({
+    port: config.brokerPort, host: config.brokerHost,
+    onPublish: handleMqtt,
+    onEvent: event => broadcast({ type: "broker-event", receivedAt: new Date().toISOString(), data: event })
+  });
+  broker.listen().then(
+    port => { console.log(`MQTT broker for the robot: port ${port} on this machine`); status(`Built-in broker listening on ${port}`); },
+    error => { mqttState = "error"; console.error(`Cannot start the built-in broker on port ${config.brokerPort}: ${error.message}`); status(error.message); }
+  );
 } else {
   mqttClient = mqtt.connect(config.mqtt.url, {
     username: config.mqtt.username, password: config.mqtt.password,
@@ -61,21 +89,14 @@ if (config.demoMode) {
   mqttClient.on("reconnect", () => { mqttState = "reconnecting"; status(); });
   mqttClient.on("offline", () => { mqttState = "offline"; status(); });
   mqttClient.on("error", error => { mqttState = "error"; status(error.message); });
-  mqttClient.on("message", (topic, payload) => {
-    try {
-      const message = routeMqttMessage(topic, payload, config.mqtt.topics);
-      if (message) publishPicoMessage(message);
-    } catch (error) {
-      const base = { receivedAt: new Date().toISOString(), topic, source: "firmware-confirmed" };
-      broadcast({ ...base, type: "parse-error", data: { message: error.message, preview: payload.toString("hex").slice(0, 80) } });
-    }
-  });
+  mqttClient.on("message", handleMqtt);
 }
 
 server.listen(config.port, () => console.log(`AAI12 dashboard: http://localhost:${config.port} (${config.demoMode ? "demo" : "live"} mode)`));
 
 function shutdown() {
   mqttClient?.end(true);
+  broker?.close();
   sockets.close();
   server.close(() => process.exit(0));
 }

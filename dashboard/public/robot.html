@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b1220">
+<title>AAI12 Robot Telemetry</title>
+<link rel="stylesheet" href="/robot.css">
+</head>
+<body>
+<header>
+  <div class="brand"><span class="mark">A12</span><div><h1>Robot telemetry</h1><p>INF2004 · line-following car</p></div></div>
+  <div class="pills">
+    <span class="pill" id="pillLink"><i class="dot"></i><b>Dashboard link</b><em id="linkText">connecting…</em></span>
+    <span class="pill" id="pillRobot"><i class="dot"></i><b>Robot</b><em id="robotText">no data yet</em></span>
+    <span class="pill" id="pillMode"><i class="dot"></i><b>Mode</b><em id="modeText">—</em></span>
+    <a class="pill link" href="/network">WiFi / MQTT diagnostics →</a>
+  </div>
+</header>
+
+<div id="demoBanner" class="banner demo hidden"><b>SIMULATION</b> Every value on this page is simulated. No robot is connected.</div>
+<div id="liftBanner" class="banner alarm hidden"><b>PICKED UP</b> The IMU latched a lift: the car has stopped its motors.</div>
+
+<main>
+  <section class="hero card">
+    <div>
+      <span class="label">Vehicle state</span>
+      <div id="state" class="state">—</div>
+      <div class="sub"><span id="stateNote">Waiting for the robot</span></div>
+    </div>
+    <div class="faults">
+      <span class="label">Faults</span>
+      <div id="faults" class="chips"><span class="chip none">none</span></div>
+    </div>
+    <div class="kv">
+      <div><span class="label">Distance run</span><b id="distance">—</b></div>
+      <div><span class="label">Robot uptime</span><b id="uptime">—</b></div>
+      <div><span class="label">Records / s</span><b id="rate">—</b></div>
+    </div>
+  </section>
+
+  <section class="grid">
+
+    <article class="card">
+      <h2>Line &amp; IR sensors <small>left · centre · right</small></h2>
+      <div class="irs">
+        <div class="ir" id="irLeft"><i></i><span>LEFT<br><small>barcode / junction</small></span></div>
+        <div class="ir" id="irCentre"><i></i><span>CENTRE</span></div>
+        <div class="ir" id="irRight"><i></i><span>RIGHT</span></div>
+      </div>
+      <div class="bar" title="line position, −1000 left … +1000 right"><span class="mid"></span><i id="linePos"></i></div>
+      <div class="barlabels"><span>left</span><b id="lineValue">—</b><span>right</span></div>
+      <dl>
+        <div><dt>Line</dt><dd id="lineState">—</dd></div>
+        <div><dt>Trusted sensors</dt><dd id="irValid">—</dd></div>
+        <div><dt>Both steering sensors on black</dt><dd id="pair">—</dd></div>
+        <div><dt>Junction seen</dt><dd id="junction">—</dd></div>
+        <div><dt>Junction armed</dt><dd id="armed">—</dd></div>
+      </dl>
+    </article>
+
+    <article class="card">
+      <h2>Barcode <small>left sensor, Code 39</small></h2>
+      <div class="letter"><b id="letter">—</b><span>last letter</span></div>
+      <div class="bars" id="bars"></div>
+      <div class="barlabels"><span>bars counted</span><b id="barsNow">0 / 15</b><span></span></div>
+      <dl>
+        <div><dt>Instruction pending</dt><dd id="navCmd">—</dd></div>
+        <div><dt>Barcode state</dt><dd id="barcodeState">—</dd></div>
+        <div><dt>Barcodes completed</dt><dd id="barsDone">—</dd></div>
+        <div><dt>Decoded / rejected</dt><dd id="decoded">—</dd></div>
+        <div><dt>Junctions / executed</dt><dd id="junctions">—</dd></div>
+        <div><dt>Letters mapped</dt><dd id="mapEntries">—</dd></div>
+      </dl>
+    </article>
+
+    <article class="card">
+      <h2>Motors &amp; encoders</h2>
+      <div class="wheels">
+        <div class="wheel"><span class="label">LEFT</span><div class="vbar"><i id="wl"></i></div><b id="wlv">—</b><small>mm/s</small></div>
+        <div class="wheel"><span class="label">RIGHT</span><div class="vbar"><i id="wr"></i></div><b id="wrv">—</b><small>mm/s</small></div>
+        <canvas id="chartSpeed" width="300" height="130"></canvas>
+      </div>
+      <dl>
+        <div><dt>Motion</dt><dd id="motion">—</dd></div>
+        <div><dt>Wheels confirmed stopped</dt><dd id="stopped">—</dd></div>
+        <div><dt>Encoder fault</dt><dd id="encFault">—</dd></div>
+        <div><dt>Encoder bad transitions L / R</dt><dd id="encBad">—</dd></div>
+      </dl>
+    </article>
+
+    <article class="card">
+      <h2>IMU <small>tilt, hump, lift</small></h2>
+      <div class="tilt"><div class="horizon"><i id="horizon"></i></div><b id="roll">—</b><span>sideways tilt</span></div>
+      <dl>
+        <div><dt>IMU</dt><dd id="imuOk">—</dd></div>
+        <div><dt>Lift / pick-up</dt><dd id="lift">—</dd></div>
+        <div><dt>Hump now</dt><dd id="humpNow">—</dd></div>
+        <div><dt>Last hump</dt><dd id="humpLast">—</dd></div>
+        <div><dt>Highest hump</dt><dd id="humpMax">—</dd></div>
+      </dl>
+    </article>
+
+    <article class="card">
+      <h2>Ultrasonic &amp; servo</h2>
+      <div class="sonar"><b id="usMm">—</b><span>mm ahead</span></div>
+      <div class="bar sonarbar" title="0 … 800 mm"><i id="usBar"></i></div>
+      <canvas id="chartUs" width="300" height="90"></canvas>
+      <dl>
+        <div><dt>Reading valid</dt><dd id="usValid">—</dd></div>
+        <div><dt>Obstacle flag</dt><dd id="usObstacle">—</dd></div>
+        <div><dt>Sensor fault</dt><dd id="usFault">—</dd></div>
+        <div><dt>Sonar pointing</dt><dd id="aim">—</dd></div>
+      </dl>
+    </article>
+
+    <article class="card wide">
+      <h2>Last obstacle scan <small id="scanAge">no scan yet</small></h2>
+      <div class="scanrow">
+        <svg id="scanSvg" viewBox="-150 0 300 200" aria-label="top-down view of the last scan">
+          <rect x="-150" y="0" width="300" height="200" class="floor"/>
+          <g id="scanBox"></g>
+          <g id="scanCar"><rect x="-10" y="170" width="20" height="25" rx="2" class="car"/><path d="M-4 170 L0 163 L4 170 Z" class="car"/></g>
+        </svg>
+        <dl>
+          <div><dt>Closest</dt><dd id="scClosest">—</dd></div>
+          <div><dt>Width</dt><dd id="scWidth">—</dd></div>
+          <div><dt>Centre (right +)</dt><dd id="scCentre">—</dd></div>
+          <div><dt>Clear left / right</dt><dd id="scClear">—</dd></div>
+          <div><dt>Plan</dt><dd id="scPlan">—</dd></div>
+          <div><dt>Reason</dt><dd id="scReason">—</dd></div>
+        </dl>
+      </div>
+    </article>
+
+    <article class="card">
+      <h2>Network</h2>
+      <dl>
+        <div><dt>WiFi link</dt><dd id="netLink">—</dd></div>
+        <div><dt>MQTT session</dt><dd id="netMqtt">—</dd></div>
+        <div><dt>Telemetry queue depth</dt><dd id="netQueue">—</dd></div>
+        <div><dt>Records dropped</dt><dd id="netDropped">—</dd></div>
+        <div><dt>Reconnects</dt><dd id="netReconnects">—</dd></div>
+        <div><dt>Robot connected to broker</dt><dd id="brokerClient">—</dd></div>
+        <div><dt>PINGREQ interval</dt><dd id="brokerPing">—</dd></div>
+      </dl>
+    </article>
+
+    <article class="card wide log">
+      <div class="loghead"><h2>Events <small>from the robot</small></h2><button id="clearLog">Clear</button></div>
+      <ol id="events"><li class="empty">No events yet.</li></ol>
+    </article>
+
+  </section>
+</main>
+<footer><span>AAI12 robot · telemetry from the robot's own bit-packed records</span><span id="footNote"></span></footer>
+<script type="module" src="/robot.js"></script>
+</body>
+</html>

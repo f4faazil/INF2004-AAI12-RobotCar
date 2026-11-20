@@ -7,6 +7,11 @@ export function loadConfig(env = process.env) {
   return {
     port,
     demoMode: bool(env.DEMO_MODE),
+    // The built-in broker: the robot connects to this machine and the dashboard reads what it sends, so no
+    // Mosquitto is needed.  Set EMBEDDED_BROKER=false to use an external broker through MQTT_URL instead.
+    embeddedBroker: bool(env.EMBEDDED_BROKER, true),
+    brokerPort: Number.parseInt(env.BROKER_PORT ?? "1883", 10),
+    brokerHost: env.BROKER_HOST ?? "0.0.0.0",
     mqtt: {
       url: env.MQTT_URL ?? "mqtt://127.0.0.1:1883",
       username: env.MQTT_USERNAME || undefined,
@@ -17,6 +22,9 @@ export function loadConfig(env = process.env) {
         diagnostic: env.MQTT_DIAGNOSTIC_TOPIC ?? "aai12/diagnostic",
         telemetry: env.MQTT_TELEMETRY_TOPIC ?? "aai12/robot/telemetry",
         heartbeat: env.MQTT_HEARTBEAT_TOPIC ?? "aai12/robot/heartbeat",
+        event: env.MQTT_EVENT_TOPIC ?? "aai12/robot/event",
+        ack: env.MQTT_ACK_TOPIC ?? "aai12/robot/ack",
+        status: env.MQTT_STATUS_TOPIC ?? "aai12/robot/status",
         json: env.MQTT_JSON_TOPIC || undefined
       }
     }
