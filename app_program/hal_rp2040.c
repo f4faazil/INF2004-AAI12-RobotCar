@@ -90,7 +90,7 @@ static volatile uint32_t g_tick_ms;
 static volatile uint32_t g_next_alarm;
 static ID g_flag_id;
 static volatile uint32_t g_pending;
-static volatile uint32_t g_overrun[3];
+static volatile uint32_t g_overrun[4];
 static volatile uint32_t g_isr_max_us;
 
 static hal_ir_frame_t g_ring[ROBOT_IR_RING_FRAMES];
@@ -397,7 +397,10 @@ static void tick_isr(UINT intno)
         release_task(HAL_TICK_MOTION, 0U);
     }
     if ((ms % ROBOT_CONTROL_PERIOD_MS) == 0U) {
+        /* Line and Vehicle each get a bit: one waiter per bit, because a
+         * TWF_BITCLR wait releases only the first task waiting on a bit. */
         release_task(HAL_TICK_CONTROL, 1U);
+        release_task(HAL_TICK_VEHICLE, 3U);
     }
     if ((ms % ROBOT_IMU_PERIOD_MS) == 0U) {
         release_task(HAL_TICK_IMU, 2U);
@@ -441,7 +444,8 @@ void hal_tick_ack(uint32_t bit)
 
 uint32_t hal_tick_overruns(uint32_t bit)
 {
-    uint32_t index = (bit == HAL_TICK_MOTION) ? 0U : ((bit == HAL_TICK_CONTROL) ? 1U : 2U);
+    uint32_t index = (bit == HAL_TICK_MOTION) ? 0U : ((bit == HAL_TICK_CONTROL) ? 1U :
+                     ((bit == HAL_TICK_VEHICLE) ? 3U : 2U));
 
     return g_overrun[index];
 }

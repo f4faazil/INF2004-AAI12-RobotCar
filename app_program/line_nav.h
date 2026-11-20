@@ -45,7 +45,9 @@
 #define NAV_JUNCTION_LEFT           (1U << 0)
 #define NAV_JUNCTION_RIGHT          (1U << 1)
 
+#define NAV_MAP_MAX                 (26U)       /* letters A to Z */
 #define NAV_LANE_COUNT              (2U)        /* the two outer channels */
+#define NAV_RUN_LOG                 (32U)       /* runs kept per attempt for the status dump */
 
 typedef enum {
     NAV_CMD_NONE = 0,
@@ -119,6 +121,16 @@ typedef struct {
      * still decided on the unfiltered reading, so line-lost timing is unchanged.
      */
     uint8_t  smooth_shift;
+
+    /*
+     * Counting bars.  A Code 39 symbol "*X*" always has 15 bars.  When a lane has seen
+     * barcode_bars bars in one pass (each at least barcode_min_bar wide, in the same
+     * units as a run: distance when the travel is reported, else ms), the barcode is
+     * over, decoded or not, and the next thing that sensor sees is the junction.  0
+     * switches the count off.
+     */
+    uint8_t  barcode_bars;
+    uint16_t barcode_min_bar;
 } line_nav_config_t;
 
 typedef struct {
@@ -127,10 +139,13 @@ typedef struct {
     uint32_t          last_edge_ms;
     bool              had_edge;
     uint8_t           run_count;        /* runs emitted since the lane went quiet */
+    uint8_t           bar_count;        /* bars among them (glitches left out) */
+    uint16_t          run_log[NAV_RUN_LOG];   /* ticks (ms) of the first runs, for diagnosis */
 } nav_lane_t;
 
 typedef struct {
     line_nav_config_t cfg;
+    nav_map_entry_t   map_store[NAV_MAP_MAX];   /* the mapping set at run time (MQTT) */
     line_cal_t        cal;
     bool              calibrating;
     uint8_t           valid_mask;
@@ -142,9 +157,20 @@ typedef struct {
     uint32_t          last_frame_ms;
     bool              have_frame;
 
+    /* distance travelled, to measure bar widths in distance rather than time */
+    bool              travel_have;           /* a previous reading exists */
+    bool              travel_on;             /* a usable window: widths are distances */
+    int32_t           travel_last;           /* last reading (encoder counts) */
+    uint32_t          travel_last_ms;
+    uint32_t          travel_win_q;          /* counts moved in the window, in quarter counts */
+    uint32_t          travel_win_ms;         /* length of that window */
+    uint32_t          travel_carry;          /* remainder kept so no distance is lost */
+    uint32_t          travel_prev_frame_ms;
+
     nav_lane_t        lane[NAV_LANE_COUNT];   /* [0] = LEFT channel, [1] = RIGHT */
     bool              ch_black[LINE_CHANNEL_COUNT];          /* Schmitt state per sensor */
     uint32_t          ch_black_frames[LINE_CHANNEL_COUNT];   /* consecutive 1 ms frames black */
+    uint16_t          ch_score[LINE_CHANNEL_COUNT];          /* leaky count: black frames up, white down */
 
     bool              pending_valid;
     nav_instruction_t pending;
@@ -167,6 +193,12 @@ typedef struct {
     uint32_t          junction_since_ms;
     uint8_t           clear_steps;
 
+    bool              bars_done;             /* a whole barcode went by: the next black is the junction */
+    uint32_t          bars_done_ms;
+    uint32_t          bars_done_count;       /* barcodes completed, by bar count or by decoding */
+    uint16_t          last_attempt_runs;     /* bars+gaps in the last barcode attempt that went quiet */
+    uint16_t          attempt_count;         /* attempts of 5+ runs that ended without a decode */
+    uint16_t          attempt_log[NAV_RUN_LOG];   /* run widths (ms) of that attempt; first run is a bar */
     uint32_t          decoded_count;
     uint32_t          rejected_count;
     uint32_t          overwritten_count;
@@ -185,6 +217,8 @@ typedef struct {
     uint8_t  junction_mask;         /* NAV_JUNCTION_*, valid with NAV_EVENT_JUNCTION */
     uint8_t  valid_mask;            /* channels trusted after calibration */
     uint8_t  barcode_lanes_active;  /* bit per lane currently seeing bars */
+    bool     pair_on_line;          /* every trusted tracking sensor sees black now */
+    bool     junction_armed;        /* a barcode has gone by (15 bars or decoded): its junction is next */
 } line_nav_out_t;
 
 void line_nav_init(line_nav_t *nav, const line_nav_config_t *cfg);
@@ -207,6 +241,24 @@ bool line_nav_calibrate_end(line_nav_t *nav);
 /* Feed one ADC frame (order: left, centre, right).  Call for every 1 ms frame. */
 void line_nav_push_frame(line_nav_t *nav, const uint16_t adc[LINE_CHANNEL_COUNT],
                          uint32_t now_ms);
+
+/*
+ * Tell the navigator how far the car has travelled (a counter that grows when
+ * the car moves forward, such as the sum of both encoder counts).  Call it
+ * once per step, just before pushing that step's frames.  From the second call
+ * on, barcode bar widths are measured in distance (quarter counts) instead of
+ * time, so an accelerating, stuttering or briefly stopped car still reads.
+ * Without it, widths are in milliseconds, as before.
+ */
+void line_nav_set_travel(line_nav_t *nav, int32_t travel, uint32_t now_ms);
+
+/*
+ * Replace the letter -> command mapping (the car has none built in; it is sent
+ * over MQTT).  Copies up to NAV_MAP_MAX entries; 0 entries removes the mapping, so
+ * every decoded letter is rejected.  Affects the barcodes decoded after the call;
+ * an instruction already stored keeps the command it was given.
+ */
+void line_nav_set_map(line_nav_t *nav, const nav_map_entry_t *entries, uint8_t len);
 
 /* The ADC ring overflowed: whatever barcode attempt was in progress is void. */
 void line_nav_note_overflow(line_nav_t *nav);

@@ -176,6 +176,15 @@ bool run_extractor_push(run_extractor_t *extractor,
                         bool *run_is_bar,
                         uint16_t *run_ticks)
 {
+    return run_extractor_push_w(extractor, blackness, 1U, run_is_bar, run_ticks);
+}
+
+bool run_extractor_push_w(run_extractor_t *extractor,
+                          uint16_t blackness,
+                          uint16_t weight,
+                          bool *run_is_bar,
+                          uint16_t *run_ticks)
+{
     bool next_in_bar;
     bool emitted = false;
 
@@ -183,7 +192,7 @@ bool run_extractor_push(run_extractor_t *extractor,
         extractor->started = true;
         extractor->in_bar = (blackness >= BAR_ON_LEVEL);
         extractor->first_run = true;
-        extractor->ticks = 1U;
+        extractor->ticks = weight;
         return false;
     }
 
@@ -206,9 +215,11 @@ bool run_extractor_push(run_extractor_t *extractor,
         }
         extractor->first_run = false;
         extractor->in_bar = next_in_bar;
-        extractor->ticks = 1U;
-    } else if (extractor->ticks < UINT16_MAX) {
-        extractor->ticks++;
+        extractor->ticks = weight;
+    } else if (((uint32_t)extractor->ticks + weight) < UINT16_MAX) {
+        extractor->ticks = (uint16_t)(extractor->ticks + weight);
+    } else {
+        extractor->ticks = UINT16_MAX;
     }
     return emitted;
 }

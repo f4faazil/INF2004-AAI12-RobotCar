@@ -10,10 +10,26 @@
 
 #define NAV_BLACK_ON            (600U)      /* per-mille: counts as black */
 #define NAV_BLACK_OFF           (400U)      /* ...and as white again below this */
-#define NAV_ACTIVE_RUNS         (3U)        /* edges that make a lane "barcode-active" */
+/*
+ * Runs that make a lane "barcode-active" (no junction checks, speed held).  2, not
+ * more: read backwards, the start character's first wide bar is the 3rd element,
+ * and every Code 39 symbol starts with a narrow bar from either end.
+ */
+#define NAV_ACTIVE_RUNS         (2U)
 #define UM_PER_MM               (1000U)
 #define PERMILLE                (1000)
 #define CLEAR_STEPS_TO_RELEASE  (3U)
+/*
+ * Junction after a barcode: the branch sensor's leaky score (+2 per black 1 kHz
+ * frame, -1 per white one, capped) must reach ARMED_JUNCTION_SCORE.  Solid black
+ * gets there in 30 frames, enough to ignore a glitch and short enough for the
+ * arm of a crossroads at the top course speed (about 18 mm at 300 mm/s); a
+ * patchy reading that is black at least about 40% of the time still gets there,
+ * and one that is mostly white never does.
+ */
+#define ARMED_SCORE_UP          (2U)
+#define ARMED_SCORE_MAX         (120U)
+#define ARMED_JUNCTION_SCORE    (60U)
 #define DEFAULT_STEP_MS         (10U)
 
 /* Lane index <-> sensor channel. */
@@ -37,6 +53,7 @@ static void lane_reset(nav_lane_t *lane)
     barcode_init(&lane->decoder);
     lane->had_edge = false;
     lane->run_count = 0U;
+    lane->bar_count = 0U;
 }
 
 static void lanes_reset(line_nav_t *nav)
@@ -45,6 +62,7 @@ static void lanes_reset(line_nav_t *nav)
 
     for (i = 0U; i < NAV_LANE_COUNT; i++) {
         lane_reset(&nav->lane[i]);
+        nav->ch_score[LANE_CHANNEL[i]] = 0U;    /* the barcode's bars must not arm its junction */
     }
 }
 
@@ -84,6 +102,11 @@ void line_nav_init(line_nav_t *nav, const line_nav_config_t *cfg)
     nav->sum_n = 0U;
     nav->last_frame_ms = 0U;
     nav->have_frame = false;
+    nav->travel_have = false;
+    nav->travel_on = false;
+    nav->travel_win_q = 0U;
+    nav->travel_win_ms = 0U;
+    nav->travel_carry = 0U;
     for (i = 0U; i < NAV_LANE_COUNT; i++) {
         lane_reset(&nav->lane[i]);
         nav->lane[i].last_edge_ms = 0U;
@@ -91,8 +114,12 @@ void line_nav_init(line_nav_t *nav, const line_nav_config_t *cfg)
     for (i = 0U; i < LINE_CHANNEL_COUNT; i++) {
         nav->ch_black[i] = false;
         nav->ch_black_frames[i] = 0U;
+        nav->ch_score[i] = 0U;
     }
     nav->pending_valid = false;
+    nav->bars_done = false;
+    nav->bars_done_ms = 0U;
+    nav->bars_done_count = 0U;
     nav->next_id = 0U;
     nav->events = 0U;
     line_tracker_init(&nav->tracker, cfg->lost_frames, cfg->found_frames);
@@ -148,6 +175,11 @@ static void handle_decode(line_nav_t *nav, char letter, uint32_t now_ms)
     uint8_t i;
     const nav_map_entry_t *entry = NULL;
 
+    /* a whole barcode has gone by, whatever its letter: the next thing is its junction */
+    nav->bars_done = true;
+    nav->bars_done_ms = now_ms;
+    nav->bars_done_count++;
+
     /* The symbol is used up.  Resetting both lanes means one physical barcode
      * can never be decoded twice, even if both outer sensors can see it. */
     lanes_reset(nav);
@@ -175,12 +207,60 @@ static void handle_decode(line_nav_t *nav, char letter, uint32_t now_ms)
     nav->events |= NAV_EVENT_BARCODE;
 }
 
+void line_nav_set_map(line_nav_t *nav, const nav_map_entry_t *entries, uint8_t len)
+{
+    uint8_t i;
+    const uint8_t n = (len > NAV_MAP_MAX) ? (uint8_t)NAV_MAP_MAX : len;
+
+    for (i = 0U; i < n; i++) {
+        nav->map_store[i] = entries[i];
+    }
+    nav->cfg.map = nav->map_store;
+    nav->cfg.map_len = n;
+}
+
+void line_nav_set_travel(line_nav_t *nav, int32_t travel, uint32_t now_ms)
+{
+    if (nav->travel_have && (now_ms > nav->travel_last_ms)) {
+        const int32_t delta = travel - nav->travel_last;
+
+        nav->travel_win_q = (delta > 0) ? ((uint32_t)delta * 4U) : 0U;
+        nav->travel_win_ms = now_ms - nav->travel_last_ms;
+        nav->travel_carry = 0U;
+        nav->travel_on = true;
+    }
+    nav->travel_last = travel;
+    nav->travel_last_ms = now_ms;
+    nav->travel_have = true;
+}
+
+/* Weight of one frame: the distance moved during it (quarter counts), or 1 with no travel data. */
+static uint16_t frame_weight(line_nav_t *nav, uint32_t now_ms)
+{
+    uint32_t dt = now_ms - nav->travel_prev_frame_ms;
+    uint32_t w;
+
+    nav->travel_prev_frame_ms = now_ms;
+    if (!nav->travel_on) {
+        return 1U;
+    }
+    if ((dt == 0U) || (dt > nav->travel_win_ms)) {
+        dt = 1U;
+    }
+    nav->travel_carry += nav->travel_win_q * dt;
+    w = nav->travel_carry / nav->travel_win_ms;
+    nav->travel_carry -= w * nav->travel_win_ms;
+    return (w > UINT16_MAX) ? UINT16_MAX : (uint16_t)w;
+}
+
 void line_nav_push_frame(line_nav_t *nav, const uint16_t adc[LINE_CHANNEL_COUNT],
                          uint32_t now_ms)
 {
     uint8_t ch;
     uint8_t i;
     uint16_t black[LINE_CHANNEL_COUNT];
+
+    const uint16_t weight = frame_weight(nav, now_ms);
 
     nav->last_frame_ms = now_ms;
     nav->have_frame = true;
@@ -211,6 +291,16 @@ void line_nav_push_frame(line_nav_t *nav, const uint16_t adc[LINE_CHANNEL_COUNT]
         } else {
             nav->ch_black_frames[ch] = 0U;
         }
+        /* leaky count: tolerates a patchy reading (different ink, a worn tile) that
+         * an unbroken-black rule would miss, but never fills on mostly-white */
+        if (nav->ch_black[ch] && (((nav->valid_mask >> ch) & 1U) != 0U)) {
+            nav->ch_score[ch] = (uint16_t)(((nav->ch_score[ch] + ARMED_SCORE_UP) > ARMED_SCORE_MAX)
+                                           ? ARMED_SCORE_MAX : (nav->ch_score[ch] + ARMED_SCORE_UP));
+        } else if (nav->ch_score[ch] > 0U) {
+            nav->ch_score[ch]--;
+        } else {
+            /* already empty */
+        }
     }
     nav->sum_n++;
 
@@ -224,19 +314,44 @@ void line_nav_push_frame(line_nav_t *nav, const uint16_t adc[LINE_CHANNEL_COUNT]
             (((nav->cfg.lane_mask >> channel) & 1U) == 0U)) {
             continue;
         }
-        if (run_extractor_push(&lane->extractor, black[channel], &is_bar, &ticks)) {
+        if (run_extractor_push_w(&lane->extractor, black[channel], weight, &is_bar, &ticks)) {
             char letter = '\0';
 
             lane->last_edge_ms = now_ms;
             lane->had_edge = true;
+            if (lane->run_count < NAV_RUN_LOG) {
+                lane->run_log[lane->run_count] = ticks;
+            }
             if (lane->run_count < UINT8_MAX) {
                 lane->run_count++;
             }
+            if (is_bar && (ticks >= nav->cfg.barcode_min_bar) && (lane->bar_count < UINT8_MAX)) {
+                lane->bar_count++;
+            }
             if (barcode_push_run(&lane->decoder, is_bar, ticks, &letter) == BARCODE_DECODED) {
                 handle_decode(nav, letter, now_ms);
+            } else if ((nav->cfg.barcode_bars != 0U) && (lane->bar_count >= nav->cfg.barcode_bars)) {
+                /* the count says a whole barcode went by even if the letter did not decode:
+                 * log the attempt (try= and the [barlog] widths) so the failure can be seen */
+                nav->last_attempt_runs = lane->run_count;
+                for (uint8_t k = 0U; k < NAV_RUN_LOG; k++) {
+                    nav->attempt_log[k] = lane->run_log[k];
+                }
+                nav->attempt_count++;
+                nav->bars_done = true;
+                nav->bars_done_ms = now_ms;
+                nav->bars_done_count++;
+                lanes_reset(nav);
             }
         }
         if (lane->had_edge && ((now_ms - lane->last_edge_ms) > nav->cfg.barcode_quiet_ms)) {
+            if (lane->run_count >= 5U) {        /* a real attempt, not a stray edge */
+                nav->last_attempt_runs = lane->run_count;
+                for (uint8_t k = 0U; k < NAV_RUN_LOG; k++) {
+                    nav->attempt_log[k] = lane->run_log[k];
+                }
+                nav->attempt_count++;
+            }
             lane_reset(lane);                   /* a stale partial symbol */
         }
     }
@@ -283,6 +398,11 @@ void line_nav_step(line_nav_t *nav, uint32_t now_ms, int16_t speed_mm_s,
                    line_nav_out_t *out)
 {
     const uint32_t junction_um = (uint32_t)nav->cfg.junction_min_mm * UM_PER_MM;
+    /* a barcode has been read and not used yet: the next all-black is its junction */
+    const bool armed = (nav->pending_valid &&
+                        ((now_ms - nav->pending.timestamp_ms) <= nav->cfg.instruction_ttl_ms)) ||
+                       (nav->bars_done &&
+                        ((now_ms - nav->bars_done_ms) <= nav->cfg.instruction_ttl_ms));
     uint8_t excluded = 0U;
     uint8_t lanes_active = 0U;
     uint8_t any_black = 0U;
@@ -302,10 +422,26 @@ void line_nav_step(line_nav_t *nav, uint32_t now_ms, int16_t speed_mm_s,
     nav->events = 0U;
     out->junction_mask = 0U;
     out->valid_mask = nav->valid_mask;
+    {
+        /* the whole tracking pair on a line: where a junction turn stops */
+        const uint8_t pair = (uint8_t)(nav->valid_mask & nav->cfg.track_mask);
+        uint8_t black = 0U;
+        uint8_t k;
+
+        for (k = 0U; k < LINE_CHANNEL_COUNT; k++) {
+            if (nav->ch_black[k]) {
+                black = (uint8_t)(black | (1U << k));
+            }
+        }
+        out->pair_on_line = (pair != 0U) && ((black & pair) == pair);
+        out->junction_armed = armed;
+    }
 
     {
         /* Is a tracking sensor over the line (apart from the branch sensors)?
-         * A branch only counts as a junction while the line is under us. */
+         * A junction needs the branch sensor (the far left one) black together with
+         * at least ONE of them, so two of the three sensors with the left one always
+         * among them: the left sensor alone is not enough. */
         uint8_t anchors = (uint8_t)(nav->cfg.track_mask & (uint8_t)(~nav->cfg.junction_mask) &
                                     nav->valid_mask);
         bool anchor_black = (anchors == 0U);
@@ -344,7 +480,18 @@ void line_nav_step(line_nav_t *nav, uint32_t now_ms, int16_t speed_mm_s,
                  (black_now && anchor_black && (black_um < junction_um)))) {
                 excluded |= (uint8_t)(1U << channel);
             }
-            if (is_branch && black_now && anchor_black && (black_um >= junction_um) &&
+            /*
+             * A junction needs the tracking sensors black together with the
+             * branch sensor.  With a barcode waiting that is all it takes: the
+             * next time the branch sensor's score fills is the junction, whatever
+             * the speed reads and even if the reading is patchy, so the flicker
+             * guard is off.  With nothing waiting the branch sensor must be
+             * steady and black for longer than any barcode bar, which needs the
+             * speed, so a bar is never taken for a junction.
+             */
+            if (is_branch && anchor_black &&
+                (armed ? (nav->ch_score[channel] >= ARMED_JUNCTION_SCORE)
+                       : (!active && black_now && (black_um >= junction_um))) &&
                 ((nav->junction_latched & LANE_SIDE[i]) == 0U)) {
                 newly |= LANE_SIDE[i];
             }
@@ -361,6 +508,7 @@ void line_nav_step(line_nav_t *nav, uint32_t now_ms, int16_t speed_mm_s,
     if ((nav->junction_pending != 0U) &&
         ((now_ms - nav->junction_since_ms) >= nav->cfg.junction_merge_ms)) {
         out->events |= NAV_EVENT_JUNCTION;
+        nav->bars_done = false;                 /* its junction has come */
         out->junction_mask = nav->junction_pending;
         nav->junction_latched |= nav->junction_pending;
         nav->junction_pending = 0U;

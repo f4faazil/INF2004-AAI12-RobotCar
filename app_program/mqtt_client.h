@@ -37,6 +37,7 @@ typedef struct {
     const char     *password;
     const char     *status_topic;       /* will "offline" / birth "online", retained */
     const char     *command_topic;      /* subscribed */
+    const char     *extra_topic;        /* a second topic to subscribe to, or NULL */
     uint16_t        keepalive_s;
     uint32_t        connect_timeout_ms;
     uint32_t        backoff_initial_ms;

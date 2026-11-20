@@ -113,7 +113,7 @@ static bool send_connect(mqtt_client_t *c)
     return send_packet(c, buf, n) == SEND_OK;
 }
 
-/* After CONNACK: subscribe to commands and announce we are online. */
+/* After CONNACK: subscribe to commands (and the extra topic, if any) and announce we are online. */
 static bool send_session_start(mqtt_client_t *c)
 {
     uint8_t buf[SEND_BUF];
@@ -121,6 +121,13 @@ static bool send_session_start(mqtt_client_t *c)
 
     if (send_packet(c, buf, n) != SEND_OK) {
         return false;
+    }
+    if (c->cfg.extra_topic != NULL) {
+        n = mqtt_encode_subscribe((uint16_t)(SUBSCRIBE_ID + 1U), c->cfg.extra_topic, buf,
+                                  sizeof(buf));
+        if (send_packet(c, buf, n) != SEND_OK) {
+            return false;
+        }
     }
     n = mqtt_encode_publish(c->cfg.status_topic, (const uint8_t *)STATUS_ONLINE, ONLINE_LEN,
                             true, buf, sizeof(buf));

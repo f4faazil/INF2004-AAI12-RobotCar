@@ -14,10 +14,11 @@ CFLAGS  := -std=c11 -O1 -g -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
            -Werror -I$(APP) -I.
 LDLIBS  := -lm
 
-TESTS   := test_barcode test_line_sensor test_pipeline test_fault_mask \
+TESTS   := test_barcode test_barcode_map test_line_sensor test_pipeline test_fault_mask \
            test_encoder test_pid test_motion test_imu test_ultrasonic test_obstacle test_line_nav test_telemetry test_mqtt_codec test_mqtt_client test_safety test_vehicle test_follow_sim
 
 SRC_test_barcode      := barcode.c
+SRC_test_barcode_map  := barcode_map.c
 SRC_test_line_sensor  := line_sensor.c
 SRC_test_pipeline     := barcode.c line_sensor.c
 SRC_test_fault_mask   := fault_mask.c
