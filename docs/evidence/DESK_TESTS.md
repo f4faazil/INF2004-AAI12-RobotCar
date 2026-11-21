@@ -108,3 +108,23 @@ Motion setting the motor output to zero, and the wheels confirmed still.
 What it reports: each stop broken down into the four hand-overs, and two verdicts against 150 ms: measured from the sonar's first reading, and (conservatively) from the earliest possible entry, which adds one ping period (70 ms) because the car cannot see an obstacle between two pings.
 
 The physical stopping distance on the floor is a separate measurement (tape on the floor, car at 100 mm/s towards a board, mark where it stops); this test measures time to zero motor output.
+
+## 6. A lap on the mini track without a USB cable (record the dashboard feed)
+
+When the car cannot be tethered, record what it sends over WiFi instead. This gives the lap, barcode, hump, obstacle and fault evidence. It cannot give the timing
+comparison or the `[stop]` lines: those exist only in the serial log, which needs the USB cable.
+
+1. Start the dashboard (`npm start` in `C:\Users\cools\Github\aai12-dashboard`) and wait until the Robot pill says "sending".
+2. Send the barcode map from the dashboard card (default `A=L,B=R,F=U`) and check the page says `OK n=3`.
+3. In a second terminal start the recorder, one file per lap and per firmware:
+   `node tools/record-feed.mjs --out lap_v22_1.jsonl`
+   It prints a line every 5 s with the state and the last event, and warns if the car goes silent.
+4. Put the car on the track and press START (GP20 or the dashboard). Keep a hand near the car for the first lap.
+5. When the lap is over, press Ctrl+C in the recorder terminal. It saves the file and prints the lap report at once.
+   Reprint it any time with `node tools/feed-summary.mjs lap_v22_1.jsonl`.
+
+The report gives: time in each vehicle state and the timeline, distance run and top speed, every barcode / junction / hump / obstacle / plan / fault event with its time,
+the barcode, encoder, IMU and sonar counters, hump and obstacle-scan tables, faults seen, gaps in the feed, broker connections, and the car's own drop counter.
+
+To compare the two firmwares, record the same lap with each (same start, same battery, at least 3 laps) and compare the reports: states and times, faults, distance, drops, and whether the barcode and hump were read.
+Event times have 10 ms resolution.
