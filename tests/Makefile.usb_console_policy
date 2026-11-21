@@ -1,0 +1,14 @@
+CC ?= cc
+CFLAGS = -std=c11 -O2 -Wall -Wextra -Werror -pedantic
+INCLUDES = -I../lib/libtm/sysdepend/pico_rp2040/usb
+
+.PHONY: test clean
+test: test_usb_console_policy
+	./test_usb_console_policy
+
+test_usb_console_policy: test_usb_console_policy.c \
+                         ../lib/libtm/sysdepend/pico_rp2040/usb/usb_console_policy.h
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ test_usb_console_policy.c
+
+clean:
+	rm -f test_usb_console_policy

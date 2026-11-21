@@ -168,7 +168,7 @@
 /* Use Sample device driver.
  *  1: Valid  0: Invalid
  */
-#define USE_SDEV_DRV		(1)	/* Use Sample device driver */
+#define USE_SDEV_DRV		(0)	/* Use Sample device driver */
 
 /*---------------------------------------------------------------------- */
 /*

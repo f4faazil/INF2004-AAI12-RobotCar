@@ -178,6 +178,28 @@ int32_t lwip_utk_ipv4_adopt_netif(struct netif *netif)
     return ERR_OK;
 }
 
+void lwip_utk_ipv4_reset(struct netif *netif)
+{
+    if(ping_pcb != NULL) {
+        raw_remove(ping_pcb);
+        ping_pcb = NULL;
+    }
+    if(netif != NULL) etharp_cleanup_netif(netif);
+
+    ipv4_status = (T_LWIP_UTK_IPV4_STATUS) {
+        .config_result = ERR_VAL,
+        .ping_send_result = ERR_VAL,
+        .ping_result = ERR_TIMEOUT,
+    };
+    ip4_addr_set_zero(&local_address);
+    ip4_addr_set_zero(&local_netmask);
+    ip4_addr_set_zero(&local_gateway);
+    ip4_addr_set_zero(&ping_target);
+    ip4_addr_set_zero(&arp_target);
+    ping_started_ms = 0;
+    last_ping_ms = 0;
+}
+
 void lwip_utk_ipv4_poll(struct netif *netif)
 {
     uint32_t now;

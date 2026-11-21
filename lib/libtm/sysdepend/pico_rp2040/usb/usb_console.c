@@ -20,6 +20,8 @@
 #include <tk/typedef.h>
 #include <sys/sysdef.h>
 
+#include "usb_console_policy.h"
+
 #if TK_SUPPORT_SMP
 #include <tk/smp.h>
 #endif
@@ -96,6 +98,11 @@ EXPORT volatile UW	tm_usb_link_state;
 
 EXPORT volatile UW	tm_usb_init_ok;
 
+/* Headless diagnostics.  These counters are sampled by the CYW43 owner;
+   they never cause console I/O and therefore cannot change USB timing. */
+EXPORT volatile UW	tm_usb_service_count;
+EXPORT volatile UW	tm_usb_event_count;
+
 EXPORT UW tm_usb_state(void)
 {
 	return tm_usb_link_state;
@@ -148,6 +155,7 @@ LOCAL void usb_service_task(INT stacd, void *exinf)
 	unsigned	available;
 	UB		chunk[USB_TX_CHUNK];
 	UW		count;
+	UW		events;
 	UINT		intsts;
 
 	(void)stacd;
@@ -167,12 +175,24 @@ LOCAL void usb_service_task(INT stacd, void *exinf)
 	tm_usb_link_state = 1;
 
 	for(;;) {
-		/* Drain the whole event burst before yielding.  Returning to
-		   the scheduler between events would put a tick period into
-		   each stage of every control transfer. */
+		tm_usb_service_count++;
+		/* Drain a normal event burst without scheduler latency, but put
+		 * a hard bound on one dispatch.  USB runs above CYW43 on this core;
+		 * an electrically noisy or non-host USB source must not keep the
+		 * radio owner from servicing lwIP and MQTT keepalive deadlines. */
+		events = 0;
 		do {
 			tm_tusb_service();
-		} while(tm_tusb_event_ready());
+			tm_usb_event_count++;
+			events++;
+		} while(tm_tusb_event_ready() &&
+			usb_event_burst_has_room(events));
+		if(tm_tusb_event_ready()) {
+			/* Unlike tk_slp_tsk(), a delay is not consumed by the counted
+			 * wakeups posted by the USB ISR during an event storm. */
+			(void)tk_dly_tsk(1);
+			continue;
+		}
 
 		tm_usb_link_state = tm_tusb_mounted()
 				  ? (tm_tusb_connected() ? 3 : 2)

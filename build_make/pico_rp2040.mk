@@ -143,6 +143,24 @@ $(error WIFI_TCPBULK=1 requires WIFI_TCP=1)
 endif
 endif
 
+# AAI12 Buddy 1: opt-in MQTT TCP client. Do not enable the echo TCP
+# test at the same time: that client is sequenced after the UDP test.
+WIFI_MQTT ?= 0
+ifneq ($(filter $(WIFI_MQTT),0 1),$(WIFI_MQTT))
+$(error Unknown WIFI_MQTT '$(WIFI_MQTT)'; use 0 or 1)
+endif
+ifeq ($(WIFI_MQTT),1)
+ifneq ($(WIFI_DHCP),1)
+$(error WIFI_MQTT=1 requires WIFI_DHCP=1)
+endif
+ifneq ($(WIFI_TCP),0)
+$(error WIFI_MQTT=1 currently requires WIFI_TCP=0)
+endif
+ifeq ($(wildcard ../config/mqtt_test_config.h),)
+$(error WIFI_MQTT=1 requires config/mqtt_test_config.h)
+endif
+endif
+
 ifeq ($(WIFI_NETIF),1)
 ifneq ($(WIFI_JOIN),1)
 $(error WIFI_NETIF=1 requires WIFI_JOIN=1)
@@ -183,6 +201,9 @@ endif
 ifeq ($(WIFI_TCPBULK),1)
 WIFI_SUFFIX := _wifi_tcpbulk
 endif
+ifeq ($(WIFI_MQTT),1)
+WIFI_SUFFIX := _wifi_mqtt
+endif
 endif
 
 #
@@ -191,7 +212,16 @@ endif
 # a live hazard: an SMP=1 build was once flashed in place of an SMP=0 one and
 # only the banner in the log revealed it.
 #
-EXE_FILE := mtk3pico_smp$(SMP)_$(CONSOLE)$(WIFI_SUFFIX)
+# 0=original demo, 1=range bench, 2=servo bench, 3=scan bench, 4=controller API.
+BUDDY5 ?= 0
+ifeq ($(filter $(BUDDY5),0 1 2 3 4),)
+$(error BUDDY5 must be 0, 1, 2, 3 or 4)
+endif
+B5_SUFFIX :=
+ifneq ($(BUDDY5),0)
+B5_SUFFIX := _b5mode$(BUDDY5)
+endif
+EXE_FILE := mtk3pico_smp$(SMP)_$(CONSOLE)$(WIFI_SUFFIX)$(B5_SUFFIX)
 
 GCC := arm-none-eabi-gcc
 AS := arm-none-eabi-gcc
@@ -232,6 +262,9 @@ LFLAGS := -mcpu=cortex-m0plus -mthumb -ffreestanding \
     -O2 -g3 \
     -mfloat-abi=soft \
 
+CFLAGS += -DAPP_BUDDY5=$(BUDDY5)
+ASFLAGS += -DAPP_BUDDY5=$(BUDDY5)
+
 LNKFILE := "../etc/linker/pico_rp2040/tkernel_map.ld"
 
 # Applied here, after CFLAGS/ASFLAGS are assigned with ':=', which would
@@ -268,7 +301,7 @@ endif
 # before any recipe executes.
 ################################################################################
 
-PROFILE_ID := smp$(SMP)-$(CONSOLE)-wifi$(WIFI)-join$(WIFI_JOIN)-netif$(WIFI_NETIF)-static$(WIFI_STATIC)-dhcp$(WIFI_DHCP)-dns$(WIFI_DNS)-udp$(WIFI_UDP)-tcp$(WIFI_TCP)-bulk$(WIFI_TCPBULK)
+PROFILE_ID := b5$(BUDDY5)-smp$(SMP)-$(CONSOLE)-wifi$(WIFI)-join$(WIFI_JOIN)-netif$(WIFI_NETIF)-static$(WIFI_STATIC)-dhcp$(WIFI_DHCP)-dns$(WIFI_DNS)-udp$(WIFI_UDP)-tcp$(WIFI_TCP)-bulk$(WIFI_TCPBULK)-mqtt$(WIFI_MQTT)
 PROFILE_FILE := .build_profile
 
 ifneq ($(strip $(shell cat $(PROFILE_FILE) 2>/dev/null)),$(PROFILE_ID))
@@ -366,7 +399,8 @@ $(error lwIP not found below $(PICO_SDK_PATH); initialize the pico-sdk submodule
 endif
 endif
 
-WIFI_LOCAL_SRCS := cyw43_utk.c cyw43_utk_kernel.c cyw43_utk_compat.c
+WIFI_LOCAL_SRCS := cyw43_utk.c cyw43_utk_join.c cyw43_utk_kernel.c \
+                   cyw43_utk_compat.c
 WIFI_LOCAL_OBJS := $(addprefix ./mtkernel_3/lib/libwifi/sysdepend/pico_rp2040/,$(WIFI_LOCAL_SRCS:.c=.o))
 
 CYW43_OBJS := ./mtkernel_3/cyw43/cyw43_ll.o \
@@ -406,15 +440,20 @@ endif
 ifeq ($(WIFI_TCPBULK),1)
 LWIP_PORT_OBJS += ./mtkernel_3/lib/libnet/lwip/lwip_utk_tcpbulk.o
 endif
+ifeq ($(WIFI_MQTT),1)
+LWIP_PORT_OBJS += ./mtkernel_3/lib/libnet/lwip/mqtt_lwip.o
+endif
 endif
 
 WIFI_INCLUDES := -I"$(WIFIDIR)" \
+                 -I"../app_program" \
                  -I"../lib/libtm/sysdepend/pico_rp2040/usb" \
                  -I"$(CYW43_DRIVER_PATH)/src" \
                  -I"$(CYW43_DRIVER_PATH)/firmware" \
                  -I"$(CYW43_PICO_PATH)/include" \
                  -I"$(PICO_SDK_PATH)/src/boards/include" \
                  -I"$(PICO_SDK_PATH)/src/common/pico_base_headers/include" \
+                 -I"$(PICO_SDK_PATH)/src/common/pico_util/include" \
                  -I"$(PICO_SDK_PATH)/src/common/hardware_claim/include" \
                  -I"$(PICO_SDK_PATH)/src/common/pico_binary_info/include" \
                  -I"$(PICO_SDK_PATH)/src/rp2040/pico_platform/include" \
@@ -446,6 +485,7 @@ CFLAGS += -DTM_WIFI_CYW43=1 -DTM_WIFI_JOIN=$(WIFI_JOIN) \
           -DTM_WIFI_STATIC=$(WIFI_STATIC) -DTM_WIFI_DHCP=$(WIFI_DHCP) \
           -DTM_WIFI_DNS=$(WIFI_DNS) -DTM_WIFI_UDP=$(WIFI_UDP) \
           -DTM_WIFI_TCP=$(WIFI_TCP) -DTM_WIFI_TCPBULK=$(WIFI_TCPBULK) \
+          -DTM_WIFI_MQTT=$(WIFI_MQTT) \
           -DCYW43_ENABLE_BLUETOOTH=0 \
           -DCYW43_USE_OTP_MAC=1 -DPICO_CYW43_LOGGING_ENABLED=0 \
           -DPICO_RP2040=1 -DPICO_32BIT=1 -DPICO_ON_DEVICE=1 -DPICO_BUILD=1 \

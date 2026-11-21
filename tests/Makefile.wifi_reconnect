@@ -1,0 +1,15 @@
+CC ?= cc
+CFLAGS = -std=c11 -O2 -Wall -Wextra -Werror -pedantic
+INCLUDES = -I../lib/libwifi/sysdepend/pico_rp2040
+SOURCES = test_wifi_reconnect.c \
+          ../lib/libwifi/sysdepend/pico_rp2040/cyw43_utk_join.c
+
+.PHONY: test clean
+test: test_wifi_reconnect
+	./test_wifi_reconnect
+
+test_wifi_reconnect: $(SOURCES) ../lib/libwifi/sysdepend/pico_rp2040/cyw43_utk_join.h
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(SOURCES)
+
+clean:
+	rm -f test_wifi_reconnect

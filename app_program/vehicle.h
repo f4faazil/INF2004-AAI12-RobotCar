@@ -1,0 +1,244 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * vehicle.h
+ * The Vehicle Controller: mission state and coordination.  It is the only
+ * module that sends movement commands to Motion Control; line following,
+ * barcode navigation and obstacle avoidance ask it, never the wheels.
+ *
+ *   BOOT -> IDLE -> CALIBRATE -> FOLLOW <-> junction manoeuvres
+ *                                  |  \-> LINE LOST -> SEARCH
+ *                                  \----> OBSTACLE: stop, confirm stopped, scan,
+ *                                         bypass, recover the line, realign
+ *   any state --stop fault--> FAULT        operator stop -> STOPPED
+ *
+ * Rules from the Tribunal enforced here:
+ *  - a decoded barcode instruction is stored by the line module and executed
+ *    at the next JUNCTION, exactly once;
+ *  - the obstacle scan starts only after Motion confirms the car has stopped;
+ *  - an invalid scan or no safe route keeps the car stopped with a fault;
+ *  - line recovery after a bypass is limited to 5 s or 0.5 m, whichever comes
+ *    first;
+ *  - STOP-class faults stop the car at once and latch until the operator
+ *    clears them;
+ *  - remote commands cannot actuate the car: START, CALIBRATE and
+ *    CLEAR_FAULTS are refused while the mission runs, and no remote command
+ *    drives the wheels at all.
+ *
+ * Pure C: step() takes a snapshot of every input and returns what to do.
+ */
+#ifndef VEHICLE_H
+#define VEHICLE_H
+
+#include <stdbool.h>
+#include <stdint.h>
+
+#include "fault_mask.h"
+#include "line_nav.h"
+#include "motion.h"
+#include "obstacle.h"
+
+/* The order matches STATE_NAMES in tools/robot_telemetry.py and fits 4 bits. */
+typedef enum {
+    VC_BOOT = 0,
+    VC_IDLE,
+    VC_CALIBRATE,
+    VC_FOLLOW,
+    VC_JUNCTION_ADVANCE,
+    VC_JUNCTION_TURN,
+    VC_REACQUIRE,
+    VC_SEARCH_LINE,
+    VC_OBSTACLE_STOP,
+    VC_OBSTACLE_SCAN,
+    VC_BYPASS,
+    VC_REVERSE,
+    VC_RECOVER_LINE,
+    VC_STOPPED,
+    VC_FAULT,
+    VC_DONE                 /* reserved: no mission-complete condition is defined yet */
+} vehicle_state_t;
+
+#define VC_REMOTE_STOP          (1U << 0)
+#define VC_REMOTE_START         (1U << 1)
+#define VC_REMOTE_CALIBRATE     (1U << 2)
+#define VC_REMOTE_CLEAR_FAULTS  (1U << 3)
+
+#define VC_ACT_LINE_REQUIRED    (1U << 0)   /* for the safety monitor */
+#define VC_ACT_DRIVING          (1U << 1)
+#define VC_ACT_OBSTACLE_WATCH   (1U << 2)
+
+#define VC_MAX_EVENTS           (4U)
+
+typedef struct {
+    int16_t  cruise_mm_s;
+    int16_t  curve_mm_s;                /* slowest line-following speed */
+    int16_t  hump_mm_s;
+    int16_t  creep_mm_s;                /* reacquiring / recovering a line */
+    int16_t  approach_mm_s;             /* top speed while a barcode waits for its junction (0 = off) */
+    int16_t  recover_advance_mm;        /* wheel axle to the IR sensor row, less half the line: once the
+                                           line is found the car drives this far so the axle is over the
+                                           line before it turns to face along it.  0 = turn at once */
+    int16_t  recover_mm_s;              /* returning to the line after a bypass: the whole sideways leg
+                                           (up to 0.5 m) must be covered inside recovery_time_limit_ms */
+    int16_t  junction_advance_mm;       /* sensor bar to wheel axle, less the crossing offset */
+    int16_t  turn_deg;                  /* a left/right instruction: + left; sets the side only */
+    int16_t  uturn_deg;                 /* + left, - right; sets the side only */
+    int16_t  turn_spin_mm_s;            /* wheel speed while spinning on to the new line */
+    uint32_t turn_spin_timeout_ms;      /* no line found while spinning: search instead */
+    int16_t  cal_sweep_deg[3];
+    int16_t  search_sweep_deg[4];
+    uint8_t  search_sweep_count;
+    uint32_t boot_ms;
+    uint32_t stop_confirm_timeout_ms;   /* Motion must report stopped within this */
+    uint32_t scan_timeout_ms;
+    uint32_t reacquire_timeout_ms;
+    int16_t  reacquire_limit_mm;
+    uint32_t recovery_time_limit_ms;    /* 5 s */
+    int16_t  recovery_distance_limit_mm;/* 0.5 m */
+    uint32_t obstacle_blank_ms;         /* ignore a cleared obstacle for a while */
+    uint16_t bypass_stop_mm;            /* the sonar reads less than this on a straight leg of a bypass, or
+                                           on the drive back to the line: stop and wait.  0 = not watched */
+    uint32_t bypass_blank_ms;           /* ignore the sonar this long after a leg starts: its median still
+                                           holds readings from before the turn */
+    uint32_t bypass_hold_ms;            /* wait this long for the way to clear, then fault */
+
+    /*
+     * Looking at the box while passing it.  On the straight leg beside the box the sonar is
+     * tilted toward it.  The car keeps going until the box is no longer seen, then drives only
+     * as far more as its rear needs to clear the box's back corner.  The planned leg (from the
+     * assumed depth) is the limit: the sonar only shortens it, unless the box is still in view
+     * at its end, when the car goes on a little at a time.  0 = the sonar is not used this way.
+     */
+    int16_t  side_aim_deg;              /* tilt of the sonar toward the box (the servo reaches about 28) */
+    uint16_t side_min_mm;               /* an echo inside [min, max] is the box's side */
+    uint16_t side_max_mm;
+    uint16_t side_loss_ahead_pct;       /* when the echo is lost, the box's back corner is this % of the last
+                                           range ahead of the sonar: sin(aim) / tan(aim + half the beam) */
+    uint16_t side_tail_mm;              /* from that moment: sonar to axle + axle to rear corner + margin */
+    uint16_t side_extend_mm;            /* box still in view at the end of the leg: go this much further ... */
+    uint16_t side_extend_max_mm;        /* ... up to this much in all */
+    uint8_t  max_reverse_attempts;
+    uint8_t  found_cycles;              /* consecutive visible cycles = line found */
+    uint32_t cmd_timeout_base_ms;       /* finite manoeuvre time allowance */
+    uint32_t cmd_timeout_per_mm_ms;
+    uint32_t cmd_timeout_per_deg_ms;
+    bool     allow_remote_stop;         /* emergency STOP over MQTT: team decision pending */
+} vehicle_config_t;
+
+typedef struct {
+    uint32_t         now_ms;
+    bool             start_pressed;
+    bool             stop_pressed;
+    uint8_t          remote;            /* VC_REMOTE_* requests accepted this cycle */
+
+    line_nav_out_t   line;
+    bool             instruction_valid; /* an unexpired barcode instruction is waiting */
+    nav_instruction_t instruction;
+    bool             calibration_done;  /* answer to calibrate_end */
+    bool             calibration_ok;
+
+    motion_status_t  motion;
+    bool             obstacle_present;  /* forward monitor */
+    bool             obstacle_mm_valid; /* a fresh distance from the forward sonar ... */
+    uint16_t         obstacle_mm;       /* ... and the distance itself, from the sonar face */
+    uint16_t         side_seq;          /* the latest raw sonar reading: its sequence number ... */
+    bool             side_echo;         /* ... whether it had an echo ... */
+    uint16_t         side_mm;           /* ... and the range */
+    bool             scan_done;
+    bypass_plan_t    plan;
+    bool             hump_in_progress;
+    fault_bits_t     faults;
+} vehicle_in_t;
+
+typedef struct {
+    uint8_t  code;                      /* TEL_EVT_* */
+    uint16_t arg;
+} vehicle_event_t;
+
+typedef struct {
+    motion_cmd_t    cmd;                /* type NONE: nothing to send this cycle */
+    bool            calibrate_begin;
+    bool            calibrate_end;
+    bool            consume_instruction;
+    uint16_t        consume_id;
+    bool            request_scan;
+    fault_bits_t    raise_faults;
+    fault_bits_t    clear_faults;       /* authorised by the operator */
+    vehicle_state_t state;
+    uint8_t         activity;           /* VC_ACT_* */
+    int8_t          sonar_aim;          /* +1 tilt the sonar left, -1 right, 0 straight ahead */
+    uint8_t         event_count;
+    vehicle_event_t events[VC_MAX_EVENTS];
+} vehicle_out_t;
+
+typedef struct {
+    vehicle_config_t cfg;
+    vehicle_state_t  state;
+    vehicle_state_t  prev_reported;
+    uint32_t         state_since_ms;
+    bool             state_entry;       /* first cycle in this state */
+    bool             calibrated;
+
+    uint16_t         next_id;
+    uint16_t         stop_id;           /* id of the last STOP sent */
+    bool             started;
+    motion_cmd_t     cmd;
+    bool             cmd_active;
+    uint32_t         cmd_started_ms;
+    uint32_t         cmd_timeout_ms;
+
+    int16_t          pending_turn_deg;
+    uint8_t          turn_lines;        /* lines still to meet while spinning at a junction */
+    uint16_t         last_executed_id;
+    bool             have_executed;
+
+    bypass_plan_t    plan;
+    uint8_t          step_idx;
+    uint8_t          cal_idx;
+    uint8_t          search_idx;
+    uint8_t          reverse_attempts;
+    uint8_t          found_run;
+    uint32_t         blank_until_ms;
+    uint32_t         phase_since_ms;    /* a sub-phase timer inside a state */
+    uint8_t          phase;
+    int32_t          start_distance_mm;
+    int16_t          realign_turn_deg;
+    bool             stop_sent;
+    uint32_t         hold_since_ms;     /* when a bypass leg was stopped for something in the way */
+    uint32_t         clear_since_ms;    /* when the way last became clear (0 = it is not) */
+    int32_t          step_start_mm;     /* odometer at the start of the current straight leg */
+    int16_t          leg_mm;            /* the distance that leg was asked to cover */
+
+    /* the straight leg beside the box */
+    int32_t          leg_origin_mm;     /* odometer when the leg began */
+    int16_t          leg_total_mm;      /* what the leg is to cover in all, from there */
+    int16_t          leg_extended_mm;
+    uint16_t         side_seq_seen;
+    uint8_t          side_hits;         /* readings in a row that saw the box's side */
+    uint8_t          side_miss;         /* readings in a row that did not */
+    bool             side_seen;         /* the box has been seen on this leg */
+    bool             side_cut_done;
+    uint16_t         side_last_mm;      /* the last range that saw it */
+    int32_t          side_miss_mm;      /* odometer when the readings stopped seeing it */
+    bool             imu_lift_latched;
+} vehicle_t;
+
+void vehicle_init(vehicle_t *vc, const vehicle_config_t *cfg);
+
+/* One control cycle (10 ms). */
+void vehicle_step(vehicle_t *vc, const vehicle_in_t *in, vehicle_out_t *out);
+
+/*
+ * Decide what to do with a command from the network (a stateless policy so
+ * the telemetry task can call it without touching controller state).
+ * Returns the TEL_ACK_* result; on TEL_ACK_RECEIVED *request_bit is the
+ * VC_REMOTE_* bit the caller hands to the controller with its next input.
+ * Remote commands never move the wheels, and START, CALIBRATE and
+ * CLEAR_FAULTS are refused while the mission is running.
+ */
+uint8_t vehicle_remote_policy(vehicle_state_t state, bool allow_remote_stop,
+                              bool imu_lift_latched, uint8_t cmd, uint8_t *request_bit);
+
+bool vehicle_is_running(vehicle_state_t state);
+
+#endif /* VEHICLE_H */

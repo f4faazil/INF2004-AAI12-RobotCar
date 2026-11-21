@@ -31,6 +31,6 @@
 
 /* Communication timeout time */
 #define	DEVCNF_I2C0_TMO		1000
-#define	DEVCNF_I2C1_TMO		1000
+#define	DEVCNF_I2C1_TMO		10		/* 10 ms = 10,000 us */
 
 #endif		/* __DEV_I2C_CNF_RP2040_H__ */

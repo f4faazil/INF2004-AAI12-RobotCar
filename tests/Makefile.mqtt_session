@@ -1,0 +1,13 @@
+CC ?= cc
+CFLAGS = -std=c11 -O2 -Wall -Wextra -Werror -pedantic
+
+.PHONY: test clean
+
+test: test_mqtt_session
+	./test_mqtt_session
+
+test_mqtt_session: test_mqtt_session.c ../app_program/mqtt_session.c ../app_program/mqtt_session.h ../app_program/mqtt_stream.c ../app_program/mqtt_wire.c
+	$(CC) $(CFLAGS) -o $@ test_mqtt_session.c ../app_program/mqtt_session.c ../app_program/mqtt_stream.c ../app_program/mqtt_wire.c
+
+clean:
+	rm -f test_mqtt_session

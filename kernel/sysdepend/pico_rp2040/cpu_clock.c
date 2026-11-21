@@ -21,6 +21,9 @@
 
 #include <tk/tkernel.h>
 #include "sysdepend.h"
+#include "timer_tick_policy.h"
+
+#define RP2040_WATCHDOG_TICK_REG 0x4005802cU
 
 /* 
  * PLL initialization
@@ -103,6 +106,13 @@ EXPORT void startup_clock(ATR clkatr)
 	while(!(in_w(CLK_REF+CLK_x_SELECTED)&(1<<2)));
 
 	out_w(CLK_REF+CLK_x_DIV, div);
+
+	/* TIMER_RAW is not self-calibrating: on RP2040 its input is the watchdog
+	 * tick generator clocked by clk_ref.  The reset CYCLES value is zero,
+	 * which represents 512 cycles and yields only 23.4375 kHz at 12 MHz.
+	 * Program the same 1 MHz timebase as pico-sdk runtime_init_clocks(). */
+	out_w(RP2040_WATCHDOG_TICK_REG,
+	      rp2040_timer_tick_value(XOSC_MHz * MHz));
 
 	/* CLK SYS settings */
 	div = (TMCLK_MHz << 8) / TMCLK_MHz;
