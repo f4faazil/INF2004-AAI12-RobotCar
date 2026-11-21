@@ -89,3 +89,22 @@ From the code (not yet measured), the time from an obstacle appearing to the mot
 So an obstacle that enters the 330 mm range from further away is likely to take **about 155 to 250 ms**, longer than 150 ms, while one that appears close takes about 100 ms. This is an
 analysis, not a measurement. The test needs a timestamp of the moment the motor output reaches zero, which the firmware does not log yet. If the measured time exceeds 150 ms the honest
 options are to report it, or to change the confirmation (for example act on the first reading and keep the median only for release).
+
+### How to run the 150 ms measurement (about 30 minutes; floor space not needed for the timing itself)
+
+Use the timing firmware `robot_wifi_telemetry_v22_stoptiming_fazfaz_smp1.uf2`. It is the v22 firmware plus one `[stop]` line per obstacle stop (built with
+`ROBOT_STOP_TIMING=1`; with the flag off the firmware is byte-identical to v22). It contains your hotspot password: keep it off GitHub.
+
+The line reports, in microseconds: the sonar's first reading inside the stop distance, the monitor declaring the obstacle, the Vehicle Controller posting STOP,
+Motion setting the motor output to zero, and the wheels confirmed still.
+
+1. Flash the timing firmware and start the serial log: `python3 serial_console.py --log desk_stop.txt`.
+2. Put the car with the **wheels off the floor** and a strip of black tape under the line sensors so it keeps following. Start the dashboard if you want to watch it.
+3. Press START (GP20 or the dashboard). The wheels turn in the air.
+4. Bring a board or a book into the sonar's path **from far to near**, quickly, so it enters the 330 mm range from further away (start at about 50 cm and move it in to about 25 cm). Also, now and then, put it in suddenly **very close** (about 10 to 15 cm). Do both kinds: they take different paths in the code.
+5. The car stops for the obstacle and prints a `[stop]` line within about a second. Take the board away, press STOP, wait for the car to settle, press START and repeat. Do at least **10 stops**.
+6. Stop the log (Ctrl+C) and run `python3 stop_timing_summary.py desk_stop.txt`.
+
+What it reports: each stop broken down into the four hand-overs, and two verdicts against 150 ms: measured from the sonar's first reading, and (conservatively) from the earliest possible entry, which adds one ping period (70 ms) because the car cannot see an obstacle between two pings.
+
+The physical stopping distance on the floor is a separate measurement (tape on the floor, car at 100 mm/s towards a board, mark where it stops); this test measures time to zero motor output.

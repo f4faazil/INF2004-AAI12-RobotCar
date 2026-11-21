@@ -171,6 +171,19 @@ static volatile uint8_t g_remote_req[4];        /* req_id + 1 per VC_REMOTE_* bi
 static uint8_t g_event_seq;
 
 static volatile uint32_t g_max_motion_us;
+#if ROBOT_STOP_TIMING
+/* Obstacle-to-stop timing (microseconds from hal_time_us, wrap-safe differences).  state: 0 idle, 1 sonar saw it, 2 monitor declared it,
+ * 3 Vehicle posted STOP, 4 PWM zero, 5 wheels still.  Each stage is written by one task; the diagnostic task prints and resets. */
+static volatile uint8_t  g_st_state;
+static volatile uint32_t g_st_first_us;
+static volatile uint32_t g_st_declared_us;
+static volatile uint32_t g_st_cmd_us;
+static volatile uint32_t g_st_pwm0_us;
+static volatile uint32_t g_st_still_us;
+static volatile uint16_t g_st_first_mm;
+static volatile uint16_t g_st_threshold_mm;
+static volatile uint32_t g_st_count;
+#endif
 static volatile uint32_t g_max_line_us;
 static volatile uint32_t g_max_vehicle_us;
 static volatile uint32_t g_ir_frames;
@@ -300,6 +313,12 @@ static void cmd_post(const motion_cmd_t *cmd)
     g_cmd_ring[g_cmd_head % ROBOT_CMD_RING] = *cmd;
     g_cmd_head++;
     robot_irq_restore(state);
+#if ROBOT_STOP_TIMING
+    if ((cmd->type == MOTION_CMD_STOP) && (g_st_state == 2U)) {
+        g_st_cmd_us = hal_time_us();
+        g_st_state = 3U;
+    }
+#endif
 }
 
 static bool cmd_take(motion_cmd_t *cmd)
@@ -366,6 +385,16 @@ static void motion_task(INT stacd, void *exinf)
         hal_encoders_snapshot(&left, &right);
         motion_step(&motion, &left, &right, hal_time_ms(), hal_time_us(), &out);
         hal_motor_set(out.left_pwm, out.right_pwm);
+#if ROBOT_STOP_TIMING
+        if ((g_st_state == 3U) && (out.left_pwm == 0) && (out.right_pwm == 0)) {
+            g_st_pwm0_us = hal_time_us();
+            g_st_state = 4U;
+        }
+        if ((g_st_state == 4U) && ((motion_status(&motion)->flags & MOTION_FLAG_STOPPED) != 0U)) {
+            g_st_still_us = hal_time_us();
+            g_st_state = 5U;
+        }
+#endif
 
         {
             robot_irq_state_t state = robot_irq_save();
@@ -915,8 +944,43 @@ static void obstacle_task(INT stacd, void *exinf)
                     if (threshold < ROBOT_OBSTACLE_SCAN_MM) {
                         threshold = ROBOT_OBSTACLE_SCAN_MM;     /* stop early enough for the scan to work */
                     }
+#if ROBOT_STOP_TIMING
+                    {
+                        static bool under;
+
+                        if (reading.status == US_VALID) {
+                            if (reading.distance_mm >= threshold) {
+                                under = false;
+                            } else if (!under) {
+                                under = true;
+                                if (g_st_state == 0U) {
+                                    g_st_first_us = hal_time_us();
+                                    g_st_first_mm = reading.distance_mm;
+                                    g_st_threshold_mm = threshold;
+                                    g_st_state = 1U;
+                                }
+                            } else {
+                                /* still inside the range: the chain is already running */
+                            }
+                        }
+                    }
+#endif
+#if ROBOT_STOP_TIMING
+                    {
+                        static bool was_obstacle;
+                        const bool is_obstacle = us_monitor_update(&mon, &reading, threshold, ROBOT_OBSTACLE_HYST_MM,
+                                                                   (uint16_t)(threshold / 2U));
+
+                        if (is_obstacle && !was_obstacle && (g_st_state == 1U)) {
+                            g_st_declared_us = hal_time_us();
+                            g_st_state = 2U;
+                        }
+                        was_obstacle = is_obstacle;
+                    }
+#else
                     (void)us_monitor_update(&mon, &reading, threshold, ROBOT_OBSTACLE_HYST_MM,
                                             (uint16_t)(threshold / 2U));
+#endif
                     publish_obstacle_state(&mon, now);
                     {
                         robot_irq_state_t state = robot_irq_save();
@@ -1608,6 +1672,28 @@ static void diag_task(INT stacd, void *exinf)
                   (UINT)g_max_motion_us, (UINT)g_max_line_us, (UINT)g_max_vehicle_us,
                   (UINT)hal_adc_max_isr_us(), (UINT)hal_tick_overruns(HAL_TICK_MOTION),
                   (UINT)hal_tick_overruns(HAL_TICK_CONTROL), (UINT)hal_tick_overruns(HAL_TICK_VEHICLE));
+#if ROBOT_STOP_TIMING
+        if (g_st_state >= 4U) {
+            /* print once the wheels are still, or after 3 s if they never were */
+            static uint32_t waiting_since_ms;
+            const uint32_t now_ms = hal_time_ms();
+
+            if (g_st_state == 4U) {
+                if (waiting_since_ms == 0U) {
+                    waiting_since_ms = now_ms;
+                }
+            }
+            if ((g_st_state == 5U) || ((now_ms - waiting_since_ms) > 3000U)) {
+                tm_printf((UB *)"[stop] #%u first-reading=%umm threshold=%umm  sonar-to-declared=%uus declared-to-STOP=%uus STOP-to-PWM0=%uus  total=%uus  wheels-still=%s%uus\n",
+                          (UINT)(++g_st_count), (UINT)g_st_first_mm, (UINT)g_st_threshold_mm,
+                          (UINT)(g_st_declared_us - g_st_first_us), (UINT)(g_st_cmd_us - g_st_declared_us),
+                          (UINT)(g_st_pwm0_us - g_st_cmd_us), (UINT)(g_st_pwm0_us - g_st_first_us),
+                          (g_st_state == 5U) ? "" : ">", (UINT)((g_st_state == 5U) ? (g_st_still_us - g_st_first_us) : 3000000U));
+                waiting_since_ms = 0U;
+                g_st_state = 0U;
+            }
+        }
+#endif
         tm_printf((UB *)"[gpio] edge-interrupts=%u (the encoders and the sonar echo count here)  switched on from processor %d, result %d\n",
                   (UINT)hal_gpio_isr_count(), (INT)g_irq_prc, (INT)g_irq_result);
 #if TM_WIFI_CYW43

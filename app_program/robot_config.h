@@ -209,6 +209,16 @@
  * toward the side whose outer rays read farther.  The sonar cannot see the sides then, so
  * only use it with nothing beside the track.  0 = stop and fault instead. */
 #define ROBOT_OBSTACLE_BLIND    (1)
+
+/*
+ * 1 = measurement build for the obstacle-to-stop time (Tribunal 1, test 1: PWM zero within 150 ms).  The firmware prints one "[stop]" line per
+ * obstacle stop with the time at each hand-over: the sonar's first reading inside the stop distance, the monitor declaring the obstacle, the
+ * Vehicle Controller posting STOP, Motion setting the PWM to zero, and the wheels confirmed still.  0 (the default) compiles all of it out:
+ * the mission firmware is byte-for-byte the same.
+ */
+#ifndef ROBOT_STOP_TIMING
+#define ROBOT_STOP_TIMING       (0)
+#endif
 /* An obstacle ahead nearer than this stops the car and starts the scan.  The scan
  * can only confirm a path of the car's width from about 650 mm (the servo sweep is
  * only 28 degrees each side); see the note on ROBOT_OBSTACLE_CFG. */
