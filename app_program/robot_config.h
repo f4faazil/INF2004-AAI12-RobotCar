@@ -219,6 +219,14 @@
 #ifndef ROBOT_STOP_TIMING
 #define ROBOT_STOP_TIMING       (0)
 #endif
+
+/*
+ * 1 = measurement build for the obstacle width: after every scan the firmware prints the raw rays (angle, what the sonar saw, distance) on a "[ray]" line,
+ * so the width estimate can be designed and checked against real data and a box of known size.  Needs ROBOT_DIAG_PRINT.  0 (the default) compiles it out.
+ */
+#ifndef ROBOT_SCAN_RAYS
+#define ROBOT_SCAN_RAYS         (0)
+#endif
 /* An obstacle ahead nearer than this stops the car and starts the scan.  The scan
  * can only confirm a path of the car's width from about 650 mm (the servo sweep is
  * only 28 degrees each side); see the note on ROBOT_OBSTACLE_CFG. */

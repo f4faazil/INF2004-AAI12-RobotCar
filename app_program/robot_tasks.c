@@ -263,6 +263,18 @@ typedef struct {
     int16_t steps[PLAN_MAX_STEPS];
 } diag_scan_t;
 static diag_scan_t g_diag_scan;
+#if ROBOT_SCAN_RAYS
+/* The raw rays of the last scan: copied by the sonar task, printed by the diagnostics task. */
+typedef struct {
+    uint8_t  angle;
+    uint8_t  kind;
+    uint16_t mm;
+} diag_ray_t;
+static diag_ray_t g_diag_ray[SCAN_MAX_POINTS];
+static volatile uint8_t g_diag_ray_count;
+static volatile bool g_diag_ray_fresh;
+static uint32_t g_diag_ray_scan_no;
+#endif
 #endif
 
 static void tel_push_event(uint8_t code, uint16_t arg)
@@ -1069,6 +1081,19 @@ static void obstacle_task(INT stacd, void *exinf)
                     }
                     g_diag_scan.fresh = true;
                 }
+#if ROBOT_SCAN_RAYS
+                {
+                    uint8_t r;
+
+                    for (r = 0U; (r < scan.point_count) && (r < SCAN_MAX_POINTS); r++) {
+                        g_diag_ray[r].angle = scan.points[r].angle_deg;
+                        g_diag_ray[r].kind = (uint8_t)scan.points[r].kind;
+                        g_diag_ray[r].mm = scan.points[r].distance_mm;
+                    }
+                    g_diag_ray_count = (scan.point_count < SCAN_MAX_POINTS) ? scan.point_count : (uint8_t)SCAN_MAX_POINTS;
+                    g_diag_ray_fresh = true;
+                }
+#endif
 #endif
                 scanning = false;
             }
@@ -1622,6 +1647,21 @@ static void diag_drain_events(void)
         }
         tm_printf((UB *)"(plan 0=continue 1=left 2=right 3=reverse 4=stop)\n");
     }
+#if ROBOT_SCAN_RAYS
+    if (g_diag_ray_fresh) {
+        /* angle:kind:mm per ray, kind O = obstacle echo, F = far echo, N = no echo, I = invalid; the angle is the servo angle, 90 straight ahead */
+        static const char KIND[4] = { 'O', 'F', 'N', 'I' };
+        uint8_t r;
+        uint8_t n = g_diag_ray_count;
+
+        g_diag_ray_fresh = false;
+        g_diag_ray_scan_no++;
+        tm_printf((UB *)"[ray] scan=%u rays=%u (angle:kind:mm, O obstacle F far N no-echo I invalid)\n", (UINT)g_diag_ray_scan_no, (UINT)n);
+        for (r = 0U; r < n; r++) {
+            tm_printf((UB *)"[ray] %u:%c:%u\n", (UINT)g_diag_ray[r].angle, KIND[g_diag_ray[r].kind & 3U], (UINT)g_diag_ray[r].mm);
+        }
+    }
+#endif
 }
 
 static void diag_task(INT stacd, void *exinf)

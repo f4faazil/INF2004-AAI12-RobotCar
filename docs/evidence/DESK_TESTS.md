@@ -128,3 +128,29 @@ the barcode, encoder, IMU and sonar counters, hump and obstacle-scan tables, fau
 
 To compare the two firmwares, record the same lap with each (same start, same battery, at least 3 laps) and compare the reports: states and times, faults, distance, drops, and whether the barcode and hump were read.
 Event times have 10 ms resolution.
+
+## 7. Collecting the raw sonar rays for the obstacle-width fix (about 25 minutes, needs the USB cable)
+
+The car reports the box as 21 to 22 cm wide when it is about 15 cm, because the sonar beam is wide and the planner clamps the width at 22 cm. To design a better estimate we need the
+raw rays (angle and distance) the scan sees for a box of known size and position. This firmware build prints them.
+
+Use `robot_wifi_telemetry_v22_rays_fazfaz_smp1.uf2` (v22 plus a `[ray]` line per ray after every scan; with the flag off it is byte-identical to v22). It contains your hotspot
+password: keep it off GitHub.
+
+1. Flash it and start the serial log: `python3 serial_console.py --log rays1.txt`.
+2. Put the car with the **wheels off the floor**, black tape under the line sensors. The box must stand with its flat 15 cm face square to the car (the box is about 15 cm wide, 10 cm deep, 20 cm high).
+3. For each placement below, put the box in place FIRST (measure with the tape: from the sonar's front face to the box's front face, and sideways from the car's centre line to the middle of the box), then press START. The car sees the box, stops and scans, and prints the rays.
+4. After the scan the car starts its bypass in the air: press STOP, move the box to the next placement, press START again. Do each placement **twice**.
+5. Write the true distance and offset of every scan in order, in a note next to the log.
+
+| Scan | Distance (cm) | Sideways offset of the box centre (cm, + is right) |
+|---|---|---|
+| 1, 2 | 28 | 0 |
+| 3, 4 | 35 | 0 |
+| 5, 6 | 22 | 0 |
+| 7, 8 | 30 | -5 (left) |
+| 9, 10 | 30 | +5 (right) |
+
+6. Stop the log and run `python3 ray_report.py rays1.txt --csv rays1.csv`. Send me the log, the CSV and your note of the true positions.
+
+With real rays I can check any new width estimate against the true 15 cm before it goes into the firmware.
