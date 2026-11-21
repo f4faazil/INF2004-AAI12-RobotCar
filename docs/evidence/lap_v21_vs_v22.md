@@ -1,7 +1,7 @@
 # Evidence: laps on the mini track, v21 (before) and v22 (after the smaller telemetry queues)
 
 Two laps recorded without a USB cable by `dashboard/tools/record-feed.mjs` on 2026-11-21 and summarised by `dashboard/tools/feed-summary.mjs`.
-Full reports: `laps/lap_v21_1_report.md` (5:01 pm, 176 s) and `laps/lap_v22_1_report.md` (5:05 pm, 264 s). The raw recordings stay in the dashboard folder (2 to 3 MB each).
+Full reports: `laps/lap_v21_1_report.md` (v21, 5:01 pm, 176 s) and `laps/lap_v22_1_report.md` (v22, 5:05 pm, 264 s). The raw recordings stay in the dashboard folder (2 to 3 MB each).
 
 ## Comparison
 
@@ -31,7 +31,7 @@ Full reports: `laps/lap_v21_1_report.md` (5:01 pm, 176 s) and `laps/lap_v22_1_re
 - v21 shows the lift stop working: the IMU_LIFT fault appears when the car was picked up.
 
 ## Limits (stated plainly)
-- The recording cannot show which firmware was loaded. It is recorded here from the order of the files (v21 at 5:01 pm, then v22 at 5:05 pm) and has to be confirmed.
+- The recording itself cannot show which firmware was loaded: the feed carries no version. The person who ran the laps confirmed that `lap_v21_1` was recorded on v21 and `lap_v22_1` on v22 (the order of the files, 5:01 pm and 5:05 pm, agrees).
 - Six barcode reads, six bypasses and seven humps are small samples. The Tribunal test asks for 95 of 100 decodes.
 - No timing: task run times and tick overruns are only in the serial log, so the before/after timing comparison is still open.
 - The scanned width (21 to 22 cm) is not the box width: the planner clamps the width at 22 cm, and the box is about 15 cm.
