@@ -60,3 +60,32 @@ takes to reconnect and deliver telemetry. It writes a CSV.
 
 ## What to keep as evidence
 The three CSV files, `desk1.txt`, and the terminal output of each run (screenshot or copy). Put them in `docs/evidence/` with the date.
+
+## 4. Timing before and after the RAM change (about 25 minutes, Week 13 item 4)
+
+Compares the firmware you tested (`robot_wifi_telemetry_v21_startstop_fazfaz_smp1.uf2`, BEFORE) with the one with the smaller telemetry queues
+(`robot_wifi_telemetry_v22_minbit_fazfaz_smp1.uf2`, AFTER). Do exactly the same thing with each, one after the other, with the same power and the same
+position of the car. Both files contain your hotspot password: keep them off GitHub.
+
+For EACH firmware:
+1. Flash it and start the serial log: `python3 serial_console.py --log desk_before.txt` (use `desk_after.txt` for the second).
+2. Start the dashboard (`npm start`) and wait until the Robot pill says "sending".
+3. Leave the car idle for 5 minutes. (Optional and better: put a strip of black tape under the line sensors, wheels OFF the floor, press START and let it run for 2 minutes; then press STOP.)
+4. Stop the log with Ctrl+C.
+5. Run `python3 log_summary.py desk_before.txt` (or `desk_after.txt`) and keep the output.
+
+Compare the two: worst Motion, Line and Vehicle run times, new tick overruns, and the telemetry drop counter. No new Motion overrun and similar worst-case times mean no timing penalty.
+
+Also check on the AFTER firmware (about 5 minutes): the dashboard shows every card updating; START and STOP answer RECEIVED then COMPLETED; sending the barcode map answers `OK n=3`.
+
+## 5. The 150 ms obstacle stop (Tribunal 1 test 1): read this before running it
+
+From the code (not yet measured), the time from an obstacle appearing to the motors stopping is made of:
+- the sonar pings every 70 ms;
+- the monitor takes the median of the last 3 readings and then needs 2 readings in a row below the 330 mm stop distance, so a new obstacle is declared on the 3rd ping after it appears: about 140 ms, plus up to 70 ms more if it appears just after a ping;
+- an obstacle already closer than half the stop distance (165 mm) is declared on the first reading (about 85 to 100 ms in total);
+- the Vehicle Controller (10 ms cycle) and Motion (5 ms) add up to about 15 ms.
+
+So an obstacle that enters the 330 mm range from further away is likely to take **about 155 to 250 ms**, longer than 150 ms, while one that appears close takes about 100 ms. This is an
+analysis, not a measurement. The test needs a timestamp of the moment the motor output reaches zero, which the firmware does not log yet. If the measured time exceeds 150 ms the honest
+options are to report it, or to change the confirmation (for example act on the first reading and keep the median only for release).
