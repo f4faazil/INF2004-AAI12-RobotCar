@@ -53,7 +53,9 @@ node tools/net-drop-test.mjs --trials 10 --down 20
 Each trial takes the broker away for 20 s (the car's buffer fills and records are dropped), brings it back, and times how long the car
 takes to reconnect and deliver telemetry. It writes a CSV.
 - Criterion (Tribunal 1): reconnection within 30 s in at least 9 of 10 trials.
-- Also check the serial log for the same period: no new Motion tick overrun (`ovr=` first number stays 0), and `drop=` grows while the broker is down.
+- Also check the serial log for the same period (use the times the test printed):
+  `python3 log_summary.py desk1.txt --from HH:MM:SS --to HH:MM:SS`
+  Success: no new Motion tick overrun in the window, and the telemetry drop counter grows while the broker is down.
 - When it ends, start the dashboard again.
 
 ## What to keep as evidence
