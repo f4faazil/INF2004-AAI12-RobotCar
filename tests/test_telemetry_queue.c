@@ -88,7 +88,7 @@ static void test_wraparound_age(void)
     assert(q.dropped_stale == 1U);
 }
 
-static void test_invalid_and_128_boundary(void)
+static void test_invalid_and_max_boundary(void)
 {
     telemetry_queue_t q;
     uint8_t p[TELEMETRY_QUEUE_MAX_BYTES], out[TELEMETRY_QUEUE_MAX_BYTES];
@@ -96,15 +96,15 @@ static void test_invalid_and_128_boundary(void)
     telemetry_queue_init(&q);
     memset(p, 0x3CU, sizeof(p));
     assert(telemetry_queue_push(&q, p, 0U, 0U) == TELEMETRY_QUEUE_INVALID);
-    assert(telemetry_queue_push(&q, p, 129U, 0U) == TELEMETRY_QUEUE_INVALID);
+    assert(telemetry_queue_push(&q, p, TELEMETRY_QUEUE_MAX_BYTES + 1U, 0U) == TELEMETRY_QUEUE_INVALID);
     assert(telemetry_queue_push(&q, NULL, 1U, 0U) == TELEMETRY_QUEUE_INVALID);
     assert(telemetry_queue_push(NULL, p, 1U, 0U) == TELEMETRY_QUEUE_INVALID);
     assert(telemetry_queue_count(&q) == 0U);
     assert(telemetry_queue_push(&q, p, sizeof(p), 0U) == TELEMETRY_QUEUE_OK);
-    assert(telemetry_queue_pop_fresh(&q, 0U, out, 127U, &length) == TELEMETRY_QUEUE_INVALID);
+    assert(telemetry_queue_pop_fresh(&q, 0U, out, TELEMETRY_QUEUE_MAX_BYTES - 1U, &length) == TELEMETRY_QUEUE_INVALID);
     assert(telemetry_queue_count(&q) == 1U);
     assert(telemetry_queue_pop_fresh(&q, 0U, out, sizeof(out), &length) == TELEMETRY_QUEUE_OK);
-    assert(length == 128U && memcmp(p, out, sizeof(p)) == 0);
+    assert(length == TELEMETRY_QUEUE_MAX_BYTES && memcmp(p, out, sizeof(p)) == 0);
 }
 
 static void test_drop_counter_saturates(void)
@@ -193,7 +193,7 @@ static void test_peek_wraparound_and_invalid(void)
     telemetry_queue_init(&q);
     assert(telemetry_queue_commit_head(NULL) == TELEMETRY_QUEUE_INVALID);
     assert(telemetry_queue_peek_fresh(NULL, 0U, out, sizeof out, &length) == TELEMETRY_QUEUE_INVALID);
-    assert(telemetry_queue_peek_fresh(&q, 0U, out, 127U, &length) == TELEMETRY_QUEUE_INVALID);
+    assert(telemetry_queue_peek_fresh(&q, 0U, out, TELEMETRY_QUEUE_MAX_BYTES - 1U, &length) == TELEMETRY_QUEUE_INVALID);
     assert(telemetry_queue_peek_fresh(&q, 0U, NULL, sizeof out, &length) == TELEMETRY_QUEUE_INVALID);
     assert(telemetry_queue_peek_fresh(&q, 0U, out, sizeof out, NULL) == TELEMETRY_QUEUE_INVALID);
     assert(length == 51U);
@@ -212,7 +212,7 @@ int main(void)
     test_full_drops_new();
     test_stale_and_exact_boundary();
     test_wraparound_age();
-    test_invalid_and_128_boundary();
+    test_invalid_and_max_boundary();
     test_drop_counter_saturates();
     test_peek_retries_without_removal();
     test_peek_stale_boundary_and_fifo();
