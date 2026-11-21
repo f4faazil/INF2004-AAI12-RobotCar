@@ -222,5 +222,16 @@ extern const uint8_t             ROBOT_BARCODE_MAP_LEN;
 #define ROBOT_LIFT_TILT_COS_PERMILLE (500U)
 #define ROBOT_LIFT_FREEFALL_MG       (300U)
 #define ROBOT_LIFT_HOLD_MS           (300U)
+/*
+ * Re-arm proxy: within 15 degrees of the calibrated attitude, within 120 mg
+ * of the calibrated gravity magnitude, and each axis changes at most 60 mg
+ * per 20 ms sample for 2 s. Require at least 1 s in the lifted state too.
+ * This cannot verify physical wheel contact.
+ */
+#define ROBOT_LIFT_REARM_COS_PERMILLE (966U)
+#define ROBOT_LIFT_REARM_MAG_TOL_MG   (120U)
+#define ROBOT_LIFT_REARM_STEP_MG      (60U)
+#define ROBOT_LIFT_REARM_HOLD_MS      (2000U)
+#define ROBOT_LIFT_MIN_LATCH_MS       (1000U)
 
 #endif /* ROBOT_CONFIG_H */

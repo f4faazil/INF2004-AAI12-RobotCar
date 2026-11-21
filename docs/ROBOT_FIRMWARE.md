@@ -61,10 +61,13 @@ The 1 kHz tick is a hardware-timer interrupt, **not** the kernel tick (10 ms): t
 - The obstacle scan starts only after Motion confirms the car has stopped *for the STOP that was sent* (a stale "stopped" flag from an earlier command does not count).
 - An IMU read failure remains informational and degrades to "hump N/A". A sustained
   tilt of at least 60 degrees or acceleration magnitude at most 300 mg for
-  300 ms raises stop-class `FAULT_IMU_LIFT`, sends STOP, reports a fault event,
-  and latches `VC_STOPPED` until reboot/reset.
-  These limits are provisional. A single accelerometer cannot detect a level,
-  stationary robot lifted evenly; that needs a wheel-contact sensor or another input.
+  300 ms raises stop-class `FAULT_IMU_LIFT`, sends STOP and reports a fault event.
+  The fault clears after at least 1 s latched and 2 s of readings within 15 degrees
+  of calibrated rest, within 120 mg of the calibrated gravity magnitude, and with
+  no axis changing by more than 60 mg between samples. The vehicle remains STOPPED
+  and requires START; it does not restart automatically. These limits are provisional.
+  A level, stationary robot held in the air also passes these accelerometer checks;
+  physical wheel contact cannot be confirmed without another sensor.
 - Network loss never reaches the control tasks: telemetry is a bounded, non-blocking queue that drops new records when full and discards anything older than 1 s.
 
 ---

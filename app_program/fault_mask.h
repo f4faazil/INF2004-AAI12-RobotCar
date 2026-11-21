@@ -4,9 +4,9 @@
  * fault_mask.h
  * The shared fault bitmask (Tribunal Version B/C): one bit per fault, updated
  * only through this protected helper because the Cortex-M0+ has no atomic
- * bit update.  A raised fault stays recorded until it is cleared by an
- * authorised caller (the Vehicle Controller), and unrelated bits are never
- * disturbed.
+ * bit update. A raised fault stays recorded until an authorised caller clears
+ * it, and unrelated bits are never disturbed. The IMU task may clear
+ * FAULT_IMU_LIFT only after its configured safe-rearm condition is satisfied.
  */
 #ifndef FAULT_MASK_H
 #define FAULT_MASK_H
@@ -50,10 +50,10 @@ void fault_mask_init(fault_mask_t *mask);
 void fault_set(fault_mask_t *mask, fault_bits_t bits);
 
 /*
- * Clear faults.  Stop-class faults are cleared only by the Vehicle Controller,
- * on the operator's authority.  Informational faults (network, telemetry
- * drops, IMU) may be cleared by the module that owns them, since they never
- * stop the car.
+ * Clear faults. Stop-class faults are normally cleared by the Vehicle
+ * Controller on the operator's authority. The IMU task may clear only
+ * FAULT_IMU_LIFT after a sustained safe-rearm condition. Informational faults
+ * may be cleared by the module that owns them.
  */
 void fault_clear(fault_mask_t *mask, fault_bits_t bits);
 

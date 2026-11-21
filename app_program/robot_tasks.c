@@ -760,6 +760,8 @@ static void imu_task(INT stacd, void *exinf)
     static imu_cal_t cal;
     static roll_hump_t hump;
     static imu_lift_detector_t lift;
+    static imu_rearm_t rearm;
+    static uint32_t lift_since_ms;
     int32_t filt[3] = { 0, 0, 0 };
     bool filt_init = false;
     imu_variant_t variant = IMU_VARIANT_LSM303D;
@@ -773,6 +775,7 @@ static void imu_task(INT stacd, void *exinf)
     (void)exinf;
     roll_hump_init(&hump, &ROBOT_ROLL_HUMP_CFG);
     imu_lift_init(&lift);
+    imu_rearm_init(&rearm);
     imu_cal_init(&cal, ROBOT_IMU_FORWARD_AXIS, ROBOT_IMU_FORWARD_SIGN, ROBOT_IMU_CAL_SAMPLES,
                  ROBOT_IMU_CAL_SPREAD_MG);
 
@@ -785,6 +788,9 @@ static void imu_task(INT stacd, void *exinf)
         now = hal_time_ms();
 
         if (!present) {
+            if (lift.latched) {
+                imu_rearm_init(&rearm);
+            }
             if ((now - last_probe_ms) >= ROBOT_IMU_PROBE_MS) {
                 last_probe_ms = now;
                 present = robot_imu_probe(&variant, &addr);
@@ -795,6 +801,9 @@ static void imu_task(INT stacd, void *exinf)
 
         ok = hal_i2c_read(addr, (uint8_t)ACCEL_OUT_X_L_AUTOINC, raw, 6U);
         if (!ok) {
+            if (lift.latched) {
+                imu_rearm_init(&rearm);
+            }
             failures++;
             if (failures >= ROBOT_IMU_FAIL_LIMIT) {
                 present = false;                /* degrade to "hump N/A" and re-probe */
@@ -821,8 +830,21 @@ static void imu_task(INT stacd, void *exinf)
             if (imu_lift_update(&lift, &cal, &g, now, ROBOT_LIFT_TILT_COS_PERMILLE,
                                 ROBOT_LIFT_FREEFALL_MG, ROBOT_LIFT_HOLD_MS)) {
                 fault_set(&g_faults, FAULT_IMU_LIFT);
+                lift_since_ms = now;
+                imu_rearm_init(&rearm);
             }
             if (lift.latched) {
+                const bool settled =
+                    imu_rearm_update(&rearm, &cal, &g, now, ROBOT_LIFT_REARM_COS_PERMILLE,
+                                     ROBOT_LIFT_REARM_MAG_TOL_MG, ROBOT_LIFT_REARM_STEP_MG,
+                                     ROBOT_LIFT_REARM_HOLD_MS);
+
+                if (settled && ((now - lift_since_ms) >= ROBOT_LIFT_MIN_LATCH_MS)) {
+                    imu_lift_init(&lift);
+                    imu_rearm_init(&rearm);
+                    filt_init = false;
+                    fault_clear(&g_faults, FAULT_IMU_LIFT);
+                }
                 publish_imu(&hump, false, false, now);
                 continue;
             }

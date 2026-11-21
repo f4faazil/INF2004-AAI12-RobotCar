@@ -110,6 +110,25 @@ typedef struct {
 void imu_lift_init(imu_lift_detector_t *detector);
 
 /*
+ * Re-arm after a lift. A single accelerometer cannot confirm wheel contact;
+ * the caller treats level, near-1 g and steady readings as a floor proxy.
+ * A level, still car held in the air satisfies this proxy too.
+ */
+typedef struct {
+    bool       ok_active;
+    uint32_t   ok_since_ms;
+    bool       have_prev;
+    imu_vec3_t prev;
+} imu_rearm_t;
+
+void imu_rearm_init(imu_rearm_t *rearm);
+
+/* Return true after hold_ms of continuous level, near-1 g and steady samples. */
+bool imu_rearm_update(imu_rearm_t *rearm, const imu_cal_t *cal, const imu_vec3_t *mg,
+                      uint32_t now_ms, uint16_t level_cos_min_permille,
+                      uint16_t mag_tol_mg, uint16_t step_max_mg, uint16_t hold_ms);
+
+/*
  * Return true once when a tilt beyond the calibrated cosine limit or a
  * near-freefall reading persists for hold_ms.  Thresholds are supplied by the
  * robot configuration and are provisional until validated on the car.

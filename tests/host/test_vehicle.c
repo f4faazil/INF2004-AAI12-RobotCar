@@ -883,9 +883,9 @@ static void test_stop_fault_stops_the_car_in_any_running_state(void)
     }
 }
 
-/* An IMU lift indication is stop-class, reported to telemetry, and cannot be
- * cleared by START or CLEAR_FAULTS; only reinitializing the controller clears it. */
-static void test_imu_lift_stop_is_latched_until_reboot(void)
+/* A lift stop is cleared only when the IMU task reports a safe re-arm; START
+ * is still required, so clearing the fault never restarts the vehicle. */
+static void test_imu_lift_stop_holds_until_the_imu_clears_it(void)
 {
     h_t h;
     int drives;
@@ -900,12 +900,34 @@ static void test_imu_lift_stop_is_latched_until_reboot(void)
     CHECK_INT(FAULT_IMU_LIFT, h.out.events[0].arg);
     drives = count_type(&h, MOTION_CMD_DRIVE);
 
-    h.in.faults = 0U;
+    /* START and CLEAR_FAULTS cannot clear the fault while the IMU still reports it. */
     h.in.start_pressed = true;
     h.in.remote = VC_REMOTE_CLEAR_FAULTS;
     cycles(&h, 5);
     CHECK_INT(VC_STOPPED, h.out.state);
     CHECK_INT(drives, count_type(&h, MOTION_CMD_DRIVE));
+    h.in.start_pressed = false;
+    h.in.remote = 0U;
+    cycles(&h, 5);
+    CHECK_INT(drives, count_type(&h, MOTION_CMD_DRIVE));
+
+    h.in.faults = 0U;
+    h_cycle(&h);
+    CHECK(saw_event(&h, TEL_EVT_FAULT_CLEAR, (uint16_t)FAULT_IMU_LIFT));
+    cycles(&h, 20);
+    CHECK_INT(VC_STOPPED, h.out.state);
+    CHECK_INT(drives, count_type(&h, MOTION_CMD_DRIVE));
+
+    h.in.start_pressed = true;
+    h_cycle(&h);
+    h.in.start_pressed = false;
+    cycles(&h, 5);
+    CHECK_INT(VC_FOLLOW, h.out.state);
+    CHECK(count_type(&h, MOTION_CMD_DRIVE) > drives);
+
+    h.in.faults = FAULT_IMU_LIFT;
+    cycles(&h, 3);
+    CHECK_INT(VC_STOPPED, h.out.state);
 }
 
 /* An informational fault does not stop the car. */
@@ -1113,7 +1135,7 @@ int main(void)
     RUN(test_scan_timeout_is_a_fault);
     RUN(test_continue_plan_resumes_and_blanks_the_monitor);
     RUN(test_stop_fault_stops_the_car_in_any_running_state);
-    RUN(test_imu_lift_stop_is_latched_until_reboot);
+    RUN(test_imu_lift_stop_holds_until_the_imu_clears_it);
     RUN(test_informational_fault_does_not_stop);
     RUN(test_fault_during_a_scan_wins);
     RUN(test_fault_needs_the_operator_to_clear_it);
