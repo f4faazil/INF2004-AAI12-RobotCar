@@ -1,6 +1,7 @@
 // WiFi / MQTT drop-and-recover test (Tribunal 1: "WiFi/Telemetry + Motion - timing").
+// NOTE: this file is deliberately NOT named *-test.mjs: `node --test` runs files with that name, and this tool talks to the real car.
 //
-//   node tools/net-drop-test.mjs [--trials 10] [--down 20] [--wait 60] [--port 1883] [--out net-drop.csv]
+//   node tools/net-drop.mjs [--trials 10] [--down 20] [--wait 60] [--port 1883] [--out net-drop.csv]
 //
 // This program REPLACES the dashboard for the length of the test: it runs the dashboard's own MQTT broker, and in each
 // trial it takes the broker away (the car loses its connection, its telemetry buffer fills and records are dropped), brings it

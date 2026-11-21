@@ -47,7 +47,7 @@ Needs: the car on and joined to the hotspot. Press START with the wheels off the
 STOP THE DASHBOARD first (Ctrl+C in its terminal), because the test uses the same port for its own broker:
 
 ```
-node tools/net-drop-test.mjs --trials 10 --down 20
+node tools/net-drop.mjs --trials 10 --down 20
 ```
 
 Each trial takes the broker away for 20 s (the car's buffer fills and records are dropped), brings it back, and times how long the car

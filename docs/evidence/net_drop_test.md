@@ -1,6 +1,6 @@
 # Evidence: WiFi / telemetry drop and recovery (Tribunal 1, "WiFi/Telemetry + Motion - timing")
 
-Run on 2026-11-21 with the finalised robot firmware (WiFi + MQTT build, v21) on the car at a desk, and `dashboard/tools/net-drop-test.mjs`
+Run on 2026-11-21 with the finalised robot firmware (WiFi + MQTT build, v21) on the car at a desk, and `dashboard/tools/net-drop.mjs`
 standing in for the dashboard.
 
 **Test case (Tribunal 1):** disconnect WiFi/MQTT until the telemetry buffer fills, then restore service while Motion runs.
@@ -8,7 +8,7 @@ standing in for the dashboard.
 discarded; no missed 5 ms Motion deadlines; reconnection within 30 s in 9 of 10 trials.
 
 ## Method
-`net-drop-test.mjs` runs the dashboard's own MQTT broker. In each of 10 trials it closes the broker (the car loses its session), keeps it
+`net-drop.mjs` runs the dashboard's own MQTT broker. In each of 10 trials it closes the broker (the car loses its session), keeps it
 down for 20 s, restarts it, and times how long the car takes to (a) connect again and (b) deliver its first telemetry record. The car's
 serial console was logged in parallel (`desk3.txt`; the window 15:54:30 to 15:59:30 is in `net_drop/`).
 
