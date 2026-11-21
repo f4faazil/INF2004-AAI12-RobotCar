@@ -59,6 +59,10 @@
 #include "telemetry_tkernel_port.h"
 #endif
 
+#if APP_BUDDY5
+#include "b5_utk.h"
+#endif
+
 #if TM_WIFI_CYW43
 /* Plain C types on purpose - see the note in cyw43_utk.h. */
 #include "cyw43_utk.h"
@@ -642,6 +646,14 @@ EXPORT INT usermain(void)
 {
 	ID	tid;
 	ER	er;
+
+#if APP_BUDDY5
+	/* Bench/control module owns GP16: do not start the demo blink task. */
+	er = b5_start();
+	if(er < E_OK) { tm_printf((UB *)"[b5] start failed: %d\n", er); return 1; }
+	tk_slp_tsk(TMO_FEVR);
+	return 0;
+#endif
 
 #if TM_WIFI_MQTT
     /* Create queue mutex BEFORE any radio/producer task starts. */

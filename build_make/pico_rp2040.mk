@@ -212,7 +212,16 @@ endif
 # a live hazard: an SMP=1 build was once flashed in place of an SMP=0 one and
 # only the banner in the log revealed it.
 #
-EXE_FILE := mtk3pico_smp$(SMP)_$(CONSOLE)$(WIFI_SUFFIX)
+# 0=original demo, 1=range bench, 2=servo bench, 3=scan bench, 4=controller API.
+BUDDY5 ?= 0
+ifeq ($(filter $(BUDDY5),0 1 2 3 4),)
+$(error BUDDY5 must be 0, 1, 2, 3 or 4)
+endif
+B5_SUFFIX :=
+ifneq ($(BUDDY5),0)
+B5_SUFFIX := _b5mode$(BUDDY5)
+endif
+EXE_FILE := mtk3pico_smp$(SMP)_$(CONSOLE)$(WIFI_SUFFIX)$(B5_SUFFIX)
 
 GCC := arm-none-eabi-gcc
 AS := arm-none-eabi-gcc
@@ -253,6 +262,9 @@ LFLAGS := -mcpu=cortex-m0plus -mthumb -ffreestanding \
     -O2 -g3 \
     -mfloat-abi=soft \
 
+CFLAGS += -DAPP_BUDDY5=$(BUDDY5)
+ASFLAGS += -DAPP_BUDDY5=$(BUDDY5)
+
 LNKFILE := "../etc/linker/pico_rp2040/tkernel_map.ld"
 
 # Applied here, after CFLAGS/ASFLAGS are assigned with ':=', which would
@@ -289,7 +301,7 @@ endif
 # before any recipe executes.
 ################################################################################
 
-PROFILE_ID := smp$(SMP)-$(CONSOLE)-wifi$(WIFI)-join$(WIFI_JOIN)-netif$(WIFI_NETIF)-static$(WIFI_STATIC)-dhcp$(WIFI_DHCP)-dns$(WIFI_DNS)-udp$(WIFI_UDP)-tcp$(WIFI_TCP)-bulk$(WIFI_TCPBULK)-mqtt$(WIFI_MQTT)
+PROFILE_ID := b5$(BUDDY5)-smp$(SMP)-$(CONSOLE)-wifi$(WIFI)-join$(WIFI_JOIN)-netif$(WIFI_NETIF)-static$(WIFI_STATIC)-dhcp$(WIFI_DHCP)-dns$(WIFI_DNS)-udp$(WIFI_UDP)-tcp$(WIFI_TCP)-bulk$(WIFI_TCPBULK)-mqtt$(WIFI_MQTT)
 PROFILE_FILE := .build_profile
 
 ifneq ($(strip $(shell cat $(PROFILE_FILE) 2>/dev/null)),$(PROFILE_ID))
