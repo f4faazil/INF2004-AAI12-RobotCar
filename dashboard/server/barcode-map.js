@@ -2,7 +2,7 @@
 // The rules mirror the robot's own parser (app_program/barcode_map.c), so a map accepted here is accepted by the car:
 // a bad map is refused HERE, with a message, instead of being rejected by the robot with "ERR ...".
 
-export const MAX_MAP_BYTES = 128;                 // what the robot's mailbox can hold (MQTT_MAILBOX_PAYLOAD_BYTES)
+export const MAX_MAP_BYTES = 128;                 // limit on the text typed into the page; what goes to the car is the binary form (at most 27 bytes, the mailbox holds 32)
 
 const ACTION_WORDS = {
   L: "L", LEFT: "L",

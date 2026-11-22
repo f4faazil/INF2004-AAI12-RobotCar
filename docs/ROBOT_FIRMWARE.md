@@ -153,7 +153,7 @@ The car has **no built-in letter-to-movement mapping**. The PC publishes it to `
 
 Payload, **binary (v23 and newer):** type `0x12`, then **one byte per letter**: the letter index (A = 0 to Z = 25) in bits 7 to 3 and the movement in bits 2 to 0 (1 left, 2 right, 3 straight, 4 U-turn). `A=L,B=R,F=U` is the four bytes `12 01 0a 2c`; the type byte alone (`12`) clears the map; at most 26 letters, so at most 27 bytes. The car keeps the map in this same form. The text form below is still accepted by the car (the dashboard now sends binary):
 
-Text payload (at most 128 bytes, case-insensitive; entries separated by comma, semicolon, space, tab or newline; no spaces around `=`):
+Text payload (at most 32 bytes since v24, which is the mailbox size; was 128; case-insensitive; entries separated by comma, semicolon, space, tab or newline; no spaces around `=`):
 
 | Form | Example |
 |---|---|
@@ -188,7 +188,7 @@ Messages are bit-packed MSB first with a 1-byte type header; **no C bit-fields o
 | highest hump | 7 | mm, 127 = none |
 | saturated flags | 4 | position, speed, distance, obstacle |
 
-Encoded sizes: status **17 bytes**, event 7, hump 6, obstacle 10, heartbeat 9, command 5, ack 3 (against a 128-byte record limit). Report RAM before/after packing with `arm-none-eabi-size` and these `sizeof`s for the Week 13 comparison.
+Encoded sizes: status **17 bytes**, event 7, hump 6, obstacle 10, heartbeat 9, command 5, ack 3 (against the 32-byte record limit; it was 128 before the queue slots were resized). Report RAM before/after packing with `arm-none-eabi-size` and these `sizeof`s for the Week 13 comparison.
 
 ### Remote commands
 
