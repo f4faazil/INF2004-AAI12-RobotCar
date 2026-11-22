@@ -4,6 +4,9 @@
 
 #include "../app_program/mqtt_mailbox.h"
 
+/* The largest binary map is the type byte plus 26 letters; it must fit one mailbox slot. */
+_Static_assert(MQTT_MAILBOX_PAYLOAD_BYTES >= 27U, "a 26-letter binary map must fit the mailbox");
+
 static const unsigned char *u(const char *s)
 {
     return (const unsigned char *)s;

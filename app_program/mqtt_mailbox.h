@@ -14,7 +14,8 @@
  */
 
 #define MQTT_MAILBOX_TOPIC_BYTES    32U     /* longest topic stored, without the terminator */
-#define MQTT_MAILBOX_PAYLOAD_BYTES  128U    /* longest payload stored (a 26-letter map with separators fits) */
+#define MQTT_MAILBOX_PAYLOAD_BYTES  32U     /* longest payload stored: a 26-letter binary map is 27 bytes, a command 5. Longer messages are dropped and counted
+                                         * (was 128, sized for the text map; a text map of more than 32 bytes is no longer accepted) */
 #define MQTT_MAILBOX_RX_SLOTS       4U
 
 /* Owner task: store an incoming message.  1 = stored; 0 = dropped (full, or too long): counted. */

@@ -17,13 +17,13 @@ record) and the demo frames are 3. Both slots are now 32 bytes (`TEL_RECORD_MAX`
 
 | Measure | Before | After | Change |
 |---|---|---|---|
-| `.bss` (zero-initialised RAM) | 67 356 B | 64 212 B | **-3 144 B (-4.7 %)** |
+| `.bss` (zero-initialised RAM) | 67 356 B | 63 732 B | **-3 624 B (-5.4 %)** |
 | `.data` (initialised RAM) | 2 700 B | 2 700 B | 0 |
-| `.text` (flash) | 378 957 B | 377 893 B | -1 064 B |
+| `.text` (flash) | 378 957 B | 377 905 B | -1 052 B |
 | Robot telemetry queue `g_tel_q` | 2 192 B | 656 B | -1 536 B (-70 %) |
 | Radio telemetry inbox `shared_inbox` | 2 204 B | 668 B | -1 536 B (-70 %) |
-| Application static RAM (`app_program/*.o`) | 14 482 B | 11 338 B | **-3 144 B (-22 %)** |
-| Static RAM of the whole image | 69 914 B | 66 770 B | -4.5 % |
+| Application static RAM (`app_program/*.o`) | 14 482 B | 10 858 B | **-3 624 B (-25 %)** |
+| Static RAM of the whole image | 69 914 B | 66 290 B | -5.2 % |
 
 ## Where the application's RAM goes now
 
@@ -33,11 +33,11 @@ record) and the demo frames are 3. Both slots are now 32 bytes (`TEL_RECORD_MAX`
 | `g_status` (radio driver status copy) | 2576 B | the radio driver's own structure, not application data |
 | `g_tel_q` | 656 B | was 2192 B |
 | `shared_inbox` | 668 B | was 2204 B |
-| `g_rx` (MQTT mailbox) | 648 B | still sized for 128 bytes; the binary map needs at most 27, so this could shrink (not done) |
+| `g_rx` (MQTT mailbox) | 264 B | was 648 B: a slot holds 32 payload bytes (the binary map needs at most 27), was 128 for the text map |
 | `nav` / `motion` / `scan` / `vc` structs | 636 / 464 / 404 / 264 B | module state; packing their flags would save up to about 60 B in total (see `DATA_REPRESENTATION.md`, section 3) |
 
 ## What this does and does not show
-- The saving is real and measured: 3 072 bytes from the two queues (2 x 1 536 B), plus 72 bytes from storing the letter map packed (v23), 3 144 bytes in all. `.text` fell by 1 064 bytes as well, because the text builders for the heartbeat and diagnostics were removed.
+- The saving is real and measured: 3 072 bytes from the two queues (2 x 1 536 B), plus 72 bytes from storing the letter map packed (v23) and 480 bytes from the smaller MQTT mailbox (v24: `g_rx` 648 to 264 B, `g_tx_payload` 128 to 32 B), 3 624 bytes in all. `.text` fell by 1 064 bytes as well, because the text builders for the heartbeat and diagnostics were removed. The v24 mailbox no longer accepts a text map of more than 32 bytes; the dashboard sends binary, so this only affects hand-typed text maps.
 - It is a reduction of the **queue slot size**, a data-representation decision (the old slots were sized for a 128-byte limit the data never needs), and not a change to any message.
 - **There was no unpacked "before" build of the firmware**: telemetry was packed from the start. So this compares the shipped firmware against the improved one. The unpacked
   comparison for the *messages* is in `message_size.md`.

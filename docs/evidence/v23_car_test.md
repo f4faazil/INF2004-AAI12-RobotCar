@@ -23,7 +23,22 @@ on the PC. Firmware: `robot_wifi_telemetry_v23_binary_fazfaz_smp1.uf2` (branch `
 
 ## Not shown by this test
 - The car was not driven, so the barcode behaviour on the track with a binary map is not tested here (the decode path is unchanged and covered by the host tests).
-- The drop counter rose by 71 in one 6-second window during the burst of map tests (reply messages go out ahead of telemetry). It was flat in steady state. The cause was not isolated.
+- The drop counter rose by 71 in one 6-second window during the first map tests. It was followed up (see "Drop and stall follow-up" below): the cause is stalls on the WiFi link, not the map messages.
+
+## Drop and stall follow-up (same day, v23, car stationary)
+The car's heartbeat record carries the drop counter, so it can be watched from the dashboard without the USB cable.
+
+| Run | What happened |
+|---|---|
+| 10 binary maps in 1 second | Drop counter did not change (10 706 before and after); queue depth stayed 0 |
+| Opening the serial port for 6 seconds | Drop counter did not change |
+| Control, 60 s, no maps and no serial | One 7 s gap and one 2.4 s gap in the heartbeats (1 Hz); drop counter flat |
+| 100 s with the serial log open | Status records (10 Hz): three gaps, 8.3 s, 2.6 s and 2.6 s. During the 8.3 s gap the car stayed `mqtt=3` (online) with no new tick overruns; its drop counter started to rise only after about 6 s of the gap (22 records), when its 16-slot queue filled |
+
+Reading: the feed stalls for 2 to 8 seconds from time to time even when nothing else is going on, the records arrive in a bunch afterwards, and the car only drops
+records when a stall lasts longer than its queue can absorb. Maps and the serial port do not cause it. This points at the WiFi link (the PC's radio carries the hotspot and its
+own connection to the other network at the same time), not at the MQTT payload change. It is not proved: the same measurement on v22 was not made, because putting the car into BOOTSEL
+needs a hand on the button. A way to test it: the same 100 s run with the PC disconnected from its other WiFi network, or on a separate router.
 - The firmware was flashed once; no repeated reconnect test was run on v23.
 
 Tool used for the map cases: `dashboard/tools/map-cases.mjs` (needs the dashboard running with the car connected). Raw logs are in the session scratchpad, not in the repo.

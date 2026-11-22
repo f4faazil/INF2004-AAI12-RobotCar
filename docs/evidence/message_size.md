@@ -44,6 +44,11 @@ The binary sizes are the lengths asserted in the firmware tests (`tests/host/tes
 are those of the old text formats, computed for the smallest and the largest values the fields can hold. The diagnostic parts still carry full 32-bit counters, so they are
 compact rather than minimum-bit; they are debug output that is sent once per connection.
 
+## Remaining idea: shorter topic names
+Every PUBLISH carries its topic name: `aai12/robot/telemetry` is 21 bytes, so a 17-byte status record travels as a 42-byte packet (25 bytes of header and topic). A short
+topic such as `a12/t` would save about 16 bytes per packet, roughly 200 of the ~600 bytes per second on the wire. MQTT 3.1.1 has no topic aliases, so shortening the
+name is the only way. **Not done:** the topic names are the interface the teammates' dashboards and the documents use, so changing them has to be agreed with the team.
+
 ## What this shows
 - The large records shrink a lot: the per-sensor record is **67 % smaller** than natural-width binary (18 B against 55 B) and 96 % smaller than text; the status record is 37 % smaller.
 - The small records (event, hump, command, ack) are **already as small as natural width**: their fields are bytes or 16-bit values anyway. Packing gains nothing there.
