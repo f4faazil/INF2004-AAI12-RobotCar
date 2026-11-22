@@ -12,8 +12,33 @@ const ACTION_WORDS = {
 };
 export const ACTION_NAMES = { L: "Left", R: "Right", F: "Straight", U: "U-turn" };
 
-// Parse a text the way the robot does.  Returns { ok: true, entries: [{letter, action}], text } where text is the
-// canonical form sent on the wire ("A=L,B=R,F=U", or "CLEAR"), or { ok: false, error }.
+// ---- the binary form that goes over MQTT (app_program/barcode_map.h) -------------------------------------------------------------
+// Map:   0x12, then ONE BYTE PER LETTER: the letter index (A = 0 to Z = 25) in bits 7 to 3 and the movement in bits 2 to 0 (left 1, right 2,
+//        straight 3, u-turn 4).  A=L,B=R,F=U is the 4 bytes 12 01 0a 2c; the type byte alone clears the map.  This is also how the car stores it.
+// Reply: 0x13, then ONE byte: the result in bits 7 to 5 (0 ok, 1 empty, 2 syntax, 3 letter, 4 action, 5 duplicate) and the number of letters in bits 4 to 0.
+export const MAP_TYPE = 0x12;
+export const MAP_ACK_TYPE = 0x13;
+const COMMAND = { L: 1, R: 2, F: 3, U: 4 };
+const RESULT_NAMES = ["OK", "empty", "syntax", "letter", "action", "duplicate"];
+
+export function encodeMapBinary(entries) {
+  const bytes = [MAP_TYPE];
+  for (const e of entries) bytes.push(((e.letter.charCodeAt(0) - 65) << 3) | COMMAND[e.action]);
+  return Buffer.from(bytes);
+}
+
+// The car's reply as text for the page: "OK n=3" or "ERR duplicate".  A car with older firmware answers in text; that is passed through.
+export function decodeMapAck(payload) {
+  if (payload.length === 2 && payload[0] === MAP_ACK_TYPE) {
+    const result = payload[1] >> 5, count = payload[1] & 31;
+    return { binary: true, ok: result === 0, result, count, text: result === 0 ? `OK n=${count}` : `ERR ${RESULT_NAMES[result] ?? "unknown"}` };
+  }
+  const text = payload.toString("utf8").slice(0, 40);
+  return { binary: false, ok: text.startsWith("OK"), text };
+}
+
+// Parse a text the way the robot does.  Returns { ok: true, entries: [{letter, action}], text } where text is the canonical form shown on the
+// page ("A=L,B=R,F=U", or "CLEAR"; what goes over MQTT is encodeMapBinary(entries)), or { ok: false, error }.
 export function parseMap(input) {
   if (typeof input !== "string") return { ok: false, error: "the map must be text" };
   const tokens = input.toUpperCase().split(/[\s,;]+/).filter(Boolean);

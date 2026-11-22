@@ -145,7 +145,7 @@ typedef struct {
 
 typedef struct {
     line_nav_config_t cfg;
-    nav_map_entry_t   map_store[NAV_MAP_MAX];   /* the mapping set at run time (MQTT) */
+    uint8_t           map_packed[NAV_MAP_MAX];  /* the letter map, one byte per entry (see nav_map_pack): 26 bytes instead of 208 */
     line_cal_t        cal;
     bool              calibrating;
     uint8_t           valid_mask;
@@ -259,6 +259,18 @@ void line_nav_set_travel(line_nav_t *nav, int32_t travel, uint32_t now_ms);
  * an instruction already stored keeps the command it was given.
  */
 void line_nav_set_map(line_nav_t *nav, const nav_map_entry_t *entries, uint8_t len);
+
+/*
+ * One letter -> movement entry in ONE byte, the form it is stored in and the form it has on the MQTT wire: the letter index (A = 0 to Z = 25) in
+ * bits 7 to 3 and the command (left 1, right 2, straight 3, u-turn 4) in bits 2 to 0.  Entries outside that range cannot be packed.
+ */
+#define NAV_PACKED_LETTER_SHIFT     (3U)
+bool nav_map_pack(char letter, nav_command_t command, uint8_t *packed);   /* false: letter not A to Z, or no command */
+char nav_map_letter(uint8_t packed);
+nav_command_t nav_map_command(uint8_t packed);
+
+/* The same as line_nav_set_map() for entries that are already packed (the form the Net task stages them in).  Bytes that do not unpack are skipped. */
+void line_nav_set_map_packed(line_nav_t *nav, const uint8_t *packed, uint8_t len);
 
 /* The ADC ring overflowed: whatever barcode attempt was in progress is void. */
 void line_nav_note_overflow(line_nav_t *nav);

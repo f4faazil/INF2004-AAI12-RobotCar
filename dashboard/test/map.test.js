@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import net from "node:net";
 import { spawn } from "node:child_process";
 import { createBroker } from "../server/broker.js";
-import { parseMap } from "../server/barcode-map.js";
+import { parseMap, encodeMapBinary, decodeMapAck } from "../server/barcode-map.js";
 import { routeMqttMessage } from "../server/message-router.js";
 import { LatestPicoState } from "../server/latest-state.js";
 import { loadConfig } from "../server/config.js";
@@ -53,6 +53,30 @@ test("a page opened later is told the last map sent and what the car answered, a
   assert.deepEqual(state.replay().map(m => m.type), ["map-sent", "map-ack"]);
   state.record({ type: "map-sent", receivedAt: "2026-11-20T12:05:00.000Z", data: { text: "F=U", entries: [], deliveredNow: 0 } });
   assert.deepEqual(state.replay().map(m => m.type), ["map-sent"]);
+});
+
+test("the map goes over MQTT as bytes: the same bytes the firmware's own tests use", () => {
+  // golden bytes from the C side (tests/host/test_barcode_map.c): A=L,B=R,F=U is 12 01 0a 2c
+  assert.equal(encodeMapBinary(parseMap("A=L,B=R,F=U").entries).toString("hex"), "12010a2c");
+  assert.equal(encodeMapBinary(parseMap("f=u, a=left").entries).toString("hex"), "12012c");     // sorted by letter
+  assert.equal(encodeMapBinary(parseMap("CLEAR").entries).toString("hex"), "12");               // the type byte alone clears
+  assert.equal(encodeMapBinary(parseMap("Z=U").entries).toString("hex"), "12cc");              // 25 << 3 | 4
+  const all = parseMap("LRFULRFULRFULRFULRFULRFULR");
+  assert.equal(encodeMapBinary(all.entries).length, 27);                                        // 26 letters: 27 bytes, was up to 100 as text
+  assert.equal(encodeMapBinary(parseMap("A=L,B=R,F=U").entries).length, 4);                     // 3 letters: 4 bytes, was 11 as text
+});
+
+test("the car's reply is one byte after the type: result in 3 bits, letters in 5", () => {
+  assert.deepEqual(decodeMapAck(Buffer.from("1303", "hex")), { binary: true, ok: true, result: 0, count: 3, text: "OK n=3" });
+  assert.equal(decodeMapAck(Buffer.from("131a", "hex")).text, "OK n=26");
+  assert.equal(decodeMapAck(Buffer.from("13a0", "hex")).text, "ERR duplicate");
+  assert.equal(decodeMapAck(Buffer.from("1340", "hex")).text, "ERR syntax");
+  assert.equal(decodeMapAck(Buffer.from("1380", "hex")).text, "ERR action");
+  assert.equal(decodeMapAck(Buffer.from("13e0", "hex")).text, "ERR unknown");
+  // older firmware answers in text: still understood, not mistaken for the binary form
+  assert.deepEqual(decodeMapAck(Buffer.from("OK n=3")), { binary: false, ok: true, text: "OK n=3" });
+  assert.equal(decodeMapAck(Buffer.from("ERR syntax")).ok, false);
+  assert.equal(decodeMapAck(Buffer.from("13", "hex")).binary, false);                           // a truncated binary reply is not trusted
 });
 
 // ---- the bytes the robot actually sends and expects ----------------------------------------------------------------
@@ -152,11 +176,11 @@ test("POST /api/map validates, publishes retained to the car, and the car's map_
     assert.equal(good.status, 200);
     assert.equal(result.text, "A=L,F=U");
     assert.equal(result.deliveredNow, 1);
-    const bytes = await rx.until(9 + 2 + 2 + 15 + 7);
-    assert.equal(bytes.subarray(9 + 19).toString(), "A=L,F=U");                                         // exactly what the car's parser reads
+    const bytes = await rx.until(9 + 2 + 2 + 15 + 3);
+    assert.equal(bytes.subarray(9 + 19).toString("hex"), "12012c");                                     // exactly what the car's parser reads: A=L,F=U in 3 bytes
 
     // the car answers; the dashboard forwards it to the page
-    const answer = Buffer.from("OK n=2");
+    const answer = Buffer.from("1302", "hex");                                                          // the car's binary reply: OK, 2 letters
     const t = Buffer.from("aai12/robot/map_ack");
     const body = Buffer.concat([Buffer.from([0, t.length]), t, answer]);
     const seen = new Promise(resolve => {

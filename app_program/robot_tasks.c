@@ -155,7 +155,7 @@ static volatile uint8_t g_vstate = (uint8_t)VC_BOOT;
 static volatile uint8_t g_remote_bits;
 
 /* The letter -> movement mapping: parsed by the Net task from MQTT, copied by the Line task. */
-static nav_map_entry_t g_map_stage[BMAP_MAX];
+static uint8_t g_map_stage[BMAP_MAX];           /* one packed byte per letter (nav_map_pack): 26 bytes, was 208 */
 static volatile uint8_t g_map_stage_len;
 static volatile uint32_t g_map_seq;             /* bumped for every accepted mapping */
 static volatile uint32_t g_map_applied;         /* mappings the Line task has applied */
@@ -488,17 +488,17 @@ static void line_task(INT stacd, void *exinf)
         }
 
         if (g_map_seq != map_applied_seq) {
-            nav_map_entry_t entries[BMAP_MAX];
+            uint8_t packed[BMAP_MAX];
             uint8_t entry_count;
             robot_irq_state_t state = robot_irq_save();
 
             entry_count = g_map_stage_len;
             for (uint8_t k = 0U; k < entry_count; k++) {
-                entries[k] = g_map_stage[k];
+                packed[k] = g_map_stage[k];
             }
             map_applied_seq = g_map_seq;
             robot_irq_restore(state);
-            line_nav_set_map(&nav, entries, entry_count);
+            line_nav_set_map_packed(&nav, packed, entry_count);
             g_map_len = entry_count;
             g_map_applied++;
         }
@@ -1307,53 +1307,47 @@ static bool topic_is(const char *topic, const char *expect)
     return (*topic == '\0') && (*expect == '\0');
 }
 
-/* The acknowledgement text for the last mapping message, published by the Net loop. */
-static char g_map_ack[24];
+/* The reply to the last mapping message, published by the Net loop: 2 bytes (type, then result in 3 bits and entry count in 5). */
+static uint8_t g_map_ack[2];
 static uint8_t g_map_ack_len;
 
-static void map_ack(const char *text, uint8_t count, bool with_count)
+static void map_ack(bmap_result_t result, uint8_t count)
 {
-    uint8_t n = 0U;
-
-    while ((text[n] != '\0') && (n < 12U)) {
-        g_map_ack[n] = text[n];
-        n++;
-    }
-    if (with_count) {
-        g_map_ack[n++] = ' ';
-        g_map_ack[n++] = 'n';
-        g_map_ack[n++] = '=';
-        if (count >= 10U) {
-            g_map_ack[n++] = (char)('0' + (count / 10U));
-        }
-        g_map_ack[n++] = (char)('0' + (count % 10U));
-    }
-    g_map_ack_len = n;
+    g_map_ack_len = (uint8_t)bmap_encode_ack(result, count, g_map_ack);
 }
 
 /* A mapping from the PC.  Applied whole or not at all; the old one is kept on any error. */
 static void on_map(const uint8_t *payload, uint16_t len)
 {
     nav_map_entry_t parsed[BMAP_MAX];
+    uint8_t packed[BMAP_MAX];
     uint8_t count = 0U;
-    bmap_result_t r = bmap_parse(payload, len, parsed, &count);
+    bmap_result_t r = bmap_parse_any(payload, len, parsed, &count);
 
+    if (r == BMAP_OK) {
+        for (uint8_t k = 0U; k < count; k++) {
+            if (!nav_map_pack(parsed[k].letter, parsed[k].command, &packed[k])) {
+                r = BMAP_ERR_ACTION;            /* cannot happen for a parsed map; refuse rather than store garbage */
+                break;
+            }
+        }
+    }
     if (r != BMAP_OK) {
         g_map_rejected++;
-        map_ack(bmap_result_text(r), 0U, false);
+        map_ack(r, 0U);
         return;
     }
     {
         robot_irq_state_t state = robot_irq_save();
 
         for (uint8_t k = 0U; k < count; k++) {
-            g_map_stage[k] = parsed[k];
+            g_map_stage[k] = packed[k];
         }
         g_map_stage_len = count;
         g_map_seq++;
         robot_irq_restore(state);
     }
-    map_ack("OK", count, true);
+    map_ack(BMAP_OK, count);
 }
 
 static void on_command(void *ctx, const char *topic, const uint8_t *payload, uint16_t len)

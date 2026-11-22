@@ -63,6 +63,8 @@ int32_t  bitr_get_signed(bitr_t *r, uint8_t width);
 #define TEL_TYPE_SENSORS    (0x06U)     /* the per-sensor detail record */
 #define TEL_TYPE_COMMAND    (0x10U)     /* laptop -> robot */
 #define TEL_TYPE_ACK        (0x11U)     /* robot -> laptop */
+#define TEL_TYPE_MAP        (0x12U)     /* laptop -> robot: the barcode letter map, one byte per letter (barcode_map.h) */
+#define TEL_TYPE_MAP_ACK    (0x13U)     /* robot -> laptop: result (3 bits) and entries (5 bits) in one byte */
 
 /* Field widths: the data representation table. */
 #define TEL_TYPE_BITS       (8U)

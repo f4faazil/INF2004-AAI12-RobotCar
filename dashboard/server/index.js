@@ -11,7 +11,7 @@ import { createRobotSimulator } from "./robot-simulator.js";
 import { createBroker } from "./broker.js";
 import { routeMqttMessage } from "./message-router.js";
 import { LatestPicoState } from "./latest-state.js";
-import { parseMap } from "./barcode-map.js";
+import { parseMap, encodeMapBinary } from "./barcode-map.js";
 import { encodeCommand, sameOrigin, createRequestIds } from "./commands.js";
 
 const config = loadConfig();
@@ -27,19 +27,20 @@ function sendMap(input) {
   const parsed = parseMap(input);
   if (!parsed.ok) return parsed;
   const topic = config.mqtt.topics.map;
+  const payload = encodeMapBinary(parsed.entries);             // binary on the wire: 1 + one byte per letter
   let delivered = null;
   if (config.demoMode) {
     delivered = 0;
   } else if (broker) {
-    delivered = broker.publish(topic, Buffer.from(parsed.text), { retain: true });
+    delivered = broker.publish(topic, payload, { retain: true });
   } else if (mqttClient?.connected) {
-    mqttClient.publish(topic, parsed.text, { qos: 0, retain: true });
+    mqttClient.publish(topic, payload, { qos: 0, retain: true });
   } else {
     return { ok: false, error: "the dashboard is not connected to a broker" };
   }
-  publishPicoMessage({ type: "map-sent", receivedAt: new Date().toISOString(), data: { text: parsed.text, entries: parsed.entries, deliveredNow: delivered } });
+  publishPicoMessage({ type: "map-sent", receivedAt: new Date().toISOString(), data: { text: parsed.text, entries: parsed.entries, deliveredNow: delivered, bytes: payload.length, hex: payload.toString("hex") } });
   if (config.demoMode) setTimeout(() => publishPicoMessage({ type: "map-ack", receivedAt: new Date().toISOString(), data: parsed.text === "CLEAR" ? "OK n=0" : `OK n=${parsed.entries.length}` }), 600);
-  return { ok: true, text: parsed.text, entries: parsed.entries, deliveredNow: delivered };
+  return { ok: true, text: parsed.text, entries: parsed.entries, deliveredNow: delivered, bytes: payload.length };
 }
 
 // START / STOP.  Published WITHOUT retain (a retained START would replay when the car reconnects), and refused with a

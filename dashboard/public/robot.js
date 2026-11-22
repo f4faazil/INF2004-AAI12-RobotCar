@@ -210,7 +210,7 @@ $("mapSend").addEventListener("click", () => {
 });
 function onMapSent(m) {
   const d = m.data;
-  set("mapSent", `${d.text} · ${clock(m.receivedAt)}${d.deliveredNow === 0 ? " · robot offline: delivered when it connects" : ""}`, d.deliveredNow === 0 ? "warn" : "ok");
+  set("mapSent", `${d.text} · ${d.bytes ?? "?"} bytes on the wire · ${clock(m.receivedAt)}${d.deliveredNow === 0 ? " · robot offline: delivered when it connects" : ""}`, d.deliveredNow === 0 ? "warn" : "ok");
   if (!m.cached) set("mapAck", "waiting for the robot…", "warn");
   if (m.cached) loadMapText(d.text === "CLEAR" ? "" : d.text);   // a page opened later shows what was last sent
 }
