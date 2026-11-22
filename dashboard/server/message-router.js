@@ -1,11 +1,11 @@
-import { parseDiagnostic, parseFutureJson, parseHeartbeat, parseProvisionalTelemetry } from "./parsers.js";
+import { decodeOnlineMarker, parseDiagnostic, parseFutureJson, parseHeartbeat, parseProvisionalTelemetry } from "./parsers.js";
 import { decodeRobotFrame } from "./robot-frames.js";
 import { decodeMapAck } from "./barcode-map.js";
 
 export function routeMqttMessage(topic, payload, topics, now = () => new Date()) {
   const base = { receivedAt: now().toISOString(), topic, source: "firmware-confirmed" };
   if (topic === topics.test) {
-    return { ...base, type: "online-marker", data: payload.toString("utf8") };
+    return { ...base, type: "online-marker", data: decodeOnlineMarker(payload) };
   }
   if (topics.mapAck && topic === topics.mapAck) {
     return { ...base, type: "map-ack", data: decodeMapAck(payload).text };

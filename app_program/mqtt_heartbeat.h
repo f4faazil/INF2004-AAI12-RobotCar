@@ -6,7 +6,13 @@
 #include <stdint.h>
 
 #define MQTT_HEARTBEAT_INTERVAL_MS 10000U
-#define MQTT_HEARTBEAT_PAYLOAD_BYTES 64U
+/* The heartbeat is 13 bytes of binary, was about 40 bytes of text:
+ *   byte 0       type 0x21
+ *   bytes 1-4    boot id, big-endian (changes at every power-up)
+ *   bytes 5-8    sequence number, big-endian (counts up for the whole boot)
+ *   bytes 9-12   uptime in milliseconds, big-endian */
+#define MQTT_HEARTBEAT_TYPE 0x21U
+#define MQTT_HEARTBEAT_PAYLOAD_BYTES 13U
 
 typedef struct {
     uint32_t boot_id;
@@ -25,10 +31,10 @@ void mqtt_heartbeat_set_session(mqtt_heartbeat_t *heartbeat, bool online,
 
 bool mqtt_heartbeat_due(const mqtt_heartbeat_t *heartbeat, uint32_t now_ms);
 
-/* Produces: v=1,b=hhhhhhhh,seq=N,up=N. Returns zero unless due or on error.
+/* Produces the 13 bytes above. Returns zero unless due or on error.
  * Preparing does not advance state, so temporary TX backpressure is safe. */
 size_t mqtt_heartbeat_prepare(const mqtt_heartbeat_t *heartbeat,
-                              uint32_t now_ms, char *out, size_t capacity);
+                              uint32_t now_ms, uint8_t *out, size_t capacity);
 
 /* Call only after MQTT accepted the complete QoS-0 PUBLISH locally. */
 void mqtt_heartbeat_published(mqtt_heartbeat_t *heartbeat, uint32_t now_ms);

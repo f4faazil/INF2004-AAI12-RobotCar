@@ -174,7 +174,10 @@ int main(void)
     simulate_recv(connack_part2, sizeof connack_part2);
     mqtt_lwip_poll(&interface);
     assert(send_count == 2 && last_send[0] == 0x30U); /* MQTT PUBLISH */
-    assert(contains_bytes(last_send, last_send_len, "AAI12_PICO_W_ONLINE", 18U));
+    /* The online marker is one byte, 0x22, after the topic aai12/test. */
+    assert(last_send_len == 2U + 2U + 10U + 1U);
+    assert(contains_bytes(last_send, last_send_len, "aai12/test", 10U));
+    assert(last_send[14] == 0x22U);
     /* Simulate another robot component submitting telemetry. */
 {
     static const uint8_t frame[] = {0x04U, 0x25U, 0x03U};
@@ -247,8 +250,13 @@ int main(void)
     assert(send_count == 8 && last_send[0] == 0x30U);
     assert(contains_bytes(last_send, last_send_len, "aai12/robot/heartbeat",
                           sizeof("aai12/robot/heartbeat") - 1U));
-    assert(contains_bytes(last_send, last_send_len, "seq=0", 5U));
-    assert(contains_bytes(last_send, last_send_len, "up=20250", 8U));
+    /* 13 bytes after the 21-byte topic: type 0x21, boot id, sequence 0, uptime 20250 = 0x4f1a. */
+    assert(last_send_len == 2U + 2U + 21U + 13U);
+    assert(last_send[25] == 0x21U);
+    assert(last_send[25 + 5] == 0U && last_send[25 + 6] == 0U &&
+           last_send[25 + 7] == 0U && last_send[25 + 8] == 0U);
+    assert(last_send[25 + 9] == 0U && last_send[25 + 10] == 0U &&
+           last_send[25 + 11] == 0x4fU && last_send[25 + 12] == 0x1aU);
     mqtt_lwip_get_status(&diagnostics);
     assert(diagnostics.ping_responses == 1U);
     assert(diagnostics.waiting_pingresp == 0U);
@@ -311,11 +319,19 @@ int main(void)
     mock_tx_room = 1024U;
     mqtt_lwip_poll(&interface);
     assert(send_count == 12);           /* Previous-session diagnostic part 1 */
-    assert(contains_bytes(last_send, last_send_len, "r=1", 3U));
-    assert(contains_bytes(last_send, last_send_len, "og=250", 6U));
+    /* Part 1 is 50 bytes of binary after the 16-byte topic: type 0x23, failure reason 1, owner max gap 250 ms. */
+    assert(last_send_len == 2U + 2U + 16U + 50U);
+    assert(last_send[20] == 0x23U);
+    assert(last_send[20 + 8] == 1U);
+    assert(last_send[20 + 18] == 0U && last_send[20 + 19] == 0U &&
+           last_send[20 + 20] == 0U && last_send[20 + 21] == 250U);
     mqtt_lwip_poll(&interface);
     assert(send_count == 13);           /* Previous-session diagnostic part 2 */
-    assert(contains_bytes(last_send, last_send_len, "ui=3", 4U));
+    /* Part 2 is 58 bytes: type 0x24, and the USB IRQ count (3) is the u32 at byte 21. */
+    assert(last_send_len == 2U + 2U + 16U + 58U);
+    assert(last_send[20] == 0x24U);
+    assert(last_send[20 + 21] == 0U && last_send[20 + 22] == 0U &&
+           last_send[20 + 23] == 0U && last_send[20 + 24] == 3U);
     mqtt_lwip_poll(&interface);
     assert(send_count == 13);           /* Stale item NOT published */
     mqtt_lwip_poll(&interface);
@@ -366,10 +382,10 @@ int main(void)
     assert(send_count == 18); /* CONNECT plus session-4 online marker. */
     mqtt_lwip_poll(&interface);
     assert(send_count == 19); /* Failed-session diagnostic part 1. */
-    assert(contains_bytes(last_send, last_send_len, "r=3", 3U));
+    assert(last_send[20] == 0x23U && last_send[20 + 8] == 3U);       /* failure reason 3 = TCP error */
     mqtt_lwip_poll(&interface);
     assert(send_count == 20); /* Failed-session diagnostic part 2. */
-    assert(contains_bytes(last_send, last_send_len, "te=1", 4U));
+    assert(last_send[20] == 0x24U && last_send[20 + 16] == 1U);      /* tcp_errors = 1 (low byte of the u32 at 13) */
 
     /* A persistently failed tcp_output retries the queued bytes, never calls
      * tcp_write again, then abandons the connection after a bounded timeout. */

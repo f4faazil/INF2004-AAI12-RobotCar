@@ -8,7 +8,7 @@
 int main(void)
 {
     mqtt_heartbeat_t heartbeat;
-    char payload[MQTT_HEARTBEAT_PAYLOAD_BYTES];
+    uint8_t payload[MQTT_HEARTBEAT_PAYLOAD_BYTES];
     size_t length;
 
     mqtt_heartbeat_init(&heartbeat, UINT32_C(0x12abcdef));
@@ -19,10 +19,17 @@ int main(void)
     assert(mqtt_heartbeat_due(&heartbeat, 10100U));
     length = mqtt_heartbeat_prepare(&heartbeat, 10100U, payload,
                                     sizeof payload);
-    assert(length > 0U);
-    assert(length < sizeof payload);
-    payload[length] = '\0';
-    assert(strcmp(payload, "v=1,b=12abcdef,seq=0,up=10100") == 0);
+    /* 13 bytes: type 0x21, boot id, sequence 0, uptime 10100 (0x2774), all big-endian. */
+    {
+        static const uint8_t expected[13] = {
+            0x21, 0x12, 0xab, 0xcd, 0xef, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x27, 0x74
+        };
+        assert(length == sizeof expected);
+        assert(memcmp(payload, expected, sizeof expected) == 0);
+    }
+    /* A buffer that is too small gives nothing, not a cut-off record. */
+    assert(mqtt_heartbeat_prepare(&heartbeat, 10100U, payload, 12U) == 0U);
 
     /* Preparing or a failed transport does not consume a sequence. */
     assert(mqtt_heartbeat_prepare(&heartbeat, 10101U, payload,
@@ -41,8 +48,10 @@ int main(void)
     assert(mqtt_heartbeat_due(&heartbeat, 50000U));
     length = mqtt_heartbeat_prepare(&heartbeat, 50000U, payload,
                                     sizeof payload);
-    payload[length] = '\0';
-    assert(strstr(payload, "seq=1") != NULL);
+    assert(length == 13U);
+    assert(payload[8] == 1U);                              /* sequence is now 1 */
+    assert(payload[9] == 0x00 && payload[10] == 0x00 &&
+           payload[11] == 0xc3 && payload[12] == 0x50);    /* uptime 50000 = 0xc350 */
 
     /* Unsigned elapsed arithmetic remains correct across sys_now rollover. */
     mqtt_heartbeat_published(&heartbeat, UINT32_MAX - 4999U);
