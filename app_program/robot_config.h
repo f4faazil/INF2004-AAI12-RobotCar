@@ -25,6 +25,46 @@
  */
 #define ROBOT_FIRMWARE          (1)
 
+/* Debug aid: wait this long after boot before starting the robot tasks, printing the radio's state once a second, so the
+ * USB console is up first and shows whether starting the robot is what breaks it.  0 = start at once (the mission). */
+#define ROBOT_START_DELAY_MS    (0U)
+
+/*
+ * 1 = build the motor calibration application (motor_cal_task.c) instead of the
+ * robot: one task, driven by the START button, that measures the dead zone and
+ * speed curve of each motor and checks distance and turn angle.  Needs
+ * ROBOT_FIRMWARE 1 and the USB console.  Set back to 0 for the mission.
+ */
+#define ROBOT_MOTOR_CAL         (0)
+
+/*
+ * 1 = build the IMU bring-up application (imu_test_task.c) instead of the robot:
+ * checks the accelerometer, finds the forward axis and its sign, and runs the hump
+ * detector over a 1 m drive.  Needs ROBOT_FIRMWARE 1 and the USB console.  Takes
+ * priority over ROBOT_MOTOR_CAL.  Set back to 0 for the mission.
+ */
+#define ROBOT_IMU_TEST          (0)
+
+/*
+ * 1 = build the ultrasonic and servo bring-up application (obstacle_test_task.c)
+ * instead of the robot: distance at known ranges, the no-echo handling, the servo
+ * limits and the real scan, profile and bypass plan.  The motors are never driven.
+ * Needs ROBOT_FIRMWARE 1 and the USB console.  Takes priority over ROBOT_IMU_TEST
+ * and ROBOT_MOTOR_CAL.  Set back to 0 for the mission.
+ */
+#define ROBOT_OBSTACLE_TEST     (0)
+
+/*
+ * 1 = build the open-space obstacle demo (freeroam_task.c) instead of the robot: no
+ * line.  The car drives straight, stops at an obstacle, scans, goes round it on the
+ * open side, returns to its path and carries on.  The motors DRIVE: keep a hand near
+ * the car and 2 m clear ahead.  Needs ROBOT_FIRMWARE 1 and the USB console.  Takes
+ * priority over the other bring-up switches.  Set back to 0 for the mission.
+ */
+#define ROBOT_FREEROAM          (0)
+#define ROBOT_IMU_TEST_SKIP_SETUP (0)   /* 1 = IMU test starts at the hump drive (axis and sign from below) */
+#define ROBOT_IMU_TEST_HAND     (0)   /* 1 = no motors: push the car over the hump by hand, START ends the run */
+
 /* Print a one-line status once a second on the console. */
 #define ROBOT_DIAG_PRINT        (1)
 
@@ -159,8 +199,38 @@
 #define ROBOT_IMU_PERIOD_MS     (20U)
 #define ROBOT_STATUS_PERIOD_MS  (100U)
 #define ROBOT_HEARTBEAT_MS      (1000U)
+#define ROBOT_SENSORS_PERIOD_MS (500U)      /* the per-sensor detail record */
 #define ROBOT_US_PERIOD_MS      (70U)       /* HC-SR04 needs >= 60 ms */
 #define ROBOT_US_ECHO_TIMEOUT_US (30000U)
+/* Geometry measured by Buddy 5: the sensor's front face is 80 mm behind the car's front
+ * edge, so a reading of D is only D - 80 mm of clearance for the bumper. */
+#define ROBOT_SENSOR_TO_FRONT_MM (80U)
+/* 1 = when the scan shows no open side (the box fills the whole sweep), go round anyway
+ * toward the side whose outer rays read farther.  The sonar cannot see the sides then, so
+ * only use it with nothing beside the track.  0 = stop and fault instead. */
+#define ROBOT_OBSTACLE_BLIND    (1)
+
+/*
+ * 1 = measurement build for the obstacle-to-stop time (Tribunal 1, test 1: PWM zero within 150 ms).  The firmware prints one "[stop]" line per
+ * obstacle stop with the time at each hand-over: the sonar's first reading inside the stop distance, the monitor declaring the obstacle, the
+ * Vehicle Controller posting STOP, Motion setting the PWM to zero, and the wheels confirmed still.  0 (the default) compiles all of it out:
+ * the mission firmware is byte-for-byte the same.
+ */
+#ifndef ROBOT_STOP_TIMING
+#define ROBOT_STOP_TIMING       (0)
+#endif
+
+/*
+ * 1 = measurement build for the obstacle width: after every scan the firmware prints the raw rays (angle, what the sonar saw, distance) on a "[ray]" line,
+ * so the width estimate can be designed and checked against real data and a box of known size.  Needs ROBOT_DIAG_PRINT.  0 (the default) compiles it out.
+ */
+#ifndef ROBOT_SCAN_RAYS
+#define ROBOT_SCAN_RAYS         (0)
+#endif
+/* An obstacle ahead nearer than this stops the car and starts the scan.  The scan
+ * can only confirm a path of the car's width from about 650 mm (the servo sweep is
+ * only 28 degrees each side); see the note on ROBOT_OBSTACLE_CFG. */
+#define ROBOT_OBSTACLE_SCAN_MM  (330U)
 #define ROBOT_IR_RING_FRAMES    (256U)
 
 /*
@@ -192,14 +262,36 @@
 extern const motion_config_t     ROBOT_MOTION_CFG;
 extern const line_nav_config_t   ROBOT_LINE_NAV_CFG;
 extern const hump_config_t       ROBOT_HUMP_CFG;
+extern const roll_hump_config_t  ROBOT_ROLL_HUMP_CFG;
 extern const obstacle_config_t   ROBOT_OBSTACLE_CFG;
 extern const vehicle_config_t    ROBOT_VEHICLE_CFG;
 extern const safety_limits_t     ROBOT_SAFETY_LIMITS;
 
 /* Servo trim and IMU mounting live with their structures in robot_config.c. */
 #define ROBOT_IMU_FORWARD_AXIS  (IMU_AXIS_X)
-#define ROBOT_IMU_FORWARD_SIGN  (1)
+#define ROBOT_IMU_FORWARD_SIGN  (-1)         /* measured on the car: X reads +ve with the nose up, so pitch needs -1 */
 #define ROBOT_IMU_CAL_SAMPLES   (50U)
-#define ROBOT_IMU_CAL_SPREAD_MG (80)
+#define ROBOT_IMU_CAL_SPREAD_MG (250)       /* floor vibration is about +-50 mg at rest */
+#define ROBOT_IMU_FILTER_DIV    (8)         /* accelerometer low-pass: 1/8 per 20 ms sample */
+/*
+ * Provisional lift/overturn policy: at least 60 degrees from the calibrated
+ * attitude (cosine <= 0.5) or at most 300 mg for 300 ms. Tune on the car;
+ * an accelerometer cannot distinguish a level, stationary car from one
+ * lifted evenly.
+ */
+#define ROBOT_LIFT_TILT_COS_PERMILLE (500U)
+#define ROBOT_LIFT_FREEFALL_MG       (300U)
+#define ROBOT_LIFT_HOLD_MS           (300U)
+
+/*
+ * After a lift the car re-arms by itself, so it can be tested again without a reboot, once it is back on the floor:
+ * level to within 15 degrees (cosine 966), at 1 g within 120 mg, and steady (no axis moves more than 60 mg between 20 ms
+ * samples) for 2 s in a row, and not sooner than 1 s after the lift was detected.  Re-arming only lets START work again.
+ */
+#define ROBOT_LIFT_REARM_COS_PERMILLE (966U)
+#define ROBOT_LIFT_REARM_MAG_TOL_MG   (120U)
+#define ROBOT_LIFT_REARM_STEP_MG      (60U)
+#define ROBOT_LIFT_REARM_HOLD_MS      (2000U)
+#define ROBOT_LIFT_MIN_LATCH_MS       (1000U)
 
 #endif /* ROBOT_CONFIG_H */

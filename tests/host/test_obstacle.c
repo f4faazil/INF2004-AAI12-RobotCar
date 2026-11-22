@@ -142,6 +142,13 @@ static obstacle_config_t make_cfg(void)
     c.assumed_depth_mm = 150U;
     c.min_turn_distance_mm = 120U;
     c.recovery_limit_mm = 500U;
+    c.sweep_clear_min_rays = 0U;
+    c.max_width_mm = 0U;
+    c.forward_extra_mm = 0U;
+    c.blind_side = 0;
+    c.sensor_to_axle_mm = 0U;
+    c.axle_to_rear_mm = 0U;
+    c.forward_margin_mm = 0U;
     return c;
 }
 
@@ -687,6 +694,412 @@ static void test_scan_time_is_bounded(void)
     CHECK(s.finished_ms < 12000U);
 }
 
+/* ---- the real car and the measured servo ----------------------------- */
+
+/* The car (200 x 250 mm) and the servo sweep measured by Buddy 5 (58 to 118
+ * degrees), as in robot_config.c. */
+static obstacle_config_t car_cfg(void)
+{
+    obstacle_config_t c = make_cfg();
+
+    c.servo.min_pulse_us = 375U;
+    c.servo.max_pulse_us = 2625U;
+    c.servo.min_angle_deg = 58U;
+    c.servo.max_angle_deg = 118U;
+    c.coarse_min_deg = 62U;
+    c.coarse_max_deg = 118U;
+    c.coarse_step_deg = 14U;
+    c.detect_range_mm = 800U;
+    c.robot_width_mm = 200U;
+    c.robot_length_mm = 250U;
+    return c;
+}
+
+/* From the scan distance the robot now uses (650 mm) the farthest ray reaches far
+ * enough to confirm room for the 200 mm car beside the box, so a bypass is
+ * planned.  Catches: a scan distance, detect range or sweep that cannot find a
+ * path. */
+static void test_car_finds_a_path_when_the_scan_starts_far_enough(void)
+{
+    obstacle_config_t cfg = car_cfg();
+    world_t w;
+    sim_t s;
+    obstacle_profile_t p;
+    bypass_plan_t plan;
+
+    w = box_at(0.0, 80.0, 650.0);
+    sim_init(&s, &w, &cfg);
+    CHECK(sim_run(&s));
+    analyse(&s, &p, &plan);
+    CHECK(p.obstacle_found);
+    CHECK((plan.action == PLAN_BYPASS_LEFT) || (plan.action == PLAN_BYPASS_RIGHT));
+    CHECK_INT(PLAN_REASON_OK, plan.reason);
+
+    w = box_at(0.0, 150.0, 700.0);
+    sim_init(&s, &w, &cfg);
+    CHECK(sim_run(&s));
+    analyse(&s, &p, &plan);
+    CHECK((plan.action == PLAN_BYPASS_LEFT) || (plan.action == PLAN_BYPASS_RIGHT));
+}
+
+/* From the old stop distance (250 mm) the same sweep confirms at most about
+ * 100 mm beside the box, so the planner correctly refuses: this is why the scan
+ * must start far away.  Catches: the planner inventing room it has not seen. */
+static void test_car_cannot_confirm_a_path_from_the_stop_distance(void)
+{
+    obstacle_config_t cfg = car_cfg();
+    world_t w = box_at(0.0, 80.0, 250.0);
+    sim_t s;
+    obstacle_profile_t p;
+    bypass_plan_t plan;
+
+    sim_init(&s, &w, &cfg);
+    CHECK(sim_run(&s));
+    analyse(&s, &p, &plan);
+    CHECK(p.obstacle_found);
+    CHECK_INT(PLAN_STOP, plan.action);
+    CHECK_INT(PLAN_REASON_NO_CLEARANCE, plan.reason);
+    CHECK(p.left_clearance_mm < 130U);
+    CHECK(p.right_clearance_mm < 130U);
+}
+
+/* ---- the real scans (felt tubes on the HC-SR04) ---------------------- */
+
+typedef struct { uint8_t angle; bool clear; uint16_t mm; } real_point_t;
+
+static void plan_real_scan(const real_point_t *r, uint8_t n, uint8_t min_rays,
+                           obstacle_profile_t *p, bypass_plan_t *plan)
+{
+    obstacle_config_t cfg = car_cfg();
+    scan_point_t pts[16];
+    uint8_t i;
+
+    cfg.sweep_clear_min_rays = min_rays;
+    for (i = 0U; i < n; i++) {
+        pts[i].angle_deg = r[i].angle;
+        pts[i].kind = r[i].clear ? SCAN_POINT_FAR : SCAN_POINT_OBSTACLE;
+        pts[i].distance_mm = r[i].clear ? US_MAX_RANGE_MM : r[i].mm;
+    }
+    obstacle_profile_build(&cfg, pts, n, p);
+    obstacle_plan(&cfg, p, plan);
+}
+
+/* Scans measured on the car, 14 Nov: the beam is wide, so the box is seen across
+ * most of the sweep and only the end rays can be clear.  A clear point is a no echo
+ * counted as free space (no_echo_is_clear). */
+static const real_point_t REAL_80_AT_500[] = {
+    { 62U, true, 0U }, { 67U, true, 0U }, { 72U, false, 539U }, { 77U, false, 517U },
+    { 82U, false, 513U }, { 87U, false, 513U }, { 92U, false, 504U }, { 97U, false, 513U },
+    { 102U, false, 510U }, { 107U, false, 514U }, { 112U, false, 514U }, { 117U, false, 526U } };
+static const real_point_t REAL_150_AT_500[] = {
+    { 62U, true, 0U }, { 76U, false, 513U }, { 81U, false, 500U }, { 86U, false, 496U },
+    { 91U, false, 496U }, { 96U, false, 509U }, { 101U, false, 509U }, { 106U, true, 0U },
+    { 111U, true, 0U }, { 116U, true, 0U } };
+static const real_point_t REAL_80_AT_650[] = {
+    { 62U, true, 0U }, { 67U, true, 0U }, { 72U, false, 718U }, { 77U, false, 689U },
+    { 82U, false, 671U }, { 87U, false, 663U }, { 92U, false, 663U }, { 97U, false, 664U },
+    { 102U, false, 676U }, { 107U, false, 664U }, { 112U, false, 681U }, { 117U, true, 0U } };
+static const real_point_t REAL_150_AT_650[] = {
+    { 58U, false, 656U }, { 63U, false, 652U }, { 68U, false, 656U }, { 73U, false, 648U },
+    { 78U, false, 647U }, { 83U, false, 647U }, { 88U, false, 639U }, { 93U, false, 634U },
+    { 98U, false, 639U }, { 103U, false, 639U }, { 108U, false, 640U }, { 113U, false, 652U },
+    { 118U, false, 657U } };
+
+#define COUNT_OF(a) ((uint8_t)(sizeof(a) / sizeof((a)[0])))
+
+/* With the rule as the Tribunal wrote it, none of the four real scans can be
+ * planned: the sonar confirms far too little room beside the box.  Catches: the
+ * default silently becoming permissive. */
+static void test_real_scans_are_refused_by_the_confirmed_clearance_rule(void)
+{
+    obstacle_profile_t p;
+    bypass_plan_t plan;
+
+    plan_real_scan(REAL_80_AT_500, COUNT_OF(REAL_80_AT_500), 0U, &p, &plan);
+    CHECK_INT(PLAN_STOP, plan.action);
+    plan_real_scan(REAL_150_AT_500, COUNT_OF(REAL_150_AT_500), 0U, &p, &plan);
+    CHECK_INT(PLAN_STOP, plan.action);
+    plan_real_scan(REAL_80_AT_650, COUNT_OF(REAL_80_AT_650), 0U, &p, &plan);
+    CHECK_INT(PLAN_STOP, plan.action);
+    plan_real_scan(REAL_150_AT_650, COUNT_OF(REAL_150_AT_650), 0U, &p, &plan);
+    CHECK_INT(PLAN_STOP, plan.action);
+}
+
+/* With "two clear rays reaching the end of the sweep" the car goes round the side
+ * that is open, and still stops when no side is.  Catches: a wrong side, or a
+ * bypass with nothing clear. */
+static void test_open_to_the_sweep_limit_picks_the_open_side(void)
+{
+    obstacle_profile_t p;
+    bypass_plan_t plan;
+
+    plan_real_scan(REAL_80_AT_500, COUNT_OF(REAL_80_AT_500), 2U, &p, &plan);
+    CHECK_INT(PLAN_BYPASS_RIGHT, plan.action);        /* only the right side has two clear rays */
+    CHECK_INT(PLAN_REASON_OK, plan.reason);
+    plan_real_scan(REAL_150_AT_500, COUNT_OF(REAL_150_AT_500), 2U, &p, &plan);
+    CHECK_INT(PLAN_BYPASS_LEFT, plan.action);         /* three clear rays on the left, one on the right */
+    plan_real_scan(REAL_80_AT_650, COUNT_OF(REAL_80_AT_650), 2U, &p, &plan);
+    CHECK_INT(PLAN_BYPASS_RIGHT, plan.action);        /* one clear ray on the left is not enough */
+    plan_real_scan(REAL_150_AT_650, COUNT_OF(REAL_150_AT_650), 2U, &p, &plan);
+    CHECK_INT(PLAN_STOP, plan.action);                /* the box fills the whole sweep: nothing clear */
+    CHECK_INT(PLAN_REASON_NO_CLEARANCE, plan.reason);
+}
+
+/* A detour longer than the recovery limit is still refused when the side is only
+ * open to the sweep limit.  Catches: the open-side rule bypassing the other checks. */
+static void test_open_side_still_respects_the_recovery_limit(void)
+{
+    obstacle_profile_t p;
+    bypass_plan_t plan;
+    obstacle_config_t cfg = car_cfg();
+    scan_point_t pts[8];
+    uint8_t i;
+    static const uint8_t ang[8] = { 62U, 67U, 72U, 77U, 82U, 87U, 92U, 97U };
+
+    cfg.sweep_clear_min_rays = 2U;
+    cfg.recovery_limit_mm = 150U;
+    for (i = 0U; i < 8U; i++) {
+        const bool clear = (i < 2U);
+
+        pts[i].angle_deg = ang[i];
+        pts[i].kind = clear ? SCAN_POINT_FAR : SCAN_POINT_OBSTACLE;
+        pts[i].distance_mm = clear ? US_MAX_RANGE_MM : 520U;
+    }
+    obstacle_profile_build(&cfg, pts, 8U, &p);
+    obstacle_plan(&cfg, &p, &plan);
+    CHECK_INT(PLAN_STOP, plan.action);
+}
+
+/* ---- the blind bypass (no open side seen) ----------------------------- */
+
+/* The scan from the free-roam run on the car, 17 Nov: the box fills all 13 rays. */
+static const real_point_t REAL_FILLS_SWEEP[] = {
+    { 58U, false, 494U }, { 63U, false, 498U }, { 68U, false, 495U }, { 73U, false, 495U },
+    { 78U, false, 482U }, { 83U, false, 477U }, { 88U, false, 477U }, { 93U, false, 474U },
+    { 98U, false, 470U }, { 103U, false, 474U }, { 108U, false, 483U }, { 113U, false, 479U },
+    { 118U, false, 483U } };
+
+static bool blind_for(const real_point_t *r, uint8_t n, obstacle_profile_t *p, bypass_plan_t *plan)
+{
+    obstacle_config_t cfg = car_cfg();
+    scan_point_t pts[16];
+    uint8_t i;
+
+    cfg.sweep_clear_min_rays = 2U;
+    cfg.margin_mm = 80U;
+    for (i = 0U; i < n; i++) {
+        pts[i].angle_deg = r[i].angle;
+        pts[i].kind = r[i].clear ? SCAN_POINT_FAR : SCAN_POINT_OBSTACLE;
+        pts[i].distance_mm = r[i].clear ? US_MAX_RANGE_MM : r[i].mm;
+    }
+    obstacle_profile_build(&cfg, pts, n, p);
+    obstacle_plan(&cfg, p, plan);
+    if (plan->action != PLAN_STOP) {
+        return false;
+    }
+    return obstacle_blind_plan(&cfg, pts, n, p, plan);
+}
+
+/* The planner stops when the box fills the sweep; the blind plan then goes round the
+ * side whose outer rays read farther (the right here), with a sensible distance.
+ * Catches: a missing fallback, a wrong side, or a silly sideways distance. */
+static void test_blind_plan_goes_round_a_box_that_fills_the_sweep(void)
+{
+    obstacle_profile_t p;
+    bypass_plan_t plan;
+
+    CHECK(blind_for(REAL_FILLS_SWEEP, COUNT_OF(REAL_FILLS_SWEEP), &p, &plan));
+    CHECK_INT(PLAN_BYPASS_RIGHT, plan.action);
+    CHECK_INT(5, plan.step_count);
+    CHECK(plan.steps[0].is_turn && (plan.steps[0].value == -90));    /* turn right first */
+    CHECK(!plan.steps[1].is_turn && (plan.steps[1].value > 300) && (plan.steps[1].value <= 500));
+    CHECK(!plan.steps[3].is_turn && (plan.steps[3].value > 800) && (plan.steps[3].value < 1100));
+}
+
+/* The farther-reading end wins: the same box with the right end closer goes left.
+ * Catches: a fixed side. */
+static void test_blind_plan_takes_the_side_that_reads_farther(void)
+{
+    static const real_point_t FLIPPED[] = {
+        { 58U, false, 470U }, { 63U, false, 470U }, { 68U, false, 480U }, { 73U, false, 480U },
+        { 78U, false, 480U }, { 83U, false, 477U }, { 88U, false, 477U }, { 93U, false, 474U },
+        { 98U, false, 480U }, { 103U, false, 480U }, { 108U, false, 490U }, { 113U, false, 500U },
+        { 118U, false, 505U } };
+    obstacle_profile_t p;
+    bypass_plan_t plan;
+
+    CHECK(blind_for(FLIPPED, COUNT_OF(FLIPPED), &p, &plan));
+    CHECK_INT(PLAN_BYPASS_LEFT, plan.action);
+    CHECK(plan.steps[0].is_turn && (plan.steps[0].value == 90));
+}
+
+/* No obstacle, or one too close to turn, gives no blind plan.  Catches: a bypass
+ * round nothing. */
+static void test_blind_plan_refuses_when_there_is_nothing_to_go_round(void)
+{
+    obstacle_config_t cfg = car_cfg();
+    obstacle_profile_t p;
+    bypass_plan_t plan;
+    scan_point_t pts[3];
+
+    pts[0].angle_deg = 62U; pts[0].kind = SCAN_POINT_FAR; pts[0].distance_mm = 1500U;
+    pts[1].angle_deg = 90U; pts[1].kind = SCAN_POINT_FAR; pts[1].distance_mm = 1500U;
+    pts[2].angle_deg = 118U; pts[2].kind = SCAN_POINT_FAR; pts[2].distance_mm = 1500U;
+    obstacle_profile_build(&cfg, pts, 3U, &p);
+    CHECK(!obstacle_blind_plan(&cfg, pts, 3U, &p, &plan));
+
+    pts[1].kind = SCAN_POINT_OBSTACLE;
+    pts[1].distance_mm = 90U;                       /* nearer than the turn distance */
+    obstacle_profile_build(&cfg, pts, 3U, &p);
+    CHECK(!obstacle_blind_plan(&cfg, pts, 3U, &p, &plan));
+}
+
+/* ---- width cap and forward extra (the robot's settings) -------------- */
+
+static bool blind_with(const real_point_t *r, uint8_t n, uint16_t cap, uint16_t extra,
+                       obstacle_profile_t *p, bypass_plan_t *plan)
+{
+    obstacle_config_t cfg = car_cfg();
+    scan_point_t pts[16];
+    uint8_t i;
+
+    cfg.sweep_clear_min_rays = 2U;
+    cfg.margin_mm = 80U;
+    cfg.max_width_mm = cap;
+    cfg.forward_extra_mm = extra;
+    for (i = 0U; i < n; i++) {
+        pts[i].angle_deg = r[i].angle;
+        pts[i].kind = r[i].clear ? SCAN_POINT_FAR : SCAN_POINT_OBSTACLE;
+        pts[i].distance_mm = r[i].clear ? US_MAX_RANGE_MM : r[i].mm;
+    }
+    obstacle_profile_build(&cfg, pts, n, p);
+    obstacle_plan(&cfg, p, plan);
+    if (plan->action != PLAN_STOP) {
+        return true;
+    }
+    return obstacle_blind_plan(&cfg, pts, n, p, plan);
+}
+
+/* The sonar read a small box as about 480 mm wide.  Clamped to 250 mm the sideways leg
+ * falls from about 440 to about 330 mm, well inside the 500 mm recovery limit.
+ * Catches: a cap that does nothing, or one that moves the centre. */
+static void test_width_cap_shortens_the_sideways_leg(void)
+{
+    obstacle_profile_t p0;
+    obstacle_profile_t p1;
+    bypass_plan_t plan0;
+    bypass_plan_t plan1;
+
+    CHECK(blind_with(REAL_FILLS_SWEEP, COUNT_OF(REAL_FILLS_SWEEP), 0U, 0U, &p0, &plan0));
+    CHECK(blind_with(REAL_FILLS_SWEEP, COUNT_OF(REAL_FILLS_SWEEP), 250U, 0U, &p1, &plan1));
+    CHECK(p0.width_mm > 400U);
+    CHECK_INT(250, p1.width_mm);
+    CHECK(abs(p1.centre_x_mm - p0.centre_x_mm) <= 2);
+    CHECK(plan0.steps[1].value > 400);
+    CHECK(plan1.steps[1].value > 280);
+    CHECK(plan1.steps[1].value < 360);
+    CHECK_INT(plan0.steps[3].value, plan1.steps[3].value);       /* only the sideways leg changes */
+}
+
+/* The forward leg grows by exactly forward_extra_mm.  Catches: the extra missing from
+ * one of the two planners. */
+static void test_forward_extra_lengthens_the_forward_leg(void)
+{
+    obstacle_profile_t p;
+    bypass_plan_t a;
+    bypass_plan_t b;
+    bypass_plan_t c;
+    bypass_plan_t d;
+
+    CHECK(blind_with(REAL_FILLS_SWEEP, COUNT_OF(REAL_FILLS_SWEEP), 250U, 0U, &p, &a));
+    CHECK(blind_with(REAL_FILLS_SWEEP, COUNT_OF(REAL_FILLS_SWEEP), 250U, 150U, &p, &b));
+    CHECK_INT(a.steps[3].value + 150, b.steps[3].value);
+    CHECK(blind_with(REAL_80_AT_500, COUNT_OF(REAL_80_AT_500), 250U, 0U, &p, &c));      /* the normal planner */
+    CHECK(blind_with(REAL_80_AT_500, COUNT_OF(REAL_80_AT_500), 250U, 150U, &p, &d));
+    CHECK_INT(c.steps[3].value + 150, d.steps[3].value);
+}
+
+/* The course says which side is free: the blind bypass takes it whatever the outer rays read,
+ * and gives no plan if that side is too far round.  Catches: an ignored or half-applied
+ * forced side. */
+static void test_blind_side_can_be_forced(void)
+{
+    obstacle_config_t cfg = car_cfg();
+    obstacle_profile_t p;
+    bypass_plan_t plan;
+    scan_point_t pts[16];
+    uint8_t i;
+
+    for (i = 0U; i < COUNT_OF(REAL_FILLS_SWEEP); i++) {
+        pts[i].angle_deg = REAL_FILLS_SWEEP[i].angle;
+        pts[i].kind = SCAN_POINT_OBSTACLE;
+        pts[i].distance_mm = REAL_FILLS_SWEEP[i].mm;
+    }
+    cfg.margin_mm = 60U;
+    cfg.max_width_mm = 220U;
+    obstacle_profile_build(&cfg, pts, COUNT_OF(REAL_FILLS_SWEEP), &p);
+
+    cfg.blind_side = 0;                                  /* auto: the right reads farther */
+    CHECK(obstacle_blind_plan(&cfg, pts, COUNT_OF(REAL_FILLS_SWEEP), &p, &plan));
+    CHECK_INT(PLAN_BYPASS_RIGHT, plan.action);
+    cfg.blind_side = 1;                                  /* forced left */
+    CHECK(obstacle_blind_plan(&cfg, pts, COUNT_OF(REAL_FILLS_SWEEP), &p, &plan));
+    CHECK_INT(PLAN_BYPASS_LEFT, plan.action);
+    CHECK(plan.steps[0].is_turn && (plan.steps[0].value == 90));
+    cfg.blind_side = -1;                                 /* forced right */
+    CHECK(obstacle_blind_plan(&cfg, pts, COUNT_OF(REAL_FILLS_SWEEP), &p, &plan));
+    CHECK_INT(PLAN_BYPASS_RIGHT, plan.action);
+    cfg.blind_side = 1;
+    cfg.recovery_limit_mm = 100U;                        /* too far round on the forced side */
+    CHECK(!obstacle_blind_plan(&cfg, pts, COUNT_OF(REAL_FILLS_SWEEP), &p, &plan));
+}
+
+/* The forward leg from the real geometry: reading + sensor-to-axle + depth + axle-to-rear +
+ * margin.  For a scan reading about 160 mm that is about 450 mm, not the 740 mm the older
+ * estimate gave.  Catches: the car's whole length or a fixed extra creeping back in, and the
+ * two planners disagreeing. */
+static void test_forward_leg_uses_the_cars_real_geometry(void)
+{
+    obstacle_config_t cfg = car_cfg();
+    obstacle_profile_t p;
+    bypass_plan_t plan_blind;
+    bypass_plan_t plan_open;
+    scan_point_t pts[13];
+    scan_point_t open_pts[12];
+    uint8_t i;
+
+    cfg.margin_mm = 60U;
+    cfg.max_width_mm = 220U;
+    cfg.sweep_clear_min_rays = 2U;
+    cfg.assumed_depth_mm = 100U;
+    cfg.sensor_to_axle_mm = 80U;
+    cfg.axle_to_rear_mm = 90U;
+    cfg.forward_margin_mm = 20U;
+    for (i = 0U; i < 13U; i++) {
+        pts[i].angle_deg = (uint8_t)(58U + (5U * i));
+        pts[i].kind = SCAN_POINT_OBSTACLE;
+        pts[i].distance_mm = 160U;
+    }
+    obstacle_profile_build(&cfg, pts, 13U, &p);
+    CHECK(obstacle_blind_plan(&cfg, pts, 13U, &p, &plan_blind));
+    CHECK_INT((int)p.closest_mm + 80 + 100 + 90 + 20, plan_blind.steps[3].value);   /* from the reading straight ahead */
+    CHECK(plan_blind.steps[3].value < 520);
+
+    for (i = 0U; i < 12U; i++) {                         /* an open side: the normal planner */
+        open_pts[i].angle_deg = (uint8_t)(62U + (5U * i));
+        open_pts[i].kind = (i < 2U) ? SCAN_POINT_FAR : SCAN_POINT_OBSTACLE;
+        open_pts[i].distance_mm = (i < 2U) ? US_MAX_RANGE_MM : 170U;
+    }
+    obstacle_profile_build(&cfg, open_pts, 12U, &p);
+    obstacle_plan(&cfg, &p, &plan_open);
+    CHECK_INT(PLAN_BYPASS_RIGHT, plan_open.action);
+    CHECK_INT((int)p.forward_mm + 80 + 100 + 90 + 20, plan_open.steps[3].value);
+
+    cfg.axle_to_rear_mm = 0U;                            /* the older estimate is still there */
+    obstacle_plan(&cfg, &p, &plan_open);
+    CHECK(plan_open.steps[3].value > (int)p.forward_mm + 400);
+}
+
 int main(void)
 {
     RUN(test_trig_tables);
@@ -711,5 +1124,17 @@ int main(void)
     RUN(test_servo_mounting_direction_is_configurable);
     RUN(test_servo_mounting_mirror_keeps_the_object_on_the_correct_side);
     RUN(test_scan_time_is_bounded);
+    RUN(test_car_finds_a_path_when_the_scan_starts_far_enough);
+    RUN(test_car_cannot_confirm_a_path_from_the_stop_distance);
+    RUN(test_real_scans_are_refused_by_the_confirmed_clearance_rule);
+    RUN(test_open_to_the_sweep_limit_picks_the_open_side);
+    RUN(test_open_side_still_respects_the_recovery_limit);
+    RUN(test_blind_plan_goes_round_a_box_that_fills_the_sweep);
+    RUN(test_blind_plan_takes_the_side_that_reads_farther);
+    RUN(test_blind_plan_refuses_when_there_is_nothing_to_go_round);
+    RUN(test_width_cap_shortens_the_sideways_leg);
+    RUN(test_forward_extra_lengthens_the_forward_leg);
+    RUN(test_blind_side_can_be_forced);
+    RUN(test_forward_leg_uses_the_cars_real_geometry);
     return TEST_REPORT();
 }

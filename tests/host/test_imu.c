@@ -553,7 +553,456 @@ static void test_motion_classification(void)
     in.hump = HUMP_FLAT;
 
     in.disturbance_mg = 900;
-    CHECK_INT(IMU_MOTION_IMPACT, imu_classify_motion(&in));    /* beats the rest */
+    CHECK_INT(IMU_MOTION_CRUISING, imu_classify_motion(&in));
+}
+
+/* ---- roll: one wheel on a hump ---------------------------------------- */
+
+/* Reading of a level sensor (X forward, Y sideways, Z up) rolled by 'deg':
+ * positive roll = the left wheel up = the Y reading goes negative. */
+static imu_vec3_t rolled(double deg)
+{
+    double a = deg * PI_D / 180.0;
+
+    return vec(0, (int16_t)lround(-1000.0 * sin(a)), (int16_t)lround(1000.0 * cos(a)));
+}
+
+static void test_lift_requires_sustained_out_of_range_tilt(void)
+{
+    imu_cal_t cal;
+    imu_lift_detector_t detector;
+    imu_vec3_t normal_hump = rolled(20.0);
+    imu_vec3_t lift_tilt = rolled(70.0);
+    uint32_t now;
+
+    calibrate(&cal, vec(0, 0, 1000), IMU_AXIS_X, 1);
+    imu_lift_init(&detector);
+    for (now = 0U; now <= 400U; now += 20U) {
+        CHECK(!imu_lift_update(&detector, &cal, &normal_hump, now, 500U, 300U, 300U));
+    }
+    CHECK(!imu_lift_update(&detector, &cal, &lift_tilt, 420U, 500U, 300U, 300U));
+    CHECK(!imu_lift_update(&detector, &cal, &lift_tilt, 700U, 500U, 300U, 300U));
+    CHECK(imu_lift_update(&detector, &cal, &lift_tilt, 720U, 500U, 300U, 300U));
+    CHECK(detector.latched);
+    CHECK(!imu_lift_update(&detector, &cal, &lift_tilt, 340U, 500U, 300U, 300U));
+}
+
+static void test_lift_does_not_accumulate_separate_tilt_periods(void)
+{
+    imu_cal_t cal;
+    imu_lift_detector_t detector;
+    imu_vec3_t level = vec(0, 0, 1000);
+    imu_vec3_t lift_tilt = rolled(70.0);
+
+    calibrate(&cal, level, IMU_AXIS_X, 1);
+    imu_lift_init(&detector);
+    CHECK(!imu_lift_update(&detector, &cal, &lift_tilt, 0U, 500U, 300U, 300U));
+    CHECK(!imu_lift_update(&detector, &cal, &level, 280U, 500U, 300U, 300U));
+    CHECK(!imu_lift_update(&detector, &cal, &lift_tilt, 300U, 500U, 300U, 300U));
+    CHECK(!imu_lift_update(&detector, &cal, &lift_tilt, 580U, 500U, 300U, 300U));
+    CHECK(imu_lift_update(&detector, &cal, &lift_tilt, 600U, 500U, 300U, 300U));
+}
+
+/* After a lift the car may run again only once it is level, at 1 g and steady for the hold time.  Catches: re-arming
+ * too early, or while it is still tilted, swung about, or falling. */
+static void test_rearm_needs_level_1g_and_steady_for_the_hold_time(void)
+{
+    imu_cal_t cal;
+    imu_rearm_t r;
+    imu_vec3_t flat = vec(0, 0, 1000);
+    uint32_t t;
+    bool armed = false;
+
+    calibrate(&cal, vec(0, 0, 1000), IMU_AXIS_X, 1);
+    imu_rearm_init(&r);
+    for (t = 0U; t <= 2000U; t += 20U) {                /* the first sample only sets the reference: steady counts from t = 20 */
+        armed = imu_rearm_update(&r, &cal, &flat, t, 966U, 120U, 60U, 2000U);
+        CHECK(!armed);                                  /* not before 2 s of it */
+    }
+    CHECK(imu_rearm_update(&r, &cal, &flat, 2020U, 966U, 120U, 60U, 2000U));
+}
+
+static void test_rearm_refuses_a_tilted_car(void)
+{
+    imu_cal_t cal;
+    imu_rearm_t r;
+    imu_vec3_t tilted = rolled(40.0);                   /* cosine 766: more than 15 degrees */
+    uint32_t t;
+
+    calibrate(&cal, vec(0, 0, 1000), IMU_AXIS_X, 1);
+    imu_rearm_init(&r);
+    for (t = 0U; t < 6000U; t += 20U) {
+        CHECK(!imu_rearm_update(&r, &cal, &tilted, t, 966U, 120U, 60U, 2000U));
+    }
+}
+
+static void test_rearm_refuses_a_car_being_swung_or_dropped(void)
+{
+    imu_cal_t cal;
+    imu_rearm_t r;
+    imu_vec3_t a = vec(0, 0, 1000);
+    imu_vec3_t b = vec(0, 150, 1000);                   /* a 150 mg jolt between samples: handled, not resting */
+    imu_vec3_t falling = vec(0, 0, 500);                /* not at 1 g */
+    uint32_t t;
+
+    calibrate(&cal, vec(0, 0, 1000), IMU_AXIS_X, 1);
+    imu_rearm_init(&r);
+    for (t = 0U; t < 6000U; t += 20U) {
+        CHECK(!imu_rearm_update(&r, &cal, (((t / 20U) & 1U) != 0U) ? &a : &b, t, 966U, 120U, 60U, 2000U));
+    }
+    imu_rearm_init(&r);
+    for (t = 0U; t < 6000U; t += 20U) {
+        CHECK(!imu_rearm_update(&r, &cal, &falling, t, 966U, 120U, 60U, 2000U));
+    }
+}
+
+/* A break in the level, steady period restarts the count: separate short periods do not add up. */
+static void test_rearm_does_not_accumulate_separate_periods(void)
+{
+    imu_cal_t cal;
+    imu_rearm_t r;
+    imu_vec3_t flat = vec(0, 0, 1000);
+    imu_vec3_t tilted = rolled(40.0);
+    uint32_t t = 0U;
+    uint32_t k;
+
+    calibrate(&cal, vec(0, 0, 1000), IMU_AXIS_X, 1);
+    imu_rearm_init(&r);
+    for (k = 0U; k < 3U; k++) {
+        uint32_t i;
+
+        for (i = 0U; i < 70U; i++, t += 20U) {          /* 1.4 s level */
+            CHECK(!imu_rearm_update(&r, &cal, &flat, t, 966U, 120U, 60U, 2000U));
+        }
+        (void)imu_rearm_update(&r, &cal, &tilted, t, 966U, 120U, 60U, 2000U);   /* picked up again */
+        t += 20U;
+    }
+}
+
+static void test_lift_detects_sustained_near_freefall(void)
+{
+    imu_cal_t cal;
+    imu_lift_detector_t detector;
+    imu_vec3_t freefall = vec(0, 0, 0);
+
+    calibrate(&cal, vec(0, 0, 1000), IMU_AXIS_X, 1);
+    imu_lift_init(&detector);
+    CHECK(!imu_lift_update(&detector, &cal, &freefall, 0U, 500U, 300U, 300U));
+    CHECK(!imu_lift_update(&detector, &cal, &freefall, 280U, 500U, 300U, 300U));
+    CHECK(imu_lift_update(&detector, &cal, &freefall, 300U, 500U, 300U, 300U));
+}
+
+/* sin(roll) for known sideways tilts, left-up positive.  Catches: wrong sign,
+ * wrong axis, degrees treated as radians. */
+static void test_roll_for_known_sideways_tilts(void)
+{
+    imu_cal_t cal;
+    imu_vec3_t t;
+
+    calibrate(&cal, vec(0, 0, 1000), IMU_AXIS_X, 1);
+    CHECK_INT(IMU_AXIS_Y, cal.lateral_axis);
+    CHECK(abs(imu_roll_permille(&cal, &(imu_vec3_t){ 0, 0, 1000 })) <= 2);
+    t = rolled(5.0);
+    CHECK(abs(imu_roll_permille(&cal, &t) - 87) <= 3);
+    t = rolled(-8.0);
+    CHECK(abs(imu_roll_permille(&cal, &t) + 139) <= 3);
+}
+
+/* A nose-up tilt must not show as roll.  Catches: pitch leaking into roll. */
+static void test_pitching_does_not_show_as_roll(void)
+{
+    imu_cal_t cal;
+    imu_vec3_t t = nose_up(10.0);
+
+    calibrate(&cal, vec(0, 0, 1000), IMU_AXIS_X, 1);
+    CHECK(abs(imu_roll_permille(&cal, &t)) <= 3);
+}
+
+/* The car's board: upside down (Z about -826), a little off level, a different
+ * scale from 1 g.  Roll is relative to the rest attitude, so the offsets cancel.
+ * Catches: assuming Z up or a 1 g scale. */
+static void test_roll_with_the_cars_upside_down_board(void)
+{
+    imu_cal_t cal;
+    imu_vec3_t t;
+    const double scale = 0.826;
+    const double a = 6.0 * PI_D / 180.0;
+
+    calibrate(&cal, vec(70, -13, -826), IMU_AXIS_X, -1);
+    CHECK_INT(IMU_AXIS_Y, cal.lateral_axis);
+    t = vec(70, (int16_t)lround(-13.0 - (1000.0 * scale * sin(a))), (int16_t)lround(-1000.0 * scale * cos(a)));
+    CHECK(abs(imu_roll_permille(&cal, &t) - 105) <= 6);
+}
+
+static roll_hump_config_t roll_cfg(void)
+{
+    roll_hump_config_t c;
+
+    c.enter_permille = 40;
+    c.exit_permille = 25;
+    c.enter_ms = 60U;
+    c.exit_ms = 200U;
+    c.lever_mm = 76U;
+    c.min_length_mm = 60U;
+    c.max_length_mm = 400U;
+    c.min_height_mm = 6;
+    return c;
+}
+
+typedef struct {
+    int started;
+    int finished;
+    int saw_rising;
+    int saw_on_hump;
+    int saw_descending;
+} roll_run_t;
+
+/*
+ * Drive at 120 mm/s over a half-sine roll bump starting at 300 mm, sampled
+ * every 20 ms with noise, distance quantised to 1 mm.  Fault, if >= 0, drops
+ * imu_ok for the samples from that distance on.
+ */
+static roll_run_t roll_run(roll_hump_t *h, double peak, double length_mm, int side, double noise,
+                           bool distance_ok, double fault_at_mm)
+{
+    roll_run_t r = { 0, 0, 0, 0, 0 };
+    uint32_t t;
+
+    for (t = 0U; t < 14000U; t += STEP_MS) {
+        const double d = 120.0 * (double)t / 1000.0;
+        double roll = 0.0;
+        roll_hump_input_t in;
+        hump_event_t ev;
+
+        if ((d > 300.0) && (d < (300.0 + length_mm))) {
+            roll = (double)side * peak * sin(PI_D * (d - 300.0) / length_mm);
+        }
+        roll += rand_pm1() * noise;
+        in.roll_permille = (int16_t)lround(roll);
+        in.distance_mm = (int32_t)lround(d);
+        in.distance_valid = distance_ok;
+        in.imu_ok = !((fault_at_mm >= 0.0) && (d >= fault_at_mm));
+        in.now_ms = t;
+        ev = roll_hump_update(h, &in);
+        if (ev == HUMP_EVENT_STARTED) {
+            r.started++;
+        }
+        if (ev == HUMP_EVENT_FINISHED) {
+            r.finished++;
+        }
+        if (h->state == HUMP_RISING) {
+            r.saw_rising = 1;
+        }
+        if (h->state == HUMP_ON_HUMP) {
+            r.saw_on_hump = 1;
+        }
+        if (h->state == HUMP_DESCENDING) {
+            r.saw_descending = 1;
+        }
+    }
+    return r;
+}
+
+/* The measured demo hump: roll peak 262 per-mille (seven runs on the car) over
+ * 190 mm gives 20 mm.  Catches: wrong lever, peak not tracked. */
+static void test_roll_hump_height_matches_the_fitted_lever(void)
+{
+    roll_hump_config_t cfg = roll_cfg();
+    roll_hump_t h;
+    roll_run_t r;
+
+    roll_hump_init(&h, &cfg);
+    r = roll_run(&h, 262.0, 190.0, 1, 10.0, true, -1.0);
+    CHECK_INT(1, r.started);
+    CHECK_INT(1, r.finished);
+    CHECK(abs((int)roll_hump_last_height_code(&h) - 20) <= 1);
+    CHECK_INT(HUMP_VALID, roll_hump_last_validity(&h));
+    CHECK(abs((int)roll_hump_highest_valid_mm(&h) - 20) <= 1);
+    CHECK_INT(1, h.side);
+    CHECK_INT(1, r.saw_rising);
+    CHECK_INT(1, r.saw_on_hump);
+    CHECK_INT(1, r.saw_descending);
+}
+
+/* The other wheel: the roll goes negative, the height is the same.  Catches:
+ * a detector that only looks at one sign. */
+static void test_roll_hump_on_the_other_wheel(void)
+{
+    roll_hump_config_t cfg = roll_cfg();
+    roll_hump_t h;
+    roll_run_t r;
+
+    roll_hump_init(&h, &cfg);
+    r = roll_run(&h, 238.0, 190.0, -1, 10.0, true, -1.0);
+    CHECK_INT(1, r.finished);
+    CHECK_INT(-1, h.side);
+    CHECK(abs((int)roll_hump_last_height_code(&h) - 18) <= 1);
+}
+
+/* Flat running with the measured vibration: nothing.  Catches: thresholds
+ * inside the noise. */
+static void test_roll_noise_alone_is_not_a_hump(void)
+{
+    roll_hump_config_t cfg = roll_cfg();
+    roll_hump_t h;
+    roll_run_t r;
+
+    roll_hump_init(&h, &cfg);
+    r = roll_run(&h, 0.0, 190.0, 1, 30.0, true, -1.0);
+    CHECK_INT(0, r.started);
+    CHECK_INT(-1, (int)roll_hump_highest_valid_mm(&h));
+}
+
+/* One bad sample is a knock, not a hump.  Catches: no enter time. */
+static void test_roll_single_spike_is_not_a_hump(void)
+{
+    roll_hump_config_t cfg = roll_cfg();
+    roll_hump_t h;
+    roll_hump_input_t in;
+    uint32_t t;
+    int started = 0;
+
+    roll_hump_init(&h, &cfg);
+    for (t = 0U; t < 2000U; t += STEP_MS) {
+        in.roll_permille = (t == 1000U) ? 300 : 0;
+        in.distance_mm = (int32_t)(t / 8U);
+        in.distance_valid = true;
+        in.imu_ok = true;
+        in.now_ms = t;
+        if (roll_hump_update(&h, &in) == HUMP_EVENT_STARTED) {
+            started++;
+        }
+    }
+    CHECK_INT(0, started);
+}
+
+/* No distance: the height is still reported but never counted as valid.
+ * Catches: trusting a missing encoder. */
+static void test_roll_missing_distance_is_low_confidence(void)
+{
+    roll_hump_config_t cfg = roll_cfg();
+    roll_hump_t h;
+    roll_run_t r;
+
+    roll_hump_init(&h, &cfg);
+    r = roll_run(&h, 262.0, 190.0, 1, 10.0, false, -1.0);
+    CHECK_INT(1, r.finished);
+    CHECK_INT(HUMP_LOW_CONFIDENCE, roll_hump_last_validity(&h));
+    CHECK_INT(-1, (int)roll_hump_highest_valid_mm(&h));
+}
+
+/* A long gentle roll (a slope or a long turn) is not a hump.  Catches: no
+ * maximum length. */
+static void test_roll_long_bump_is_low_confidence(void)
+{
+    roll_hump_config_t cfg = roll_cfg();
+    roll_hump_t h;
+    roll_run_t r;
+
+    roll_hump_init(&h, &cfg);
+    r = roll_run(&h, 262.0, 700.0, 1, 10.0, true, -1.0);
+    CHECK_INT(1, r.finished);
+    CHECK_INT(HUMP_LOW_CONFIDENCE, roll_hump_last_validity(&h));
+    CHECK_INT(-1, (int)roll_hump_highest_valid_mm(&h));
+}
+
+/* The accelerometer failing mid-hump is reported and packed.  Catches: a
+ * silent fault. */
+static void test_roll_imu_fault_is_reported(void)
+{
+    roll_hump_config_t cfg = roll_cfg();
+    roll_hump_t h;
+    roll_run_t r;
+    hump_state_t st;
+    uint8_t code;
+    hump_validity_t val;
+    bool fault;
+
+    roll_hump_init(&h, &cfg);
+    r = roll_run(&h, 262.0, 190.0, 1, 10.0, true, 380.0);
+    CHECK_INT(1, r.finished);
+    CHECK_INT(HUMP_LOW_CONFIDENCE, roll_hump_last_validity(&h));
+    hump_event_unpack(h.last_event_packed, &st, &code, &val, &fault);
+    CHECK(fault);
+}
+
+/* A taller hump later is kept, and a smaller one after it does not lower it.
+ * Catches: the highest value being overwritten. */
+static void test_roll_highest_valid_is_retained(void)
+{
+    roll_hump_config_t cfg = roll_cfg();
+    roll_hump_t h;
+    roll_run_t r;
+
+    roll_hump_init(&h, &cfg);
+    r = roll_run(&h, 400.0, 190.0, 1, 10.0, true, -1.0);
+    CHECK_INT(1, r.finished);
+    CHECK(abs((int)roll_hump_highest_valid_mm(&h) - 30) <= 1);
+    r = roll_run(&h, 160.0, 190.0, -1, 10.0, true, -1.0);
+    CHECK_INT(1, r.finished);
+    CHECK(abs((int)roll_hump_highest_valid_mm(&h) - 30) <= 1);
+    CHECK_INT(2, (int)h.humps_seen);
+}
+
+/* A bump below the minimum height is dropped without an event.  Catches:
+ * reporting noise as a 0 mm hump. */
+static void test_roll_tiny_bump_is_ignored(void)
+{
+    roll_hump_config_t cfg = roll_cfg();
+    roll_hump_t h;
+    roll_run_t r;
+
+    cfg.min_height_mm = 6;
+    roll_hump_init(&h, &cfg);
+    r = roll_run(&h, 50.0, 190.0, 1, 5.0, true, -1.0);
+    CHECK_INT(1, r.started);
+    CHECK_INT(0, r.finished);
+    CHECK_INT(0, (int)h.humps_seen);
+}
+
+/* The car showed a short dip just before the real ramp (roll 47, then 7, then the
+ * hump).  It must stay one hump, not a bogus 4 mm one followed by the real one.
+ * Catches: an end-of-hump time shorter than the dip. */
+static void test_roll_short_dip_does_not_split_a_hump(void)
+{
+    roll_hump_config_t cfg = roll_cfg();
+    roll_hump_t h;
+    roll_hump_input_t in;
+    uint32_t t;
+    int started = 0;
+    int finished = 0;
+
+    roll_hump_init(&h, &cfg);
+    for (t = 0U; t < 6000U; t += STEP_MS) {
+        double roll = 0.0;
+        hump_event_t ev;
+
+        if ((t >= 300U) && (t < 400U)) {
+            roll = 45.0;
+        } else if ((t >= 400U) && (t < 520U)) {
+            roll = 7.0;
+        } else if ((t >= 520U) && (t < 2420U)) {
+            roll = 260.0 * sin(PI_D * (double)(t - 520U) / 1900.0);
+        } else {
+            roll = 0.0;
+        }
+        in.roll_permille = (int16_t)lround(roll);
+        in.distance_mm = (int32_t)((t * 120U) / 1000U);
+        in.distance_valid = true;
+        in.imu_ok = true;
+        in.now_ms = t;
+        ev = roll_hump_update(&h, &in);
+        if (ev == HUMP_EVENT_STARTED) {
+            started++;
+        }
+        if (ev == HUMP_EVENT_FINISHED) {
+            finished++;
+        }
+    }
+    CHECK_INT(1, started);
+    CHECK_INT(1, finished);
+    CHECK(abs((int)roll_hump_last_height_code(&h) - 20) <= 1);
+    CHECK_INT(HUMP_VALID, roll_hump_last_validity(&h));
 }
 
 int main(void)
@@ -580,5 +1029,25 @@ int main(void)
     RUN(test_out_of_range_height_uses_code_127);
     RUN(test_tiny_rise_never_becomes_a_valid_height);
     RUN(test_motion_classification);
+    RUN(test_lift_requires_sustained_out_of_range_tilt);
+    RUN(test_lift_does_not_accumulate_separate_tilt_periods);
+    RUN(test_lift_detects_sustained_near_freefall);
+    RUN(test_rearm_needs_level_1g_and_steady_for_the_hold_time);
+    RUN(test_rearm_refuses_a_tilted_car);
+    RUN(test_rearm_refuses_a_car_being_swung_or_dropped);
+    RUN(test_rearm_does_not_accumulate_separate_periods);
+    RUN(test_roll_for_known_sideways_tilts);
+    RUN(test_pitching_does_not_show_as_roll);
+    RUN(test_roll_with_the_cars_upside_down_board);
+    RUN(test_roll_hump_height_matches_the_fitted_lever);
+    RUN(test_roll_hump_on_the_other_wheel);
+    RUN(test_roll_noise_alone_is_not_a_hump);
+    RUN(test_roll_single_spike_is_not_a_hump);
+    RUN(test_roll_missing_distance_is_low_confidence);
+    RUN(test_roll_long_bump_is_low_confidence);
+    RUN(test_roll_imu_fault_is_reported);
+    RUN(test_roll_highest_valid_is_retained);
+    RUN(test_roll_tiny_bump_is_ignored);
+    RUN(test_roll_short_dip_does_not_split_a_hump);
     return TEST_REPORT();
 }

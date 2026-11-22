@@ -27,6 +27,10 @@
 #define HUMP_MSG_BITS       (TEL_TYPE_BITS + TEL_TS_BITS + TEL_HUMP_BITS + TEL_HIGHEST_BITS)
 #define OBSTACLE_MSG_BITS   (TEL_TYPE_BITS + TEL_TS_BITS + 1U + (5U * TEL_CM_BITS) + 3U + 3U)
 #define HEARTBEAT_BITS      (TEL_TYPE_BITS + 32U + 16U + 8U + 5U + 3U)
+#define SENSORS_MSG_BITS    (TEL_TYPE_BITS + TEL_TS_BITS + (2U * TEL_IR_BITS) + 2U + TEL_BARS_BITS + \
+                             (5U * TEL_COUNT_BITS) + TEL_MAP_BITS + TEL_LETTER_BITS + 2U + 2U + \
+                             (2U * TEL_COUNT_BITS) + TEL_ROLL_BITS + 3U + TEL_US_MM_BITS + 3U + 2U + \
+                             TEL_NETSTATE_BITS + 1U + 1U)
 #define COMMAND_BITS        (TEL_TYPE_BITS + TEL_REQ_BITS + TEL_CMD_BITS + TEL_PARAM_BITS)
 #define ACK_BITS            (TEL_TYPE_BITS + TEL_REQ_BITS + TEL_ACK_BITS)
 
@@ -264,6 +268,103 @@ bool tel_decode_hump(const uint8_t *in, uint16_t len, tel_hump_t *h)
     h->ts10 = (uint16_t)bitr_get(&r, TEL_TS_BITS);
     h->hump_packed = (uint16_t)bitr_get(&r, TEL_HUMP_BITS);
     h->highest_hump_mm = (uint8_t)bitr_get(&r, TEL_HIGHEST_BITS);
+    return !r.underflow;
+}
+
+/* A counter that does not fit its 8 bits is clipped at 255 and the record says so. */
+static uint32_t put_count(bitw_t *w, uint32_t v, uint8_t *saturated)
+{
+    if (v > TEL_COUNT_MAX) {
+        v = TEL_COUNT_MAX;
+        *saturated = 1U;
+    }
+    bitw_put(w, v, TEL_COUNT_BITS);
+    return v;
+}
+
+uint16_t tel_encode_sensors(tel_sensors_t *s, uint8_t *out, uint16_t cap)
+{
+    bitw_t w;
+    uint8_t sat = 0U;
+    uint32_t mm = s->us_mm;
+
+    if (mm > TEL_US_MM_MAX) {
+        mm = TEL_US_MM_MAX;
+        sat = 1U;
+    }
+    bitw_init(&w, out, cap);
+    bitw_put(&w, TEL_TYPE_SENSORS, TEL_TYPE_BITS);
+    bitw_put(&w, s->ts10, TEL_TS_BITS);
+    bitw_put(&w, s->ir_levels, TEL_IR_BITS);
+    bitw_put(&w, s->ir_valid_mask, TEL_IR_BITS);
+    bitw_put(&w, s->pair_on_line ? 1U : 0U, 1U);
+    bitw_put(&w, s->junction_armed ? 1U : 0U, 1U);
+    bitw_put(&w, s->bars_now, TEL_BARS_BITS);
+    (void)put_count(&w, s->bars_done, &sat);
+    (void)put_count(&w, s->decoded, &sat);
+    (void)put_count(&w, s->rejected, &sat);
+    (void)put_count(&w, s->junctions, &sat);
+    (void)put_count(&w, s->executed, &sat);
+    bitw_put(&w, s->map_entries, TEL_MAP_BITS);
+    bitw_put(&w, s->last_letter, TEL_LETTER_BITS);
+    bitw_put(&w, s->motion_state, 2U);
+    bitw_put(&w, s->motion_stopped ? 1U : 0U, 1U);
+    bitw_put(&w, s->encoder_fault ? 1U : 0U, 1U);
+    (void)put_count(&w, s->enc_bad_left, &sat);
+    (void)put_count(&w, s->enc_bad_right, &sat);
+    bitw_put_signed(&w, clamp_i32(s->roll_permille, -1000, 1000), TEL_ROLL_BITS);
+    bitw_put(&w, s->imu_ok ? 1U : 0U, 1U);
+    bitw_put(&w, s->lift_latched ? 1U : 0U, 1U);
+    bitw_put(&w, s->hump_active ? 1U : 0U, 1U);
+    bitw_put(&w, mm, TEL_US_MM_BITS);
+    bitw_put(&w, s->us_valid ? 1U : 0U, 1U);
+    bitw_put(&w, s->us_obstacle ? 1U : 0U, 1U);
+    bitw_put(&w, s->us_fault ? 1U : 0U, 1U);
+    bitw_put(&w, s->servo_aim, 2U);
+    bitw_put(&w, s->net_state, TEL_NETSTATE_BITS);
+    bitw_put(&w, s->link_up ? 1U : 0U, 1U);
+    bitw_put(&w, sat, 1U);
+    s->saturated = sat;
+    return w.overflow ? 0U : bitw_bytes(&w);
+}
+
+bool tel_decode_sensors(const uint8_t *in, uint16_t len, tel_sensors_t *s)
+{
+    bitr_t r;
+
+    if (!open_reader(&r, in, len, TEL_TYPE_SENSORS, SENSORS_MSG_BITS)) {
+        return false;
+    }
+    s->ts10 = (uint16_t)bitr_get(&r, TEL_TS_BITS);
+    s->ir_levels = (uint8_t)bitr_get(&r, TEL_IR_BITS);
+    s->ir_valid_mask = (uint8_t)bitr_get(&r, TEL_IR_BITS);
+    s->pair_on_line = bitr_get(&r, 1U) != 0U;
+    s->junction_armed = bitr_get(&r, 1U) != 0U;
+    s->bars_now = (uint8_t)bitr_get(&r, TEL_BARS_BITS);
+    s->bars_done = bitr_get(&r, TEL_COUNT_BITS);
+    s->decoded = bitr_get(&r, TEL_COUNT_BITS);
+    s->rejected = bitr_get(&r, TEL_COUNT_BITS);
+    s->junctions = bitr_get(&r, TEL_COUNT_BITS);
+    s->executed = bitr_get(&r, TEL_COUNT_BITS);
+    s->map_entries = (uint8_t)bitr_get(&r, TEL_MAP_BITS);
+    s->last_letter = (uint8_t)bitr_get(&r, TEL_LETTER_BITS);
+    s->motion_state = (uint8_t)bitr_get(&r, 2U);
+    s->motion_stopped = bitr_get(&r, 1U) != 0U;
+    s->encoder_fault = bitr_get(&r, 1U) != 0U;
+    s->enc_bad_left = bitr_get(&r, TEL_COUNT_BITS);
+    s->enc_bad_right = bitr_get(&r, TEL_COUNT_BITS);
+    s->roll_permille = (int16_t)bitr_get_signed(&r, TEL_ROLL_BITS);
+    s->imu_ok = bitr_get(&r, 1U) != 0U;
+    s->lift_latched = bitr_get(&r, 1U) != 0U;
+    s->hump_active = bitr_get(&r, 1U) != 0U;
+    s->us_mm = (uint16_t)bitr_get(&r, TEL_US_MM_BITS);
+    s->us_valid = bitr_get(&r, 1U) != 0U;
+    s->us_obstacle = bitr_get(&r, 1U) != 0U;
+    s->us_fault = bitr_get(&r, 1U) != 0U;
+    s->servo_aim = (uint8_t)bitr_get(&r, 2U);
+    s->net_state = (uint8_t)bitr_get(&r, TEL_NETSTATE_BITS);
+    s->link_up = bitr_get(&r, 1U) != 0U;
+    s->saturated = (uint8_t)bitr_get(&r, 1U);
     return !r.underflow;
 }
 

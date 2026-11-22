@@ -1,0 +1,18 @@
+CC ?= cc
+CFLAGS ?= -std=c11 -O2 -Wall -Wextra -Werror -pedantic
+INC = -Imock_pico -I../app_program
+SRC = test_telemetry_crosscore_demo.c mock_mutex_port.c \
+      ../app_program/telemetry_crosscore_demo.c \
+      ../app_program/telemetry_rtos.c ../app_program/telemetry_inbox.c \
+      ../app_program/telemetry_queue.c ../app_program/telemetry_hump_demo.c \
+      ../app_program/telemetry_bits.c
+
+.PHONY: test clean
+test: test_telemetry_crosscore_demo
+	./test_telemetry_crosscore_demo
+
+test_telemetry_crosscore_demo: $(SRC)
+	$(CC) $(CFLAGS) $(INC) -o $@ $(SRC)
+
+clean:
+	rm -f test_telemetry_crosscore_demo

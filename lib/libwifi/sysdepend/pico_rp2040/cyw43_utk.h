@@ -9,6 +9,8 @@
 
 #include <stdint.h>
 
+#include "cyw43_utk_join.h"
+
 #define CYW43_UTK_DNS_TEST_HOSTNAME "example.com"
 
 #define CYW43_UDP_RING     32
@@ -33,6 +35,15 @@ typedef struct {
     volatile int32_t link_status;
     volatile uint32_t link_up;
     volatile uint32_t join_elapsed_ms;
+    volatile uint32_t join_state;
+    volatile uint32_t join_attempts;
+    volatile uint32_t join_failures;
+    volatile uint32_t join_successes;
+    volatile uint32_t join_recoveries;
+    volatile uint32_t link_losses;
+    volatile uint32_t join_no_ip_rejoins;
+    volatile uint32_t join_retry_delay_ms;
+    volatile uint32_t join_retry_remaining_ms;
     volatile int32_t link_rssi;
     uint8_t bssid[6];
     volatile uint32_t lwip_initialized;
@@ -47,13 +58,63 @@ typedef struct {
     volatile uint32_t dhcp_enabled;
     volatile uint32_t dhcp_started;
     volatile uint32_t dhcp_complete;
+    volatile uint32_t dhcp_timed_out;
     volatile int32_t dhcp_result;
     volatile uint32_t dhcp_elapsed_ms;
     volatile uint32_t dhcp_tries;
+    volatile uint32_t dhcp_gateway_available;
+    volatile uint32_t dhcp_dns_available;
     uint8_t dhcp_address[4];
     uint8_t dhcp_netmask[4];
     uint8_t dhcp_gateway[4];
     uint8_t dhcp_dns[4];
+    volatile uint32_t mqtt_initialized;
+    volatile uint32_t mqtt_state;
+    volatile uint32_t mqtt_tcp_active;
+    volatile uint32_t mqtt_connects_started;
+    volatile uint32_t mqtt_sessions_online;
+    volatile uint32_t mqtt_session_failures;
+    volatile uint32_t mqtt_poll_calls;
+    volatile uint32_t mqtt_last_poll_ms;
+    volatile uint32_t mqtt_max_poll_gap_ms;
+    volatile uint32_t mqtt_owner_calls;
+    volatile uint32_t mqtt_owner_last_ms;
+    volatile uint32_t mqtt_owner_max_gap_ms;
+    volatile uint32_t mqtt_last_tx_ms;
+    volatile uint32_t mqtt_ping_attempts;
+    volatile uint32_t mqtt_pings_queued;
+    volatile uint32_t mqtt_ping_responses;
+    volatile uint32_t mqtt_waiting_pingqueue;
+    volatile uint32_t mqtt_ping_queue_timeouts;
+    volatile uint32_t mqtt_waiting_pingresp;
+    volatile uint32_t mqtt_tcp_write_calls;
+    volatile uint32_t mqtt_tcp_write_failures;
+    volatile uint32_t mqtt_tcp_write_fatal_errors;
+    volatile uint32_t mqtt_tcp_output_failures;
+    volatile uint32_t mqtt_tcp_output_pending;
+    volatile uint32_t mqtt_tcp_output_retries;
+    volatile uint32_t mqtt_tcp_output_timeouts;
+    volatile uint32_t mqtt_tcp_sent_callbacks;
+    volatile uint32_t mqtt_tcp_acked_bytes;
+    volatile uint32_t mqtt_last_tcp_ack_ms;
+    volatile int32_t mqtt_last_tcp_write_result;
+    volatile int32_t mqtt_last_tcp_output_result;
+    volatile uint32_t mqtt_tcp_errors;
+    volatile int32_t mqtt_last_tcp_error;
+    volatile uint32_t mqtt_disconnect_callbacks;
+    volatile uint32_t mqtt_diagnostic_publishes;
+    volatile uint32_t mqtt_diagnostic_publish_failures;
+    volatile uint32_t mqtt_boot_nonce;
+    volatile uint32_t mqtt_reset_reason;
+    volatile uint32_t mqtt_timer_tick_config;
+    volatile uint32_t mqtt_usb_irq_count;
+    volatile uint32_t mqtt_usb_service_count;
+    volatile uint32_t mqtt_usb_event_count;
+    volatile uint32_t mqtt_usb_link_state;
+    volatile uint32_t mqtt_wifi_link_changes;
+    volatile uint32_t mqtt_dhcp_changes;
+    volatile uint32_t mqtt_last_wifi_change_ms;
+    volatile uint32_t mqtt_last_dhcp_change_ms;
     volatile uint32_t dns_enabled;
     volatile uint32_t dns_started;
     volatile uint32_t dns_complete;

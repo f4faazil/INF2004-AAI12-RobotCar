@@ -1,0 +1,20 @@
+{
+  "name": "aai12-robot-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local MQTT telemetry dashboard for the INF2004 AAI12 robot car",
+  "type": "module",
+  "scripts": {
+    "start": "node server/index.js",
+    "demo": "DEMO_MODE=true node server/index.js",
+    "map": "node tools/send-map.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "mqtt": "^5.10.4",
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

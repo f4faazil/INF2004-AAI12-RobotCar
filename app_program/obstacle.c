@@ -394,13 +394,19 @@ static uint16_t side_clearance(const obstacle_config_t *cfg, const scan_point_t 
 {
     int idx = (int)from + step;
     int last_far = -1;
+    uint8_t far_run = 0U;
 
     while ((idx >= 0) && (idx < (int)n) && (pts[idx].kind == SCAN_POINT_FAR)) {
         last_far = idx;
+        far_run++;
         idx += step;
     }
     if (last_far < 0) {
         return 0U;
+    }
+    if ((cfg->sweep_clear_min_rays > 0U) && (far_run >= cfg->sweep_clear_min_rays) &&
+        ((idx < 0) || (idx >= (int)n))) {
+        return US_MAX_RANGE_MM;                 /* clear all the way to the end of the sweep */
     }
     {
         int16_t sin_pm = trig_sin_permille(pts[last_far].angle_deg);
@@ -543,6 +549,12 @@ void obstacle_profile_build(const obstacle_config_t *cfg, const scan_point_t *pt
         right_pad = low_is_left ? pad_hi : pad_lo;
         left_edge = x_min - left_pad;
         right_edge = x_max + right_pad;
+        if ((cfg->max_width_mm > 0U) && ((right_edge - left_edge) > (int32_t)cfg->max_width_mm)) {
+            const int32_t mid = (left_edge + right_edge) / HALF;
+
+            left_edge = mid - ((int32_t)cfg->max_width_mm / HALF);
+            right_edge = mid + ((int32_t)cfg->max_width_mm / HALF);
+        }
 
         p->left_edge_x_mm = (int16_t)left_edge;
         p->right_edge_x_mm = (int16_t)right_edge;
@@ -566,6 +578,19 @@ void obstacle_profile_build(const obstacle_config_t *cfg, const scan_point_t *pt
 }
 
 /* ---- bypass plan ------------------------------------------------------- */
+
+/* How far the axle must travel from the stop for the car to be clear of the obstacle. */
+static int32_t bypass_forward_mm(const obstacle_config_t *cfg, int32_t distance_ahead_mm)
+{
+    if (cfg->axle_to_rear_mm > 0U) {
+        return distance_ahead_mm + (int32_t)cfg->sensor_to_axle_mm +
+               (int32_t)cfg->assumed_depth_mm + (int32_t)cfg->axle_to_rear_mm +
+               (int32_t)cfg->forward_margin_mm + (int32_t)cfg->forward_extra_mm;
+    }
+    return distance_ahead_mm + (int32_t)cfg->assumed_depth_mm +
+           (int32_t)cfg->robot_length_mm + (int32_t)cfg->margin_mm +
+           (int32_t)cfg->forward_extra_mm;
+}
 
 static void add_step(bypass_plan_t *plan, bool is_turn, int32_t value)
 {
@@ -636,8 +661,7 @@ void obstacle_plan(const obstacle_config_t *cfg, const obstacle_profile_t *p,
     }
     go_left = left_ok && (!right_ok || (lateral_left <= lateral_right));
 
-    forward = (int32_t)p->forward_mm + (int32_t)cfg->assumed_depth_mm +
-              (int32_t)cfg->robot_length_mm + (int32_t)cfg->margin_mm;
+    forward = bypass_forward_mm(cfg, (int32_t)p->forward_mm);
 
     plan_clear(plan, go_left ? PLAN_BYPASS_LEFT : PLAN_BYPASS_RIGHT, PLAN_REASON_OK);
     {
@@ -651,4 +675,83 @@ void obstacle_plan(const obstacle_config_t *cfg, const obstacle_profile_t *p,
         add_step(plan, true, -sign * 90);
         plan->return_leg_mm = (uint16_t)lateral;
     }
+}
+
+/* How far the outermost rays on one end of the sweep read; a clear or no-echo ray
+ * counts as far.  'from_low_end' picks the low angles. */
+static int32_t end_distance_mm(const scan_point_t *pts, uint8_t n, bool from_low_end)
+{
+    int32_t sum = 0;
+    uint8_t taken = 0U;
+    uint8_t i;
+
+    for (i = 0U; (i < n) && (taken < 2U); i++) {
+        const scan_point_t *q = from_low_end ? &pts[i] : &pts[n - 1U - i];
+
+        sum += (q->kind == SCAN_POINT_OBSTACLE) ? (int32_t)q->distance_mm : (int32_t)US_MAX_RANGE_MM;
+        taken++;
+    }
+    return (taken == 0U) ? 0 : (sum / (int32_t)taken);
+}
+
+bool obstacle_blind_plan(const obstacle_config_t *cfg, const scan_point_t *pts, uint8_t n,
+                         const obstacle_profile_t *p, bypass_plan_t *plan)
+{
+    const int32_t half = (int32_t)cfg->robot_width_mm / HALF;
+    const int32_t corridor = half + (int32_t)cfg->margin_mm;
+    int32_t lateral_left;
+    int32_t lateral_right;
+    int32_t low_end;
+    int32_t high_end;
+    int32_t right_end;
+    int32_t left_end;
+    bool go_right;
+    int32_t lateral;
+    int32_t forward;
+    int32_t sign;
+
+    if (!p->valid || !p->obstacle_found || (n == 0U)) {
+        return false;
+    }
+    if ((p->left_edge_x_mm > corridor) || (p->right_edge_x_mm < -corridor)) {
+        return false;                           /* beside the path, not in it */
+    }
+    /* The wide beam makes the outer rays read the box's distance at an angle, so their forward
+     * component (forward_mm) comes out short.  The closest reading is the distance straight ahead. */
+    if ((int32_t)p->closest_mm < (int32_t)cfg->min_turn_distance_mm) {
+        return false;                           /* too close to turn */
+    }
+
+    lateral_left = corridor - p->left_edge_x_mm;
+    lateral_right = corridor + p->right_edge_x_mm;
+    low_end = end_distance_mm(pts, n, true);
+    high_end = end_distance_mm(pts, n, false);
+    right_end = cfg->left_is_high_angle ? low_end : high_end;
+    left_end = cfg->left_is_high_angle ? high_end : low_end;
+    go_right = (right_end >= left_end);
+
+    if (cfg->blind_side != 0) {
+        go_right = (cfg->blind_side < 0);       /* the course says which side is free */
+    } else if (go_right && (lateral_right > (int32_t)cfg->recovery_limit_mm)) {
+        go_right = false;
+    } else if (!go_right && (lateral_left > (int32_t)cfg->recovery_limit_mm)) {
+        go_right = true;
+    } else {
+        /* the preferred side stays */
+    }
+    lateral = go_right ? lateral_right : lateral_left;
+    if (lateral > (int32_t)cfg->recovery_limit_mm) {
+        return false;                           /* too far round on both sides */
+    }
+    sign = go_right ? -1 : 1;
+    forward = bypass_forward_mm(cfg, (int32_t)p->closest_mm);
+
+    plan_clear(plan, go_right ? PLAN_BYPASS_RIGHT : PLAN_BYPASS_LEFT, PLAN_REASON_OK);
+    add_step(plan, true, sign * 90);
+    add_step(plan, false, lateral);
+    add_step(plan, true, -sign * 90);
+    add_step(plan, false, forward);
+    add_step(plan, true, -sign * 90);
+    plan->return_leg_mm = (uint16_t)lateral;
+    return true;
 }

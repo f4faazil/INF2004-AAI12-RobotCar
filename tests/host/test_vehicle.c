@@ -9,6 +9,7 @@
  */
 #include <stddef.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "telemetry.h"
@@ -64,6 +65,7 @@ static vehicle_config_t make_cfg(void)
     c.curve_mm_s = 80;
     c.hump_mm_s = 100;
     c.creep_mm_s = 60;
+    c.recover_mm_s = 60;
     c.approach_mm_s = 60;
     c.junction_advance_mm = 70;
     c.turn_deg = 90;
@@ -808,7 +810,7 @@ static void test_left_bypass_runs_the_plan_then_recovers_the_line(void)
     CHECK_INT(680, h.log[first + 2].distance_mm);
     CHECK_INT(-90, h.log[first + 3].angle_deg);
 
-    cycles(&h, 5);                                       /* creeping */
+    cycles(&h, 80);                                      /* creeping: 48 mm, past the 40 mm before a line counts */
     CHECK_INT(MOTION_CMD_DRIVE, h.log[h.log_n - 1].type);
     CHECK_INT(60, h.log[h.log_n - 1].speed_mm_s);
 
@@ -827,6 +829,346 @@ static void test_left_bypass_runs_the_plan_then_recovers_the_line(void)
         CHECK(realigned);
     }
     CHECK(saw_event(&h, TEL_EVT_RECOVERED, 0U));
+}
+
+/* The IR sensors sit ahead of the wheel axle, so on finding the line the car must drive on
+ * by recover_advance_mm and only then turn back to the line's heading.  Turning at once
+ * swings the line off to the side and the car loses it (seen on the track).  Catches: the
+ * advance missing, or the turn before it. */
+static void test_recovery_drives_on_before_turning_back(void)
+{
+    h_t h;
+    int k;
+    int move_k = -1;
+
+    h_init(&h);
+    h.vc.cfg.recover_advance_mm = 100;
+    to_follow(&h);
+    h.in.obstacle_present = true;
+    CHECK(until(&h, VC_OBSTACLE_SCAN, 100));
+    h.in.obstacle_present = false;
+    line_gone(&h);
+    h.in.scan_done = true;
+    h.in.plan = left_plan();
+    h_cycle(&h);
+    CHECK(until(&h, VC_RECOVER_LINE, 400));
+    cycles(&h, 80);                                      /* creeping: 48 mm, past the 40 mm before a line counts */
+    line_ok(&h, 0, 0);
+    CHECK(until(&h, VC_FOLLOW, 300));
+    for (k = h.log_n - 1; k >= 0; k--) {
+        if ((h.log[k].type == MOTION_CMD_MOVE) && (h.log[k].distance_mm == 100)) {
+            move_k = k;
+            break;
+        }
+    }
+    CHECK(move_k >= 0);
+    CHECK((move_k + 1) < h.log_n);
+    CHECK_INT(MOTION_CMD_TURN, h.log[move_k + 1].type);
+    CHECK_INT(90, h.log[move_k + 1].angle_deg);
+    CHECK(saw_event(&h, TEL_EVT_RECOVERED, 0U));
+}
+
+/* ---- awareness during the bypass --------------------------------------- */
+
+/* A bypass test rig: the sonar watch is on, and each finite command takes 3 s so the legs
+ * last longer than the sonar blanking period. */
+static void bypass_rig(h_t *h)
+{
+    h_init(h);
+    h->vc.cfg.bypass_stop_mm = 100U;
+    h->vc.cfg.bypass_blank_ms = 500U;
+    h->vc.cfg.bypass_hold_ms = 4000U;
+    to_follow(h);
+    h->finite_ms = 3000U;                                  /* legs outlast the sonar blanking */
+    h->in.obstacle_present = true;
+    (void)until(h, VC_OBSTACLE_SCAN, 100);
+    h->in.obstacle_present = false;
+    line_gone(h);
+    h->in.scan_done = true;
+    h->in.plan = left_plan();
+    h_cycle(h);
+}
+
+/* Cycle until the car has started a MOVE of 'mm'. */
+static bool until_move(h_t *h, int mm, int max)
+{
+    int i;
+
+    for (i = 0; i < max; i++) {
+        const motion_cmd_t *last = &h->log[h->log_n - 1];
+
+        if ((last->type == MOTION_CMD_MOVE) && (last->distance_mm == mm)) {
+            return true;
+        }
+        h_cycle(h);
+    }
+    return false;
+}
+
+static void sonar(h_t *h, uint16_t mm)
+{
+    h->in.obstacle_mm_valid = true;
+    h->in.obstacle_mm = mm;
+}
+
+/* The sonar used to be ignored once the bypass began: a box (or a hand) in the way of the
+ * sideways leg was driven into.  Now the car stops, waits for the way to clear, and drives
+ * only what is left of the leg.  Catches: no stop; a restart of the whole leg. */
+static void test_bypass_stops_for_something_in_the_way_then_finishes_the_leg(void)
+{
+    h_t h;
+    int stops;
+
+    bypass_rig(&h);
+    CHECK(until_move(&h, 140, 800));
+    cycles(&h, 60);                                         /* the leg is under way ... */
+    h.m_distance_um = 60000;                                /* ... 60 mm along */
+    cycles(&h, 2);
+    stops = count_type(&h, MOTION_CMD_STOP);
+    sonar(&h, 300U);
+    cycles(&h, 5);
+    CHECK_INT(stops, count_type(&h, MOTION_CMD_STOP));      /* clear: it carries on */
+
+    sonar(&h, 80U);
+    cycles(&h, 3);
+    CHECK_INT(stops + 1, count_type(&h, MOTION_CMD_STOP));
+    CHECK_INT(VC_BYPASS, h.out.state);
+    cycles(&h, 100);
+    CHECK_INT(MOTION_CMD_STOP, h.log[h.log_n - 1].type);    /* still held */
+
+    sonar(&h, 300U);
+    cycles(&h, 20);
+    CHECK_INT(MOTION_CMD_STOP, h.log[h.log_n - 1].type);    /* it must stay clear a while */
+    cycles(&h, 40);
+    CHECK_INT(MOTION_CMD_MOVE, h.log[h.log_n - 1].type);
+    CHECK(abs(h.log[h.log_n - 1].distance_mm - 80) <= 3);   /* 140 - 60, to the odometer's rounding */
+    CHECK_INT(VC_BYPASS, h.out.state);
+}
+
+/* The sonar sees the box itself while the car turns, and its median holds old readings just
+ * after: neither may stop the bypass.  Catches: stopping on the first turn. */
+static void test_bypass_ignores_the_sonar_while_turning_and_just_after(void)
+{
+    h_t h;
+    int stops;
+
+    bypass_rig(&h);
+    stops = count_type(&h, MOTION_CMD_STOP);
+    sonar(&h, 60U);                                         /* the box, right in front */
+    CHECK(until_move(&h, 140, 800));
+    cycles(&h, 40);                                         /* 400 ms into the leg: blanked */
+    CHECK_INT(stops, count_type(&h, MOTION_CMD_STOP));
+    cycles(&h, 30);                                         /* past the blanking: now it counts */
+    CHECK_INT(stops + 1, count_type(&h, MOTION_CMD_STOP));
+}
+
+/* A way that never clears is a fault, not a wait forever. */
+static void test_bypass_blocked_too_long_is_a_fault(void)
+{
+    h_t h;
+
+    bypass_rig(&h);
+    CHECK(until_move(&h, 140, 800));
+    cycles(&h, 60);
+    sonar(&h, 50U);
+    CHECK(until(&h, VC_FAULT, 700));
+    CHECK((h.raised & FAULT_NO_SAFE_PATH) != 0U);
+}
+
+/* A line seen on the pass-by leg is not the line to rejoin: on the real circuit a line crosses the
+ * way beside the box.  The car must finish the leg and turn toward its line, not follow the
+ * crossing line (it did, and then lost it and searched).  The first sideways leg starts on the
+ * line, so seeing it there is no sign either.  Catches: leaving the bypass when any line is seen. */
+static void test_bypass_ignores_a_line_seen_on_the_way_past_the_box(void)
+{
+    h_t h;
+
+    bypass_rig(&h);
+    CHECK(until_move(&h, 140, 800));
+    cycles(&h, 60);
+    line_ok(&h, 0, 0);                                      /* the line the car just left */
+    cycles(&h, 60);
+    CHECK_INT(VC_BYPASS, h.out.state);
+
+    line_gone(&h);
+    CHECK(until_move(&h, 680, 800));
+    cycles(&h, 60);
+    line_ok(&h, 0, 0);                                      /* a crossing line beside the box */
+    cycles(&h, 60);
+    CHECK_INT(VC_BYPASS, h.out.state);                      /* still passing the box */
+    CHECK(until(&h, VC_RECOVER_LINE, 1500));                /* the leg ends, the car turns back */
+}
+
+/* On the drive back a line seen too soon is a crossing line, not the one being rejoined: the
+ * car drives on over it and accepts the line only once it has covered most of the planned way
+ * back.  Catches: stopping on the first line seen. */
+static void test_recovery_drives_on_over_a_crossing_line(void)
+{
+    h_t h;
+
+    h_init(&h);
+    to_follow(&h);
+    h.in.obstacle_present = true;
+    CHECK(until(&h, VC_OBSTACLE_SCAN, 100));
+    h.in.obstacle_present = false;
+    line_gone(&h);
+    h.in.scan_done = true;
+    h.in.plan = left_plan();                                /* the way back is 140 mm */
+    h_cycle(&h);
+    CHECK(until(&h, VC_RECOVER_LINE, 400));
+    cycles(&h, 10);
+    line_ok(&h, 0, 0);                                      /* a line almost at once: a crossing line */
+    cycles(&h, 20);
+    CHECK_INT(VC_RECOVER_LINE, h.out.state);
+    CHECK_INT(MOTION_CMD_DRIVE, h.log[h.log_n - 1].type);   /* still driving, no advance or turn */
+    line_gone(&h);
+    cycles(&h, 80);                                         /* over the crossing line, most of the way */
+    line_ok(&h, 0, 0);                                      /* now it is the line */
+    CHECK(until(&h, VC_FOLLOW, 400));
+    CHECK(saw_event(&h, TEL_EVT_RECOVERED, 0U));
+}
+
+/* ---- looking at the box while passing it -------------------------------- */
+
+static void side_rig(h_t *h)
+{
+    bypass_rig(h);
+    h->vc.cfg.side_aim_deg = 25;
+    h->vc.cfg.side_min_mm = 50U;
+    h->vc.cfg.side_max_mm = 700U;
+    h->vc.cfg.side_loss_ahead_pct = 60U;
+    h->vc.cfg.side_tail_mm = 235U;
+    h->vc.cfg.side_extend_mm = 100U;
+    h->vc.cfg.side_extend_max_mm = 300U;
+}
+
+/* One raw sonar reading (70 ms apart): an echo at 'mm', or none when mm is 0. */
+static void side_reading(h_t *h, uint16_t mm)
+{
+    h->in.side_seq++;
+    h->in.side_echo = (mm != 0U);
+    h->in.side_mm = mm;
+    h->in.obstacle_mm_valid = (mm != 0U);              /* the median follows the same readings */
+    h->in.obstacle_mm = mm;
+    cycles(h, 7);
+}
+
+/* The sonar looks at the box from the turn before the leg beside it until that leg ends, and
+ * is straight ahead the rest of the time.  A left bypass leaves the box on the right.
+ * Catches: looking at it the wrong way; not looking; staying tilted afterwards. */
+static void test_sonar_tilts_toward_the_box_beside_it_only(void)
+{
+    h_t h;
+
+    side_rig(&h);
+    CHECK_INT(0, h.out.sonar_aim);                          /* turning away: ahead */
+    CHECK(until_move(&h, 140, 800));
+    CHECK_INT(0, h.out.sonar_aim);                          /* sideways leg: ahead */
+    cycles(&h, 400);                                        /* the leg and the next turn start */
+    CHECK_INT(-1, h.out.sonar_aim);                         /* turning back: look at the box (right) */
+    CHECK(until_move(&h, 680, 800));
+    CHECK_INT(-1, h.out.sonar_aim);
+    CHECK(until(&h, VC_RECOVER_LINE, 1500));
+    CHECK_INT(0, h.out.sonar_aim);                          /* going back to the line: ahead */
+}
+
+/* The box is seen along the leg and then not: the leg is cut to what the rear needs.  Here the
+ * last range was 200 mm, lost at 300 mm of travel: 300 + 200 x 60% + 235 = 655 mm in all, so
+ * 355 mm are left from the 300 mm travelled.  Catches: no cut; the planned length kept. */
+static void test_leg_beside_the_box_ends_when_the_box_is_passed(void)
+{
+    h_t h;
+    int i;
+
+    side_rig(&h);
+    CHECK(until_move(&h, 680, 1500));
+    cycles(&h, 55);                                         /* past the blanking */
+    for (i = 0; i < 5; i++) {
+        side_reading(&h, 200U);                             /* the box's side */
+    }
+    h.m_distance_um = 300000;                               /* 300 mm along ... */
+    cycles(&h, 2);
+    for (i = 0; i < 4; i++) {
+        side_reading(&h, 0U);                               /* ... the echo is gone */
+    }
+    CHECK_INT(MOTION_CMD_MOVE, h.log[h.log_n - 1].type);
+    CHECK(abs(h.log[h.log_n - 1].distance_mm - 355) <= 4);
+    CHECK(saw_event(&h, TEL_EVT_OBSTACLE, 2U));
+}
+
+/* A box that was never seen (an echo that does not come back from its side) leaves the planned
+ * leg alone: the sonar may only shorten the leg when it saw the box first.  Catches: cutting
+ * the leg because of a missing echo. */
+static void test_leg_is_not_cut_if_the_box_was_never_seen(void)
+{
+    h_t h;
+    int i;
+    int moves;
+
+    side_rig(&h);
+    CHECK(until_move(&h, 680, 1500));
+    cycles(&h, 55);
+    moves = count_type(&h, MOTION_CMD_MOVE);
+    for (i = 0; i < 8; i++) {
+        side_reading(&h, 0U);
+    }
+    CHECK_INT(moves, count_type(&h, MOTION_CMD_MOVE));
+}
+
+/* A box deeper than assumed is still in view when the planned leg ends: the car goes on a
+ * little at a time, not past the limit, and turns only once the box is no longer seen.
+ * Catches: turning toward a box that is still beside the car; no limit. */
+static void test_leg_goes_on_while_the_box_is_still_beside_the_car(void)
+{
+    h_t h;
+    int i;
+    int extra = 0;
+
+    side_rig(&h);
+    CHECK(until_move(&h, 680, 1500));
+    cycles(&h, 55);
+    for (i = 0; i < 4; i++) {
+        side_reading(&h, 300U);
+    }
+    for (i = 0; i < 400; i++) {                             /* the leg ends, the box is still there */
+        side_reading(&h, 300U);
+        if ((h.log[h.log_n - 1].type == MOTION_CMD_MOVE) && (h.log[h.log_n - 1].distance_mm == 100)) {
+            extra++;
+            h.log[h.log_n - 1].distance_mm = 0;             /* count each new command once */
+        }
+        if (h.out.state != VC_BYPASS) {
+            break;
+        }
+    }
+    CHECK_INT(3, extra);                                    /* 300 mm in 100 mm steps, then on */
+    CHECK(saw_event(&h, TEL_EVT_OBSTACLE, 3U));
+}
+
+/* On the drive back to the line the sonar still watches, and the time spent waiting does not
+ * use up the 5 s recovery limit.  Catches: driving on into something; a fault from a pause. */
+static void test_recovery_drive_waits_for_the_way_and_keeps_its_time_limit(void)
+{
+    h_t h;
+    int stops;
+
+    bypass_rig(&h);
+    h.finite_ms = 100U;                                     /* quick legs: we want the recovery */
+    CHECK(until(&h, VC_RECOVER_LINE, 800));
+    cycles(&h, 60);
+    stops = count_type(&h, MOTION_CMD_STOP);
+    sonar(&h, 70U);
+    cycles(&h, 3);
+    CHECK_INT(stops + 1, count_type(&h, MOTION_CMD_STOP));
+    cycles(&h, 300);                                        /* 3 s waiting: over the 5 s with the drive */
+    CHECK_INT(VC_RECOVER_LINE, h.out.state);
+
+    sonar(&h, 400U);
+    cycles(&h, 60);
+    CHECK_INT(MOTION_CMD_DRIVE, h.log[h.log_n - 1].type);
+    cycles(&h, 250);                                        /* driving again, within its own 5 s */
+    CHECK_INT(VC_RECOVER_LINE, h.out.state);
+    line_ok(&h, 0, 0);
+    CHECK(until(&h, VC_FOLLOW, 300));
 }
 
 /* The recovery is bounded: no line within 5 s is a fault. */
@@ -855,7 +1197,7 @@ static void test_recovery_distance_limit(void)
     uint32_t t_recover = 0U;
 
     h_init(&h);
-    h.vc.cfg.creep_mm_s = 300;                           /* 3 mm per cycle */
+    h.vc.cfg.recover_mm_s = 300;                         /* 3 mm per cycle */
     to_follow(&h);
     h.in.obstacle_present = true;
     CHECK(until(&h, VC_OBSTACLE_SCAN, 100));
@@ -1003,6 +1345,58 @@ static void test_stop_fault_stops_the_car_in_any_running_state(void)
     }
 }
 
+/* An IMU lift indication is stop-class and reported to telemetry.  START and CLEAR_FAULTS cannot clear it while it is
+ * set.  It clears only when the IMU task clears the fault (the car is back on the floor, level and steady); the car then
+ * stays STOPPED until START, and START works again without a reboot.  Catches: a latch that needs a reboot; a car that
+ * starts by itself when it is put down. */
+static void test_imu_lift_stop_holds_until_the_imu_clears_it(void)
+{
+    h_t h;
+    int drives;
+
+    h_init(&h);
+    to_follow(&h);
+    h.in.faults = FAULT_IMU_LIFT;
+    h_cycle(&h);
+    CHECK_INT(VC_STOPPED, h.out.state);
+    CHECK_INT(MOTION_CMD_STOP, h.log[h.log_n - 1].type);
+    CHECK_INT(TEL_EVT_FAULT, h.out.events[0].code);
+    CHECK_INT(FAULT_IMU_LIFT, h.out.events[0].arg);
+    drives = count_type(&h, MOTION_CMD_DRIVE);
+
+    /* the fault is still set: START and CLEAR_FAULTS are refused */
+    h.in.start_pressed = true;
+    h.in.remote = VC_REMOTE_CLEAR_FAULTS;
+    cycles(&h, 5);
+    CHECK_INT(VC_STOPPED, h.out.state);
+    CHECK_INT(drives, count_type(&h, MOTION_CMD_DRIVE));
+    h.in.start_pressed = false;
+    h.in.remote = 0U;
+    cycles(&h, 5);
+    CHECK_INT(drives, count_type(&h, MOTION_CMD_DRIVE));
+
+    /* the IMU task re-arms (the car is on the floor): the fault clears, the car stays stopped, and says so */
+    h.in.faults = 0U;
+    h_cycle(&h);
+    CHECK(saw_event(&h, TEL_EVT_FAULT_CLEAR, (uint16_t)FAULT_IMU_LIFT));
+    cycles(&h, 20);
+    CHECK_INT(VC_STOPPED, h.out.state);
+    CHECK_INT(drives, count_type(&h, MOTION_CMD_DRIVE));    /* it does not start by itself */
+
+    /* START now works, without a reboot */
+    h.in.start_pressed = true;
+    h_cycle(&h);
+    h.in.start_pressed = false;
+    cycles(&h, 5);
+    CHECK_INT(VC_FOLLOW, h.out.state);
+    CHECK(count_type(&h, MOTION_CMD_DRIVE) > drives);
+
+    /* and a second lift stops it again */
+    h.in.faults = FAULT_IMU_LIFT;
+    cycles(&h, 3);
+    CHECK_INT(VC_STOPPED, h.out.state);
+}
+
 /* An informational fault does not stop the car. */
 static void test_informational_fault_does_not_stop(void)
 {
@@ -1098,27 +1492,35 @@ static void test_remote_policy(void)
     uint8_t bit = 0U;
 
     CHECK_INT(TEL_ACK_REJECTED_RUNNING,
-              vehicle_remote_policy(VC_FOLLOW, true, TEL_CMD_START, &bit));
+              vehicle_remote_policy(VC_FOLLOW, true, false, TEL_CMD_START, &bit));
     CHECK_INT(TEL_ACK_REJECTED_RUNNING,
-              vehicle_remote_policy(VC_FOLLOW, true, TEL_CMD_CALIBRATE, &bit));
+              vehicle_remote_policy(VC_FOLLOW, true, false, TEL_CMD_CALIBRATE, &bit));
     CHECK_INT(TEL_ACK_REJECTED_RUNNING,
-              vehicle_remote_policy(VC_OBSTACLE_SCAN, true, TEL_CMD_CLEAR_FAULTS, &bit));
+              vehicle_remote_policy(VC_OBSTACLE_SCAN, true, false, TEL_CMD_CLEAR_FAULTS, &bit));
 
-    CHECK_INT(TEL_ACK_RECEIVED, vehicle_remote_policy(VC_FOLLOW, true, TEL_CMD_STOP, &bit));
+    CHECK_INT(TEL_ACK_RECEIVED,
+              vehicle_remote_policy(VC_FOLLOW, true, false, TEL_CMD_STOP, &bit));
     CHECK_INT(VC_REMOTE_STOP, bit);
     CHECK_INT(TEL_ACK_REJECTED_RUNNING,
-              vehicle_remote_policy(VC_FOLLOW, false, TEL_CMD_STOP, &bit));
+              vehicle_remote_policy(VC_FOLLOW, false, false, TEL_CMD_STOP, &bit));
 
-    CHECK_INT(TEL_ACK_RECEIVED, vehicle_remote_policy(VC_IDLE, true, TEL_CMD_START, &bit));
+    CHECK_INT(TEL_ACK_RECEIVED,
+              vehicle_remote_policy(VC_IDLE, true, false, TEL_CMD_START, &bit));
     CHECK_INT(VC_REMOTE_START, bit);
-    CHECK_INT(TEL_ACK_RECEIVED, vehicle_remote_policy(VC_STOPPED, true, TEL_CMD_CALIBRATE, &bit));
+    CHECK_INT(TEL_ACK_RECEIVED,
+              vehicle_remote_policy(VC_STOPPED, true, false, TEL_CMD_CALIBRATE, &bit));
     CHECK_INT(VC_REMOTE_CALIBRATE, bit);
-    CHECK_INT(TEL_ACK_RECEIVED, vehicle_remote_policy(VC_FAULT, true, TEL_CMD_CLEAR_FAULTS, &bit));
+    CHECK_INT(TEL_ACK_RECEIVED,
+              vehicle_remote_policy(VC_FAULT, true, false, TEL_CMD_CLEAR_FAULTS, &bit));
     CHECK_INT(VC_REMOTE_CLEAR_FAULTS, bit);
+    CHECK_INT(TEL_ACK_REJECTED_RUNNING,
+              vehicle_remote_policy(VC_STOPPED, true, true, TEL_CMD_START, &bit));
+    CHECK_INT(TEL_ACK_REJECTED_RUNNING,
+              vehicle_remote_policy(VC_STOPPED, true, true, TEL_CMD_CLEAR_FAULTS, &bit));
 
     CHECK_INT(TEL_ACK_COMPLETED,
-              vehicle_remote_policy(VC_FOLLOW, true, TEL_CMD_REQUEST_STATUS, &bit));
-    CHECK_INT(TEL_ACK_INVALID, vehicle_remote_policy(VC_IDLE, true, 15U, &bit));
+              vehicle_remote_policy(VC_FOLLOW, true, false, TEL_CMD_REQUEST_STATUS, &bit));
+    CHECK_INT(TEL_ACK_INVALID, vehicle_remote_policy(VC_IDLE, true, false, 15U, &bit));
 }
 
 /* A manoeuvre that Motion never completes is a motion fault, not an endless
@@ -1195,6 +1597,17 @@ int main(void)
     RUN(test_a_stale_stopped_flag_does_not_confirm_a_new_stop);
     RUN(test_unconfirmed_stop_is_a_motion_fault);
     RUN(test_left_bypass_runs_the_plan_then_recovers_the_line);
+    RUN(test_recovery_drives_on_before_turning_back);
+    RUN(test_bypass_stops_for_something_in_the_way_then_finishes_the_leg);
+    RUN(test_bypass_ignores_the_sonar_while_turning_and_just_after);
+    RUN(test_bypass_blocked_too_long_is_a_fault);
+    RUN(test_bypass_ignores_a_line_seen_on_the_way_past_the_box);
+    RUN(test_recovery_drives_on_over_a_crossing_line);
+    RUN(test_sonar_tilts_toward_the_box_beside_it_only);
+    RUN(test_leg_beside_the_box_ends_when_the_box_is_passed);
+    RUN(test_leg_is_not_cut_if_the_box_was_never_seen);
+    RUN(test_leg_goes_on_while_the_box_is_still_beside_the_car);
+    RUN(test_recovery_drive_waits_for_the_way_and_keeps_its_time_limit);
     RUN(test_recovery_time_limit);
     RUN(test_recovery_distance_limit);
     RUN(test_no_safe_path_keeps_the_car_stopped);
@@ -1203,6 +1616,7 @@ int main(void)
     RUN(test_scan_timeout_is_a_fault);
     RUN(test_continue_plan_resumes_and_blanks_the_monitor);
     RUN(test_stop_fault_stops_the_car_in_any_running_state);
+    RUN(test_imu_lift_stop_holds_until_the_imu_clears_it);
     RUN(test_informational_fault_does_not_stop);
     RUN(test_fault_during_a_scan_wins);
     RUN(test_fault_needs_the_operator_to_clear_it);

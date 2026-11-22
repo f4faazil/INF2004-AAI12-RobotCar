@@ -12,7 +12,7 @@
  *      2      Line      10 ms    IR ring, calibration, barcode, line events
  *      3      Vehicle   10 ms    mission state; the only sender of movement
  *      3      Obstacle  10 ms    servo, HC-SR04, scan and bypass planning
- *      5      IMU       20 ms    I2C1, tilt and hump height
+ *      5      IMU       20 ms    I2C1, tilt, hump height and lift detection
  *     10      Net       20 ms    WiFi/MQTT, telemetry publishing (lowest)
  *     11      Diag      1 s      one status line on the console
  *
@@ -28,6 +28,9 @@
  */
 #include <tk/tkernel.h>
 #include <tm/tmonitor.h>
+#if TK_SUPPORT_SMP
+#include <tk/smp.h>
+#endif
 
 #include "barcode_map.h"
 #include "fault_mask.h"
@@ -43,6 +46,13 @@
 #include "robot_tasks.h"
 #include "safety.h"
 #include "telemetry.h"
+#if TM_WIFI_MQTT
+#include "mqtt_mailbox.h"
+#include "telemetry_tkernel_port.h"
+#endif
+#if TM_WIFI_CYW43
+#include "cyw43_utk.h"
+#endif
 #include "ultrasonic.h"
 #include "vehicle.h"
 
@@ -50,9 +60,11 @@
  * distance on the car (Tribunal: physical stopping distance is not PWM-zero). */
 #define ROBOT_STOP_RESPONSE_MS      (120U)
 #define ROBOT_BRAKING_MM            (40U)
-#define ROBOT_OBSTACLE_MARGIN_MM    (60U)
+/* margin: the 80 mm between the sensor and the bumper plus 60 mm of clearance */
+#define ROBOT_OBSTACLE_MARGIN_MM    (ROBOT_SENSOR_TO_FRONT_MM + 60U)
 #define ROBOT_OBSTACLE_HYST_MM      (30U)
 #define ROBOT_OBSTACLE_CONFIRM      (2U)
+#define ROBOT_OBSTACLE_FRESH_MS     (300U)      /* an older sonar distance is not used to steer or stop */
 #define ROBOT_US_INVALID_LIMIT      (8U)
 #define ROBOT_POLL_MS               (10U)
 #define ROBOT_BUTTON_DEBOUNCE       (3U)
@@ -69,7 +81,9 @@
 #define LSM303D_WHO_AM_I_VALUE      (0x49U)
 #define LSM303DLHC_ACCEL_ADDR       (0x19U)
 #define ACCEL_CTRL1_REG             (0x20U)
-#define ACCEL_CTRL1_100HZ_XYZ       (0x57U)
+#define ACCEL_CTRL1_100HZ_XYZ       (0x57U)     /* LSM303DLHC: 100 Hz, normal, XYZ */
+#define LSM303D_CTRL1_100HZ_XYZ_BDU (0x6FU)     /* LSM303D: 100 Hz, XYZ, block data update */
+#define LSM303D_CTRL2_AAF50_2G      (0xC0U)     /* LSM303D: 50 Hz anti-alias filter (less vibration), +/-2 g */
 #define LSM303D_CTRL2_REG           (0x21U)
 #define LSM303DLHC_CTRL4_REG        (0x23U)
 #define LSM303DLHC_CTRL4_HR_2G      (0x08U)
@@ -104,6 +118,10 @@ typedef struct {
     bool               distance_valid;
     uint16_t           distance_mm;
     uint32_t           updated_ms;
+    uint16_t           raw_seq;         /* the latest single reading, unfiltered */
+    bool               raw_echo;
+    uint16_t           raw_mm;
+    int8_t             aim;             /* +1 tilt left, -1 tilt right, 0 ahead */
     bool               scan_request;
     bool               scan_done;
     bypass_plan_t      plan;
@@ -137,16 +155,35 @@ static volatile uint8_t g_vstate = (uint8_t)VC_BOOT;
 static volatile uint8_t g_remote_bits;
 
 /* The letter -> movement mapping: parsed by the Net task from MQTT, copied by the Line task. */
-static nav_map_entry_t g_map_stage[BMAP_MAX];
+static uint8_t g_map_stage[BMAP_MAX];           /* one packed byte per letter (nav_map_pack): 26 bytes, was 208 */
 static volatile uint8_t g_map_stage_len;
 static volatile uint32_t g_map_seq;             /* bumped for every accepted mapping */
 static volatile uint32_t g_map_applied;         /* mappings the Line task has applied */
+static volatile ER g_irq_result;                /* the result of switching the GPIO interrupt and the ticks on (irq_start_task) */
+static volatile bool g_irq_done;
+static volatile INT g_irq_prc;                  /* the processor that did it: it must be 1 */
+static volatile int16_t g_imu_roll_permille;   /* the IMU task's latest sideways tilt, for the sensor record */
+static volatile bool g_imu_lift;                /* the lift detector has latched */
+static volatile bool g_imu_cal_done;            /* the rest attitude is calibrated */
 static volatile uint8_t g_map_len;              /* entries in the mapping now in use */
 static volatile uint32_t g_map_rejected;        /* mapping messages refused */
 static volatile uint8_t g_remote_req[4];        /* req_id + 1 per VC_REMOTE_* bit; 0 = none */
 static uint8_t g_event_seq;
 
 static volatile uint32_t g_max_motion_us;
+#if ROBOT_STOP_TIMING
+/* Obstacle-to-stop timing (microseconds from hal_time_us, wrap-safe differences).  state: 0 idle, 1 sonar saw it, 2 monitor declared it,
+ * 3 Vehicle posted STOP, 4 PWM zero, 5 wheels still.  Each stage is written by one task; the diagnostic task prints and resets. */
+static volatile uint8_t  g_st_state;
+static volatile uint32_t g_st_first_us;
+static volatile uint32_t g_st_declared_us;
+static volatile uint32_t g_st_cmd_us;
+static volatile uint32_t g_st_pwm0_us;
+static volatile uint32_t g_st_still_us;
+static volatile uint16_t g_st_first_mm;
+static volatile uint16_t g_st_threshold_mm;
+static volatile uint32_t g_st_count;
+#endif
 static volatile uint32_t g_max_line_us;
 static volatile uint32_t g_max_vehicle_us;
 static volatile uint32_t g_ir_frames;
@@ -198,6 +235,48 @@ static void tel_submit(const uint8_t *data, uint16_t len)
     }
 }
 
+#if ROBOT_DIAG_PRINT
+/* Events and scan results for the console: a line each, printed by the diagnostics task, so a run
+ * can be followed state by state.  Written from any task, read only by the diagnostics task. */
+#define DIAG_EV_RING        (32U)
+typedef struct {
+    uint32_t ms;
+    int32_t  odo_mm;
+    uint16_t arg;
+    uint8_t  code;
+} diag_ev_t;
+static diag_ev_t g_diag_ev[DIAG_EV_RING];
+static volatile uint8_t g_diag_ev_head;
+static uint8_t g_diag_ev_tail;
+
+typedef struct {
+    volatile bool fresh;
+    int16_t closest_mm;
+    int16_t forward_mm;
+    int16_t width_mm;
+    int16_t centre_mm;
+    int16_t left_clear_mm;
+    int16_t right_clear_mm;
+    uint8_t action;
+    uint8_t reason;
+    uint8_t step_count;
+    int16_t steps[PLAN_MAX_STEPS];
+} diag_scan_t;
+static diag_scan_t g_diag_scan;
+#if ROBOT_SCAN_RAYS
+/* The raw rays of the last scan: copied by the sonar task, printed by the diagnostics task. */
+typedef struct {
+    uint8_t  angle;
+    uint8_t  kind;
+    uint16_t mm;
+} diag_ray_t;
+static diag_ray_t g_diag_ray[SCAN_MAX_POINTS];
+static volatile uint8_t g_diag_ray_count;
+static volatile bool g_diag_ray_fresh;
+static uint32_t g_diag_ray_scan_no;
+#endif
+#endif
+
 static void tel_push_event(uint8_t code, uint16_t arg)
 {
     uint8_t buf[TEL_MAX_MESSAGE];
@@ -206,6 +285,17 @@ static void tel_push_event(uint8_t code, uint16_t arg)
 
     e.seq = g_event_seq;
     g_event_seq++;
+#if ROBOT_DIAG_PRINT
+    {
+        diag_ev_t *slot = &g_diag_ev[g_diag_ev_head % DIAG_EV_RING];
+
+        slot->ms = hal_time_ms();
+        slot->odo_mm = g_motion_share.status.distance_mm;
+        slot->arg = arg;
+        slot->code = code;
+        g_diag_ev_head++;
+    }
+#endif
     robot_irq_restore(state);
     e.ts10 = ts10_now();
     e.code = code;
@@ -235,6 +325,12 @@ static void cmd_post(const motion_cmd_t *cmd)
     g_cmd_ring[g_cmd_head % ROBOT_CMD_RING] = *cmd;
     g_cmd_head++;
     robot_irq_restore(state);
+#if ROBOT_STOP_TIMING
+    if ((cmd->type == MOTION_CMD_STOP) && (g_st_state == 2U)) {
+        g_st_cmd_us = hal_time_us();
+        g_st_state = 3U;
+    }
+#endif
 }
 
 static bool cmd_take(motion_cmd_t *cmd)
@@ -301,6 +397,16 @@ static void motion_task(INT stacd, void *exinf)
         hal_encoders_snapshot(&left, &right);
         motion_step(&motion, &left, &right, hal_time_ms(), hal_time_us(), &out);
         hal_motor_set(out.left_pwm, out.right_pwm);
+#if ROBOT_STOP_TIMING
+        if ((g_st_state == 3U) && (out.left_pwm == 0) && (out.right_pwm == 0)) {
+            g_st_pwm0_us = hal_time_us();
+            g_st_state = 4U;
+        }
+        if ((g_st_state == 4U) && ((motion_status(&motion)->flags & MOTION_FLAG_STOPPED) != 0U)) {
+            g_st_still_us = hal_time_us();
+            g_st_state = 5U;
+        }
+#endif
 
         {
             robot_irq_state_t state = robot_irq_save();
@@ -382,17 +488,17 @@ static void line_task(INT stacd, void *exinf)
         }
 
         if (g_map_seq != map_applied_seq) {
-            nav_map_entry_t entries[BMAP_MAX];
+            uint8_t packed[BMAP_MAX];
             uint8_t entry_count;
             robot_irq_state_t state = robot_irq_save();
 
             entry_count = g_map_stage_len;
             for (uint8_t k = 0U; k < entry_count; k++) {
-                entries[k] = g_map_stage[k];
+                packed[k] = g_map_stage[k];
             }
             map_applied_seq = g_map_seq;
             robot_irq_restore(state);
-            line_nav_set_map(&nav, entries, entry_count);
+            line_nav_set_map_packed(&nav, packed, entry_count);
             g_map_len = entry_count;
             g_map_applied++;
         }
@@ -564,12 +670,57 @@ static void push_status(const vehicle_in_t *in, const line_share_t *line,
     tel_submit(buf, tel_encode_status(&s, buf, sizeof(buf)));
 }
 
+/* The per-sensor detail record (see telemetry.h for the fields and their widths). */
+static void push_sensors(const vehicle_in_t *in, const line_share_t *line, const obstacle_share_t *obs,
+                         const imu_share_t *imu, bool encoder_fault, uint8_t last_letter)
+{
+    uint8_t buf[TEL_MAX_MESSAGE];
+    tel_sensors_t s;
+    encoder_snapshot_t enc_l;
+    encoder_snapshot_t enc_r;
+
+    hal_encoders_snapshot(&enc_l, &enc_r);
+    s.ts10 = ts10_now();
+    s.ir_levels = (uint8_t)(hal_ir_levels() & 7U);
+    s.ir_valid_mask = (uint8_t)(line->out.valid_mask & 7U);
+    s.pair_on_line = line->out.pair_on_line;
+    s.junction_armed = line->out.junction_armed;
+    s.bars_now = (g_bars_now > 15U) ? 15U : (uint8_t)g_bars_now;
+    s.bars_done = g_bars_done;
+    s.decoded = g_bar_decoded;
+    s.rejected = g_bar_rejected;
+    s.junctions = g_junctions_seen;
+    s.executed = g_nav_executed;
+    s.map_entries = (g_map_len > 26U) ? 26U : g_map_len;
+    s.last_letter = last_letter;
+    s.motion_state = (uint8_t)in->motion.state & 3U;
+    s.motion_stopped = (in->motion.flags & MOTION_FLAG_STOPPED) != 0U;
+    s.encoder_fault = encoder_fault;
+    s.enc_bad_left = enc_l.illegal;
+    s.enc_bad_right = enc_r.illegal;
+    s.roll_permille = g_imu_roll_permille;
+    s.imu_ok = g_imu_cal_done && !imu->read_failed;
+    s.lift_latched = g_imu_lift;
+    s.hump_active = imu->in_progress;
+    s.us_mm = obs->distance_mm;
+    s.us_valid = obs->distance_valid;
+    s.us_obstacle = obs->obstacle;
+    s.us_fault = obs->sensor_fault;
+    s.servo_aim = (obs->aim > 0) ? (uint8_t)TEL_AIM_LEFT : ((obs->aim < 0) ? (uint8_t)TEL_AIM_RIGHT : (uint8_t)TEL_AIM_AHEAD);
+    s.net_state = (uint8_t)(g_mqtt_state & 7U);
+    s.link_up = robot_net_link_up();
+    s.saturated = 0U;
+    tel_submit(buf, tel_encode_sensors(&s, buf, sizeof(buf)));
+}
+
 static void vehicle_task(INT stacd, void *exinf)
 {
     static vehicle_t vc;
     static debounce_t start_btn;
     static debounce_t stop_btn;
     static uint32_t last_status_ms;
+    static uint32_t last_sensors_ms;
+    static uint8_t last_letter;
     static uint32_t last_junction_ms;
     static uint8_t last_junction_mask;
     static vehicle_in_t in;
@@ -619,6 +770,11 @@ static void vehicle_task(INT stacd, void *exinf)
         in.calibration_ok = line.calibration_ok;
         in.motion = motion.status;
         in.obstacle_present = obs.obstacle;
+        in.obstacle_mm_valid = obs.distance_valid && ((now - obs.updated_ms) < ROBOT_OBSTACLE_FRESH_MS);
+        in.obstacle_mm = obs.distance_mm;
+        in.side_seq = obs.raw_seq;
+        in.side_echo = obs.raw_echo;
+        in.side_mm = obs.raw_mm;
         in.scan_done = obs.scan_done;
         in.plan = obs.plan;
         in.hump_in_progress = imu.in_progress;
@@ -644,6 +800,12 @@ static void vehicle_task(INT stacd, void *exinf)
                 g_line_req.consume = true;
                 g_line_req.consume_id = out.consume_id;
             }
+            robot_irq_restore(state);
+        }
+        {
+            robot_irq_state_t state = robot_irq_save();
+
+            g_obstacle_share.aim = out.sonar_aim;
             robot_irq_restore(state);
         }
         if (out.request_scan) {
@@ -707,6 +869,13 @@ static void vehicle_task(INT stacd, void *exinf)
             push_status(&in, &line, &obs, &imu, out.state,
                         ((now - last_junction_ms) < ROBOT_JUNCTION_HOLD_MS) ? last_junction_mask : 0U);
         }
+        if (line.instruction_valid && (line.instruction.letter >= 'A') && (line.instruction.letter <= 'Z')) {
+            last_letter = (uint8_t)(line.instruction.letter - 'A' + 1);     /* 1..26, held until the next barcode */
+        }
+        if ((now - last_sensors_ms) >= ROBOT_SENSORS_PERIOD_MS) {
+            last_sensors_ms = now;
+            push_sensors(&in, &line, &obs, &imu, motion.encoder_fault, last_letter);
+        }
         note_max(&g_max_vehicle_us, hal_time_us() - start);
     }
 }
@@ -751,6 +920,7 @@ static void obstacle_task(INT stacd, void *exinf)
     static us_reading_t reading;
     bool measuring = false;
     bool scanning = false;
+    int8_t aim_now = 0;
     uint32_t last_start_ms = 0U;
     motion_share_t motion;
 
@@ -783,10 +953,70 @@ static void obstacle_task(INT stacd, void *exinf)
                     motion_share_get(&motion);
                     threshold = us_stop_threshold_mm(centre_speed(&motion), ROBOT_STOP_RESPONSE_MS,
                                                      ROBOT_BRAKING_MM, ROBOT_OBSTACLE_MARGIN_MM);
+                    if (threshold < ROBOT_OBSTACLE_SCAN_MM) {
+                        threshold = ROBOT_OBSTACLE_SCAN_MM;     /* stop early enough for the scan to work */
+                    }
+#if ROBOT_STOP_TIMING
+                    {
+                        static bool under;
+
+                        if (reading.status == US_VALID) {
+                            if (reading.distance_mm >= threshold) {
+                                under = false;
+                            } else if (!under) {
+                                under = true;
+                                if (g_st_state == 0U) {
+                                    g_st_first_us = hal_time_us();
+                                    g_st_first_mm = reading.distance_mm;
+                                    g_st_threshold_mm = threshold;
+                                    g_st_state = 1U;
+                                }
+                            } else {
+                                /* still inside the range: the chain is already running */
+                            }
+                        }
+                    }
+#endif
+#if ROBOT_STOP_TIMING
+                    {
+                        static bool was_obstacle;
+                        const bool is_obstacle = us_monitor_update(&mon, &reading, threshold, ROBOT_OBSTACLE_HYST_MM,
+                                                                   (uint16_t)(threshold / 2U));
+
+                        if (is_obstacle && !was_obstacle && (g_st_state == 1U)) {
+                            g_st_declared_us = hal_time_us();
+                            g_st_state = 2U;
+                        }
+                        was_obstacle = is_obstacle;
+                    }
+#else
                     (void)us_monitor_update(&mon, &reading, threshold, ROBOT_OBSTACLE_HYST_MM,
                                             (uint16_t)(threshold / 2U));
+#endif
                     publish_obstacle_state(&mon, now);
+                    {
+                        robot_irq_state_t state = robot_irq_save();
+
+                        g_obstacle_share.raw_seq = (uint16_t)reading.seq;
+                        g_obstacle_share.raw_echo = (reading.status == US_VALID);
+                        g_obstacle_share.raw_mm = reading.distance_mm;
+                        robot_irq_restore(state);
+                    }
                 }
+            }
+        }
+
+        if (!scanning) {
+            /* point the sonar where the vehicle asks (at the box's side, or ahead) */
+            const int8_t want = g_obstacle_share.aim;
+
+            if (want != aim_now) {
+                const int16_t tilt = ROBOT_OBSTACLE_CFG.left_is_high_angle ? ROBOT_VEHICLE_CFG.side_aim_deg
+                                                                           : (int16_t)-ROBOT_VEHICLE_CFG.side_aim_deg;
+
+                hal_servo_set_pulse_us(servo_pulse_us(&ROBOT_OBSTACLE_CFG.servo,
+                                                      (int16_t)(90 + (want * tilt))));
+                aim_now = want;
             }
         }
 
@@ -821,12 +1051,50 @@ static void obstacle_task(INT stacd, void *exinf)
 
                 obstacle_profile_build(&ROBOT_OBSTACLE_CFG, scan.points, scan.point_count, &profile);
                 obstacle_plan(&ROBOT_OBSTACLE_CFG, &profile, &plan);
+#if ROBOT_OBSTACLE_BLIND
+                if ((plan.action == PLAN_STOP) && (plan.reason == PLAN_REASON_NO_CLEARANCE)) {
+                    (void)obstacle_blind_plan(&ROBOT_OBSTACLE_CFG, scan.points, scan.point_count,
+                                              &profile, &plan);
+                }
+#endif
                 state = robot_irq_save();
                 g_obstacle_share.profile = profile;
                 g_obstacle_share.plan = plan;
                 g_obstacle_share.scan_done = true;
                 robot_irq_restore(state);
                 push_obstacle_message(&profile, &plan);
+#if ROBOT_DIAG_PRINT
+                {
+                    uint8_t k;
+
+                    g_diag_scan.closest_mm = (int16_t)profile.closest_mm;
+                    g_diag_scan.forward_mm = (int16_t)profile.forward_mm;
+                    g_diag_scan.width_mm = (int16_t)profile.width_mm;
+                    g_diag_scan.centre_mm = profile.centre_x_mm;
+                    g_diag_scan.left_clear_mm = (int16_t)profile.left_clearance_mm;
+                    g_diag_scan.right_clear_mm = (int16_t)profile.right_clearance_mm;
+                    g_diag_scan.action = (uint8_t)plan.action;
+                    g_diag_scan.reason = (uint8_t)plan.reason;
+                    g_diag_scan.step_count = plan.step_count;
+                    for (k = 0U; k < PLAN_MAX_STEPS; k++) {
+                        g_diag_scan.steps[k] = (k < plan.step_count) ? (int16_t)plan.steps[k].value : (int16_t)0;
+                    }
+                    g_diag_scan.fresh = true;
+                }
+#if ROBOT_SCAN_RAYS
+                {
+                    uint8_t r;
+
+                    for (r = 0U; (r < scan.point_count) && (r < SCAN_MAX_POINTS); r++) {
+                        g_diag_ray[r].angle = scan.points[r].angle_deg;
+                        g_diag_ray[r].kind = (uint8_t)scan.points[r].kind;
+                        g_diag_ray[r].mm = scan.points[r].distance_mm;
+                    }
+                    g_diag_ray_count = (scan.point_count < SCAN_MAX_POINTS) ? scan.point_count : (uint8_t)SCAN_MAX_POINTS;
+                    g_diag_ray_fresh = true;
+                }
+#endif
+#endif
                 scanning = false;
             }
         } else if (!measuring && ((now - last_start_ms) >= ROBOT_US_PERIOD_MS)) {
@@ -841,7 +1109,7 @@ static void obstacle_task(INT stacd, void *exinf)
 
 /* ---- IMU task ------------------------------------------------------------------ */
 
-static bool imu_probe(imu_variant_t *variant, uint8_t *addr)
+bool robot_imu_probe(imu_variant_t *variant, uint8_t *addr)
 {
     uint8_t id = 0U;
 
@@ -849,8 +1117,10 @@ static bool imu_probe(imu_variant_t *variant, uint8_t *addr)
         (id == LSM303D_WHO_AM_I_VALUE)) {
         *variant = IMU_VARIANT_LSM303D;
         *addr = LSM303D_ADDR;
-        return hal_i2c_write(LSM303D_ADDR, ACCEL_CTRL1_REG, ACCEL_CTRL1_100HZ_XYZ) &&
-               hal_i2c_write(LSM303D_ADDR, LSM303D_CTRL2_REG, 0U);
+        /* BDU keeps the six output bytes of one sample together, so a read that
+         * lands as the chip updates cannot mix two samples into a false tilt. */
+        return hal_i2c_write(LSM303D_ADDR, ACCEL_CTRL1_REG, LSM303D_CTRL1_100HZ_XYZ_BDU) &&
+               hal_i2c_write(LSM303D_ADDR, LSM303D_CTRL2_REG, LSM303D_CTRL2_AAF50_2G);
     }
     if (hal_i2c_read(LSM303DLHC_ACCEL_ADDR, ACCEL_CTRL1_REG, &id, 1U)) {
         *variant = IMU_VARIANT_LSM303DLHC;
@@ -862,14 +1132,14 @@ static bool imu_probe(imu_variant_t *variant, uint8_t *addr)
     return false;
 }
 
-static void publish_imu(const hump_detector_t *h, bool in_progress, bool failed, uint32_t now)
+static void publish_imu(const roll_hump_t *h, bool in_progress, bool failed, uint32_t now)
 {
-    int32_t best = hump_highest_valid_mm(h);
+    int32_t best = roll_hump_highest_valid_mm(h);
     robot_irq_state_t state = robot_irq_save();
 
     g_imu_share.in_progress = in_progress;
-    g_imu_share.packed = hump_event_pack(h->state, hump_last_height_code(h),
-                                         hump_last_validity(h), failed);
+    g_imu_share.packed = hump_event_pack(h->state, roll_hump_last_height_code(h),
+                                         roll_hump_last_validity(h), failed);
     g_imu_share.highest_code = (best < 0) ? (uint8_t)TEL_HIGHEST_NONE
                              : ((best > (int32_t)HUMP_HEIGHT_MAX_MM) ? (uint8_t)TEL_HIGHEST_NONE
                                                                      : (uint8_t)best);
@@ -881,7 +1151,12 @@ static void publish_imu(const hump_detector_t *h, bool in_progress, bool failed,
 static void imu_task(INT stacd, void *exinf)
 {
     static imu_cal_t cal;
-    static hump_detector_t hump;
+    static roll_hump_t hump;
+    static imu_lift_detector_t lift;
+    static imu_rearm_t rearm;
+    static uint32_t lift_since_ms;
+    int32_t filt[3] = { 0, 0, 0 };
+    bool filt_init = false;
     imu_variant_t variant = IMU_VARIANT_LSM303D;
     uint8_t addr = LSM303D_ADDR;
     bool present = false;
@@ -891,7 +1166,9 @@ static void imu_task(INT stacd, void *exinf)
 
     (void)stacd;
     (void)exinf;
-    hump_init(&hump, &ROBOT_HUMP_CFG);
+    roll_hump_init(&hump, &ROBOT_ROLL_HUMP_CFG);
+    imu_lift_init(&lift);
+    imu_rearm_init(&rearm);
     imu_cal_init(&cal, ROBOT_IMU_FORWARD_AXIS, ROBOT_IMU_FORWARD_SIGN, ROBOT_IMU_CAL_SAMPLES,
                  ROBOT_IMU_CAL_SPREAD_MG);
 
@@ -906,7 +1183,7 @@ static void imu_task(INT stacd, void *exinf)
         if (!present) {
             if ((now - last_probe_ms) >= ROBOT_IMU_PROBE_MS) {
                 last_probe_ms = now;
-                present = imu_probe(&variant, &addr);
+                present = robot_imu_probe(&variant, &addr);
             }
             publish_imu(&hump, false, true, now);
             continue;
@@ -927,28 +1204,73 @@ static void imu_task(INT stacd, void *exinf)
             imu_vec3_t g;
 
             imu_decode_accel(variant, raw, &g);
+            g_imu_cal_done = (cal.state == IMU_CAL_DONE);
             if (cal.state != IMU_CAL_DONE) {
                 if (imu_cal_feed(&cal, &g) == IMU_CAL_FAILED_MOVING) {
                     imu_cal_init(&cal, ROBOT_IMU_FORWARD_AXIS, ROBOT_IMU_FORWARD_SIGN,
                                  ROBOT_IMU_CAL_SAMPLES, ROBOT_IMU_CAL_SPREAD_MG);
                 }
+                filt_init = false;
                 publish_imu(&hump, false, false, now);
                 continue;
             }
             motion_share_get(&motion);
-            {
-                hump_input_t hin;
-                hump_event_t ev;
+            if (imu_lift_update(&lift, &cal, &g, now, ROBOT_LIFT_TILT_COS_PERMILLE,
+                                ROBOT_LIFT_FREEFALL_MG, ROBOT_LIFT_HOLD_MS)) {
+                fault_set(&g_faults, FAULT_IMU_LIFT);
+                lift_since_ms = now;
+                imu_rearm_init(&rearm);
+            }
+            g_imu_lift = lift.latched;
+            if (lift.latched) {
+                /* Stopped.  Keep reading, so the tilt stays live on the dashboard, and re-arm once the car is back on the
+                 * floor: level, at 1 g and steady for a while.  That only clears the stop; START is still needed. */
+                const bool settled = imu_rearm_update(&rearm, &cal, &g, now, ROBOT_LIFT_REARM_COS_PERMILLE,
+                                                      ROBOT_LIFT_REARM_MAG_TOL_MG, ROBOT_LIFT_REARM_STEP_MG,
+                                                      ROBOT_LIFT_REARM_HOLD_MS);
 
-                hin.pitch_permille = imu_pitch_permille(&cal, &g);
-                hin.disturbance_mg = imu_disturbance_mg(&cal, &g);
+                g_imu_roll_permille = imu_roll_permille(&cal, &g);
+                if (settled && ((now - lift_since_ms) >= ROBOT_LIFT_MIN_LATCH_MS)) {
+                    imu_lift_init(&lift);
+                    imu_rearm_init(&rearm);
+                    g_imu_lift = false;
+                    filt_init = false;
+                    fault_clear(&g_faults, FAULT_IMU_LIFT);
+                }
+                publish_imu(&hump, false, false, now);
+                continue;
+            }
+            {
+                roll_hump_input_t hin;
+                hump_event_t ev;
+                imu_vec3_t gf;
+
+                /*
+                 * Driving shakes the sensor by several times a 1 cm hump, so the vector
+                 * is low-pass filtered (8 samples = 160 ms) before the roll is taken.
+                 */
+                if (!filt_init) {
+                    filt[0] = (int32_t)g.x * 16;
+                    filt[1] = (int32_t)g.y * 16;
+                    filt[2] = (int32_t)g.z * 16;
+                    filt_init = true;
+                } else {
+                    filt[0] += (((int32_t)g.x * 16) - filt[0]) / ROBOT_IMU_FILTER_DIV;
+                    filt[1] += (((int32_t)g.y * 16) - filt[1]) / ROBOT_IMU_FILTER_DIV;
+                    filt[2] += (((int32_t)g.z * 16) - filt[2]) / ROBOT_IMU_FILTER_DIV;
+                }
+                gf.x = (int16_t)(filt[0] / 16);
+                gf.y = (int16_t)(filt[1] / 16);
+                gf.z = (int16_t)(filt[2] / 16);
+                hin.roll_permille = imu_roll_permille(&cal, &gf);
+                g_imu_roll_permille = hin.roll_permille;
                 hin.distance_mm = motion.status.distance_mm;
                 hin.distance_valid = ((now - motion.status.timestamp_ms) <= ROBOT_MOTION_FRESH_MS) &&
                                      !motion.encoder_fault;
                 hin.imu_ok = true;
                 hin.now_ms = now;
-                ev = hump_update(&hump, &hin);
-                publish_imu(&hump, hump_in_progress(&hump), false, now);
+                ev = roll_hump_update(&hump, &hin);
+                publish_imu(&hump, roll_hump_in_progress(&hump), false, now);
                 if (ev == HUMP_EVENT_FINISHED) {
                     uint8_t buf[TEL_MAX_MESSAGE];
                     tel_hump_t th;
@@ -985,53 +1307,47 @@ static bool topic_is(const char *topic, const char *expect)
     return (*topic == '\0') && (*expect == '\0');
 }
 
-/* The acknowledgement text for the last mapping message, published by the Net loop. */
-static char g_map_ack[24];
+/* The reply to the last mapping message, published by the Net loop: 2 bytes (type, then result in 3 bits and entry count in 5). */
+static uint8_t g_map_ack[2];
 static uint8_t g_map_ack_len;
 
-static void map_ack(const char *text, uint8_t count, bool with_count)
+static void map_ack(bmap_result_t result, uint8_t count)
 {
-    uint8_t n = 0U;
-
-    while ((text[n] != '\0') && (n < 12U)) {
-        g_map_ack[n] = text[n];
-        n++;
-    }
-    if (with_count) {
-        g_map_ack[n++] = ' ';
-        g_map_ack[n++] = 'n';
-        g_map_ack[n++] = '=';
-        if (count >= 10U) {
-            g_map_ack[n++] = (char)('0' + (count / 10U));
-        }
-        g_map_ack[n++] = (char)('0' + (count % 10U));
-    }
-    g_map_ack_len = n;
+    g_map_ack_len = (uint8_t)bmap_encode_ack(result, count, g_map_ack);
 }
 
 /* A mapping from the PC.  Applied whole or not at all; the old one is kept on any error. */
 static void on_map(const uint8_t *payload, uint16_t len)
 {
     nav_map_entry_t parsed[BMAP_MAX];
+    uint8_t packed[BMAP_MAX];
     uint8_t count = 0U;
-    bmap_result_t r = bmap_parse(payload, len, parsed, &count);
+    bmap_result_t r = bmap_parse_any(payload, len, parsed, &count);
 
+    if (r == BMAP_OK) {
+        for (uint8_t k = 0U; k < count; k++) {
+            if (!nav_map_pack(parsed[k].letter, parsed[k].command, &packed[k])) {
+                r = BMAP_ERR_ACTION;            /* cannot happen for a parsed map; refuse rather than store garbage */
+                break;
+            }
+        }
+    }
     if (r != BMAP_OK) {
         g_map_rejected++;
-        map_ack(bmap_result_text(r), 0U, false);
+        map_ack(r, 0U);
         return;
     }
     {
         robot_irq_state_t state = robot_irq_save();
 
         for (uint8_t k = 0U; k < count; k++) {
-            g_map_stage[k] = parsed[k];
+            g_map_stage[k] = packed[k];
         }
         g_map_stage_len = count;
         g_map_seq++;
         robot_irq_restore(state);
     }
-    map_ack("OK", count, true);
+    map_ack(BMAP_OK, count);
 }
 
 static void on_command(void *ctx, const char *topic, const uint8_t *payload, uint16_t len)
@@ -1049,6 +1365,7 @@ static void on_command(void *ctx, const char *topic, const uint8_t *payload, uin
         return;
     }
     result = vehicle_remote_policy((vehicle_state_t)g_vstate, ROBOT_ALLOW_REMOTE_STOP != 0,
+                                   (fault_read(&g_faults) & FAULT_IMU_LIFT) != 0U,
                                    c.cmd, &bit);
     if ((result == TEL_ACK_RECEIVED) && (bit != 0U)) {
         robot_irq_state_t state = robot_irq_save();
@@ -1073,6 +1390,100 @@ static const char *topic_for(uint8_t type)
     return TOPIC_TELEMETRY;
 }
 
+#if TM_WIFI_MQTT
+/*
+ * Owner build: the MQTT session belongs to the radio task (Aamir's mqtt_lwip.c).  This task only moves the
+ * robot's records from the telemetry queue into that session's inbox, and watches the session state.
+ * Records go out on aai12/robot/telemetry; the first byte of each says what it is (see telemetry.h).
+ */
+#define ROBOT_MQTT_ONLINE   (3U)
+
+static void net_task(INT stacd, void *exinf)
+{
+    static uint32_t last_heartbeat_ms;
+    static uint32_t down_since_ms;
+
+    (void)stacd;
+    (void)exinf;
+    (void)topic_for;
+    for (;;) {
+        uint32_t now;
+        uint8_t i;
+        bool connected;
+
+        (void)tk_dly_tsk(20U);
+        now = hal_time_ms();
+        robot_net_refresh();                    /* this task alone reads the radio's 2.5 KB status block */
+        g_mqtt_state = robot_net_mqtt_state();
+        connected = robot_net_link_up() && (g_mqtt_state == ROBOT_MQTT_ONLINE);
+
+        if (connected) {
+            down_since_ms = now;
+            fault_clear(&g_faults, FAULT_NET_DOWN);
+        } else if ((now - down_since_ms) >= ROBOT_NET_DOWN_MS) {
+            fault_set(&g_faults, FAULT_NET_DOWN);
+        } else {
+            /* briefly down: not worth reporting yet */
+        }
+
+        /* Hand records over only while the session is online, so they age out in the queue instead of being
+         * sent late. */
+        for (i = 0U; connected && (i < ROBOT_NET_POP_PER_LOOP); i++) {
+            uint8_t buf[TEL_RECORD_MAX];
+            uint16_t len = 0U;
+
+            if (!tel_queue_pop(&g_tel_q, buf, &len, now)) {
+                break;
+            }
+            if (telemetry_robot_submit(buf, (unsigned int)len) != 0) {
+                g_tel_q.dropped_full++;         /* the session's inbox was full or busy: counted, not blocked on */
+            }
+        }
+        if (connected && (tel_queue_depth(&g_tel_q) < (TEL_QUEUE_DEPTH / 4U))) {
+            fault_clear(&g_faults, FAULT_TELEMETRY_DROP);
+        }
+
+        /* From the PC: the barcode letter map (aai12/robot/map) and START / STOP (aai12/robot/cmd).  Any other topic
+         * that reached the mailbox is dropped.  A command goes through the same policy as the physical button and the
+         * IMU lift stop: refused while the car is picked up, START refused while running. */
+        {
+            char topic[MQTT_MAILBOX_TOPIC_BYTES + 1U];
+            uint8_t payload[MQTT_MAILBOX_PAYLOAD_BYTES];
+            unsigned int length = 0U;
+            uint8_t drained;
+
+            for (drained = 0U; drained < 2U; drained++) {
+                if (mqtt_mailbox_rx_pop(topic, payload, &length) == 0U) {
+                    break;
+                }
+                if (topic_is(topic, TOPIC_MAP) || topic_is(topic, TOPIC_CMD)) {
+                    on_command((void *)0, topic, payload, (uint16_t)length);
+                }
+            }
+            /* The reply ("OK n=26" / "ERR ...") goes out through the owner task, which has the session. */
+            if ((g_map_ack_len != 0U) &&
+                (mqtt_mailbox_tx_put(TOPIC_MAP_ACK, (const unsigned char *)g_map_ack, g_map_ack_len) != 0U)) {
+                g_map_ack_len = 0U;
+            }
+        }
+
+        if (connected && ((now - last_heartbeat_ms) >= ROBOT_HEARTBEAT_MS)) {
+            uint8_t buf[TEL_MAX_MESSAGE];
+            tel_heartbeat_t hb;
+            uint16_t n;
+
+            last_heartbeat_ms = now;
+            hb.uptime_s = now / 1000U;
+            hb.dropped = (uint16_t)g_tel_q.dropped_full;
+            hb.reconnects = 0U;
+            hb.queue_depth = tel_queue_depth(&g_tel_q);
+            hb.net_state = (uint8_t)g_mqtt_state;
+            n = tel_encode_heartbeat(&hb, buf, sizeof(buf));
+            (void)telemetry_robot_submit(buf, (unsigned int)n);
+        }
+    }
+}
+#else   /* no radio, or the application's own MQTT client */
 static void net_task(INT stacd, void *exinf)
 {
     static mqtt_client_t client;
@@ -1104,6 +1515,7 @@ static void net_task(INT stacd, void *exinf)
 
         (void)tk_dly_tsk(20U);
         now = hal_time_ms();
+        robot_net_refresh();
         mqtt_client_set_link(&client, robot_net_link_up());
         mqtt_client_step(&client, now);
         connected = mqtt_client_state(&client) == MQTT_CONNECTED;
@@ -1157,12 +1569,99 @@ static void net_task(INT stacd, void *exinf)
         }
     }
 }
+#endif  /* TM_WIFI_MQTT */
 
 /* ---- Diagnostics task --------------------------------------------------------------- */
 
 #if ROBOT_DIAG_PRINT
+static const char *diag_state_name(uint16_t s)
+{
+    static const char *const names[] = {
+        "boot", "idle", "calibrate", "follow", "junction-advance", "junction-turn", "reacquire", "search",
+        "obstacle-stop", "obstacle-scan", "bypass", "reverse", "recover", "stopped", "fault", "done"
+    };
+
+    return (s < (sizeof(names) / sizeof(names[0]))) ? names[s] : "?";
+}
+
+static const char *diag_event_name(uint8_t c)
+{
+    switch (c) {
+    case TEL_EVT_STATE:      return "state";
+    case TEL_EVT_BARCODE:    return "barcode";
+    case TEL_EVT_JUNCTION:   return "junction";
+    case TEL_EVT_NAV_EXEC:   return "nav-exec";
+    case TEL_EVT_HUMP:       return "hump";
+    case TEL_EVT_OBSTACLE:   return "obstacle";
+    case TEL_EVT_PLAN:       return "plan";
+    case TEL_EVT_FAULT:      return "fault";
+    case TEL_EVT_FAULT_CLEAR: return "fault-clear";
+    case TEL_EVT_LINE_LOST:  return "line-lost";
+    case TEL_EVT_LINE_FOUND: return "line-found";
+    case TEL_EVT_RECOVERED:  return "recovered";
+    default:                 return "event";
+    }
+}
+
+/* One line per event and per scan, so the run can be followed state by state. */
+static void diag_drain_events(void)
+{
+    static uint16_t diag_side_seq;
+
+    while (g_diag_ev_tail != g_diag_ev_head) {
+        diag_ev_t e;
+        robot_irq_state_t state = robot_irq_save();
+
+        e = g_diag_ev[g_diag_ev_tail % DIAG_EV_RING];
+        g_diag_ev_tail++;
+        robot_irq_restore(state);
+        if (e.code == TEL_EVT_STATE) {
+            tm_printf((UB *)"[ev] t=%u d=%dmm state -> %s\n", (UINT)e.ms, (INT)e.odo_mm,
+                      (UB *)diag_state_name(e.arg));
+        } else {
+            tm_printf((UB *)"[ev] t=%u d=%dmm %s arg=%u\n", (UINT)e.ms, (INT)e.odo_mm,
+                      (UB *)diag_event_name(e.code), (UINT)e.arg);
+        }
+    }
+    if ((g_obstacle_share.aim != 0) && (g_obstacle_share.raw_seq != diag_side_seq)) {
+        diag_side_seq = g_obstacle_share.raw_seq;           /* the sonar is tilted at the box: show what it sees */
+        tm_printf((UB *)"[side] aim=%d echo=%d range=%dmm\n", (INT)g_obstacle_share.aim,
+                  (INT)g_obstacle_share.raw_echo, (INT)g_obstacle_share.raw_mm);
+    }
+    if (g_diag_scan.fresh) {
+        diag_scan_t sc = g_diag_scan;
+        uint8_t k;
+
+        g_diag_scan.fresh = false;
+        tm_printf((UB *)"[scan] closest=%dmm forward=%dmm width=%dmm centre=%dmm left-clear=%dmm right-clear=%dmm "
+                        "plan=%d reason=%d steps=", (INT)sc.closest_mm, (INT)sc.forward_mm, (INT)sc.width_mm,
+                  (INT)sc.centre_mm, (INT)sc.left_clear_mm, (INT)sc.right_clear_mm, (INT)sc.action, (INT)sc.reason);
+        for (k = 0U; k < sc.step_count; k++) {
+            tm_printf((UB *)"%d ", (INT)sc.steps[k]);
+        }
+        tm_printf((UB *)"(plan 0=continue 1=left 2=right 3=reverse 4=stop)\n");
+    }
+#if ROBOT_SCAN_RAYS
+    if (g_diag_ray_fresh) {
+        /* angle:kind:mm per ray, kind O = obstacle echo, F = far echo, N = no echo, I = invalid; the angle is the servo angle, 90 straight ahead */
+        static const char KIND[4] = { 'O', 'F', 'N', 'I' };
+        uint8_t r;
+        uint8_t n = g_diag_ray_count;
+
+        g_diag_ray_fresh = false;
+        g_diag_ray_scan_no++;
+        tm_printf((UB *)"[ray] scan=%u rays=%u (angle:kind:mm, O obstacle F far N no-echo I invalid)\n", (UINT)g_diag_ray_scan_no, (UINT)n);
+        for (r = 0U; r < n; r++) {
+            tm_printf((UB *)"[ray] %u:%c:%u\n", (UINT)g_diag_ray[r].angle, KIND[g_diag_ray[r].kind & 3U], (UINT)g_diag_ray[r].mm);
+        }
+    }
+#endif
+}
+
 static void diag_task(INT stacd, void *exinf)
 {
+    uint8_t diag_loops = 0U;
+
     (void)stacd;
     (void)exinf;
     for (;;) {
@@ -1174,7 +1673,12 @@ static void diag_task(INT stacd, void *exinf)
         uint32_t ir_edges[3];
         uint32_t ir_do;
 
-        (void)tk_dly_tsk(1000);
+        (void)tk_dly_tsk(100);
+        diag_drain_events();
+        if (++diag_loops < 10U) {
+            continue;
+        }
+        diag_loops = 0U;
         state = robot_irq_save();
         line = g_line_share;
         motion = g_motion_share;
@@ -1202,6 +1706,55 @@ static void diag_task(INT stacd, void *exinf)
                   (UINT)g_max_motion_us, (UINT)g_max_line_us, (UINT)g_max_vehicle_us,
                   (UINT)hal_adc_max_isr_us(), (UINT)hal_tick_overruns(HAL_TICK_MOTION),
                   (UINT)hal_tick_overruns(HAL_TICK_CONTROL), (UINT)hal_tick_overruns(HAL_TICK_VEHICLE));
+#if ROBOT_STOP_TIMING
+        if (g_st_state >= 4U) {
+            /* print once the wheels are still, or after 3 s if they never were */
+            static uint32_t waiting_since_ms;
+            const uint32_t now_ms = hal_time_ms();
+
+            if (g_st_state == 4U) {
+                if (waiting_since_ms == 0U) {
+                    waiting_since_ms = now_ms;
+                }
+            }
+            if ((g_st_state == 5U) || ((now_ms - waiting_since_ms) > 3000U)) {
+                tm_printf((UB *)"[stop] #%u first-reading=%umm threshold=%umm  sonar-to-declared=%uus declared-to-STOP=%uus STOP-to-PWM0=%uus  total=%uus  wheels-still=%s%uus\n",
+                          (UINT)(++g_st_count), (UINT)g_st_first_mm, (UINT)g_st_threshold_mm,
+                          (UINT)(g_st_declared_us - g_st_first_us), (UINT)(g_st_cmd_us - g_st_declared_us),
+                          (UINT)(g_st_pwm0_us - g_st_cmd_us), (UINT)(g_st_pwm0_us - g_st_first_us),
+                          (g_st_state == 5U) ? "" : ">", (UINT)((g_st_state == 5U) ? (g_st_still_us - g_st_first_us) : 3000000U));
+                waiting_since_ms = 0U;
+                g_st_state = 0U;
+            }
+        }
+#endif
+        tm_printf((UB *)"[gpio] edge-interrupts=%u (the encoders and the sonar echo count here)  switched on from processor %d, result %d\n",
+                  (UINT)hal_gpio_isr_count(), (INT)g_irq_prc, (INT)g_irq_result);
+#if TM_WIFI_CYW43
+        {
+            /* What the radio is doing, once a second: this is what says why the car has not joined. */
+            robot_net_info_t w;
+            const char *js = "?";
+
+            robot_net_get(&w);
+            switch (w.join_state) {
+            case CYW43_UTK_JOIN_WAIT_SCAN:      js = "waiting-for-scan"; break;
+            case CYW43_UTK_JOIN_JOINING:        js = "joining"; break;
+            case CYW43_UTK_JOIN_CONNECTED:      js = "connected"; break;
+            case CYW43_UTK_JOIN_LOSS_GRACE:     js = "link-lost-grace"; break;
+            case CYW43_UTK_JOIN_BACKOFF:        js = "backoff-before-retry"; break;
+            case CYW43_UTK_JOIN_DISCONNECTING:  js = "disconnecting"; break;
+            default: break;
+            }
+            tm_printf((UB *)"[wifi] radio=%s init=%d networks-seen=%u strongest=%ddBm join=%s attempts=%u failed=%u last-rc=%d "
+                            "link=%u rssi=%ddBm dhcp=%u ip=%u.%u.%u.%u mqtt=%u\n",
+                      (UB *)(w.ready ? "ready" : "NOT-READY"), (INT)w.init_result, (UINT)w.networks_seen, (INT)w.strongest_dbm,
+                      (UB *)js, (UINT)w.join_attempts, (UINT)w.join_failures, (INT)w.join_result,
+                      (UINT)w.link_up, (INT)w.rssi_dbm, (UINT)w.dhcp,
+                      (UINT)w.ip[0], (UINT)w.ip[1], (UINT)w.ip[2], (UINT)w.ip[3],
+                      (UINT)w.mqtt_state);
+        }
+#endif
         {
             static uint32_t shown_tries;
 
@@ -1264,12 +1817,49 @@ static ER make_task(void (*entry)(INT, void *), PRI pri, INT stack)
     return tk_sta_tsk(id, 0);
 }
 
+/*
+ * The GPIO edge interrupt (the wheel encoders and the sonar echo) is routed to processor 1 (RP2040 core 0): the HAL uses the
+ * PROC0 interrupt-enable registers.  EnableInt() switches an interrupt on in the NVIC of the core that CALLS it, and the
+ * initial task that runs robot_start() is not pinned, so on the radio build it ran on core 1: the interrupt was enabled on
+ * the wrong core and never fired (encoders stuck at 0, so the car faulted on START; no sonar echo).  This task is pinned to
+ * processor 1, like every robot task, and does the two calls that switch interrupts on.
+ */
+static void irq_start_task(INT stacd, void *exinf)
+{
+    (void)stacd;
+    (void)exinf;
+#if TK_SUPPORT_SMP
+    g_irq_prc = (INT)tk_get_prc();
+#endif
+    g_irq_result = hal_gpio_irq_start();
+    if (g_irq_result >= E_OK) {
+        g_irq_result = hal_tick_start(g_flg);
+    }
+    g_irq_done = true;
+    tk_ext_tsk();
+}
+
+/* Debug aid (ROBOT_START_DELAY_MS != 0): print a line and pause before each start-up step, so that a step which stalls the
+ * core is named by the last line that reached the console. */
+#if ROBOT_START_DELAY_MS
+#define STAGE(name) do { tm_printf((UB *)"[start] %s\n", (UB *)(name)); (void)tk_dly_tsk(1500U); } while (0)
+#else
+#define STAGE(name) ((void)0)
+#endif
+
 ER robot_start(void)
 {
     T_CFLG cflg;
     ER err;
 
+    STAGE("hal_init");
     hal_init();
+    STAGE("telemetry inbox");
+#if TM_WIFI_MQTT
+    if (telemetry_rtos_boot_init() == 0) {      /* the inbox mutex, before any producer or radio task runs */
+        return E_SYS;
+    }
+#endif
     fault_mask_init(&g_faults);
     tel_queue_init(&g_tel_q);
     g_obstacle_share.updated_ms = 0U;
@@ -1282,26 +1872,47 @@ ER robot_start(void)
         return g_flg;
     }
 
+    STAGE("motion task");
     err = make_task(motion_task, ROBOT_PRI_MOTION, ROBOT_STACK_BYTES);
     if (err < E_OK) { return err; }
+    STAGE("line task");
     err = make_task(line_task, ROBOT_PRI_LINE, ROBOT_STACK_BYTES);
     if (err < E_OK) { return err; }
+    STAGE("vehicle task");
     err = make_task(vehicle_task, ROBOT_PRI_VEHICLE, ROBOT_STACK_BYTES);
     if (err < E_OK) { return err; }
+    STAGE("obstacle task");
     err = make_task(obstacle_task, ROBOT_PRI_OBSTACLE, ROBOT_STACK_BYTES);
     if (err < E_OK) { return err; }
+    STAGE("imu task");
     err = make_task(imu_task, ROBOT_PRI_IMU, ROBOT_STACK_BYTES);
     if (err < E_OK) { return err; }
+    STAGE("net task");
+#if TM_WIFI_MQTT
+    err = make_task(net_task, ROBOT_PRI_NET, ROBOT_STACK_BYTES * 2);        /* it calls into the kernel (mutex, queue copy) */
+#else
     err = make_task(net_task, ROBOT_PRI_NET, ROBOT_STACK_BYTES);
+#endif
     if (err < E_OK) { return err; }
+    STAGE("diag task");
 #if ROBOT_DIAG_PRINT
     err = make_task(diag_task, ROBOT_PRI_DIAG, ROBOT_STACK_BYTES * 2);
     if (err < E_OK) { return err; }
 #endif
 
-    err = hal_gpio_irq_start();
-    if (err < E_OK) {
-        return err;
+    STAGE("gpio interrupts and control ticks (on processor 1)");
+    err = make_task(irq_start_task, 1, ROBOT_STACK_BYTES);
+    if (err < E_OK) { return err; }
+    {
+        uint32_t waited;
+
+        for (waited = 0U; (!g_irq_done) && (waited < 2000U); waited += 2U) {
+            (void)tk_dly_tsk(2U);
+        }
     }
-    return hal_tick_start(g_flg);
+    if (!g_irq_done) {
+        return E_TMOUT;
+    }
+    STAGE("all started");
+    return g_irq_result;
 }

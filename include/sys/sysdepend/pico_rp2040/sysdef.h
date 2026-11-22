@@ -111,4 +111,8 @@
  */
 #define LOWPOW_LIMIT	0x7fff		/* Maximum number for disabling */
 
+#if APP_BUDDY5 && BOARD_DIAG_GPIO_SCAN
+#error Buddy_5_requires_BOARD_DIAG_GPIO_SCAN_disabled
+#endif
+
 #endif /* __TK_SYSDEF_DEPEND_H__ */

@@ -1,0 +1,7 @@
+cycle,leg,expected_mm,measured_mm,error_mm,error_percent,direction_ok,bad_transitions_added
+1,forward,500,463,-37,-7.4,yes,8
+1,back,-500,-486,-14,-2.8,yes,13
+2,forward,500,504,4,0.8,yes,10
+2,back,-500,-499,-1,-0.2,yes,7
+3,forward,500,497,-3,-0.6,yes,17
+3,back,-500,-496,-4,-0.8,yes,7

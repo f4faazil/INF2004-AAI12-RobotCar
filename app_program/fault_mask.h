@@ -18,9 +18,8 @@ typedef uint16_t fault_bits_t;
 
 /* Bit positions are part of the telemetry format (telemetry.h), so append,
  * never renumber.  Stop-class faults stop the car; informational faults are
- * reported only.  The IMU is informational on purpose: Tribunal Version A
- * says an IMU failure must degrade to "hump N/A", never block or stop the
- * car, because hump measurement is not safety-critical. */
+ * reported only.  IMU read failures are informational ("hump N/A"), while a
+ * sustained lift/overturn indication is stop-class. */
 #define FAULT_LINE_STALE        ((fault_bits_t)(1U << 0))   /* stop: no fresh IR frames */
 #define FAULT_LINE_CAL          ((fault_bits_t)(1U << 1))   /* stop: calibration failed */
 #define FAULT_LINE_LOST         ((fault_bits_t)(1U << 2))   /* stop: line not recovered */
@@ -30,6 +29,7 @@ typedef uint16_t fault_bits_t;
 #define FAULT_ULTRASONIC        ((fault_bits_t)(1U << 6))   /* stop: cannot see obstacles */
 #define FAULT_NO_SAFE_PATH      ((fault_bits_t)(1U << 7))   /* stop: scan found no route */
 #define FAULT_RECOVERY_LIMIT    ((fault_bits_t)(1U << 8))   /* stop: 5 s / 0.5 m exceeded */
+#define FAULT_IMU_LIFT          ((fault_bits_t)(1U << 9))   /* stop: sustained lift/overturn */
 #define FAULT_BARCODE_REJECT    ((fault_bits_t)(1U << 12))  /* info: unmapped/invalid code */
 #define FAULT_LINE_OVERFLOW     ((fault_bits_t)(1U << 13))  /* info: ADC ring overflowed */
 #define FAULT_TELEMETRY_DROP    ((fault_bits_t)(1U << 14))  /* info: telemetry buffer full */
@@ -38,7 +38,7 @@ typedef uint16_t fault_bits_t;
 #define FAULT_STOP_MASK         ((fault_bits_t)(FAULT_LINE_STALE | FAULT_LINE_CAL | \
                                   FAULT_LINE_LOST | FAULT_ENCODER | FAULT_MOTION | \
                                   FAULT_ULTRASONIC | FAULT_NO_SAFE_PATH | \
-                                  FAULT_RECOVERY_LIMIT))
+                                  FAULT_RECOVERY_LIMIT | FAULT_IMU_LIFT))
 
 typedef struct {
     volatile fault_bits_t bits;

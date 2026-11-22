@@ -47,6 +47,11 @@ static motion_config_t make_config(void)
     c.stopped_confirm_ms = 40U;
     c.encoder_fault_ms = 300U;
     c.encoder_fault_pwm = 300U;
+    c.ff_right_num = 0;
+    c.ff_right_den = 0;             /* right wheel shares the left feed-forward */
+    c.pwm_offset_left = 0;
+    c.pwm_offset_right = 0;
+    c.pwm_limit = 0;                /* full range */
     return c;
 }
 
@@ -573,6 +578,89 @@ static void test_unit_conversions(void)
     CHECK_INT(-motion_counts_to_um(&cfg, 777), motion_counts_to_um(&cfg, -777));
 }
 
+/*
+ * Open-loop drive model: with the PID switched off the PWM is exactly
+ * offset + speed x ff, per wheel, in the direction of the target.
+ */
+static void rig_init_open_loop(rig_t *r, motion_config_t *cfg)
+{
+    rig_init(r);
+    cfg->kp = 0;
+    cfg->ki = 0;
+    cfg->kd = 0;
+    cfg->balance_mm_s_per_mm = 0;
+    motion_init(&r->m, cfg);
+}
+
+static void test_offset_is_added_in_the_direction_of_the_target(void)
+{
+    rig_t r;
+    motion_config_t cfg = make_config();
+    motion_cmd_t fwd = drive(90U, 80, 0);
+    motion_cmd_t rev = drive(91U, -80, 0);
+
+    cfg.pwm_offset_left = 100;
+    cfg.pwm_offset_right = 60;
+    rig_init_open_loop(&r, &cfg);
+    rig_run(&r, 300U, &fwd);
+    CHECK_INT(300, r.out.left_pwm);             /* 80 x 5/2 + 100 */
+    CHECK_INT(260, r.out.right_pwm);            /* 80 x 5/2 + 60 */
+
+    rig_init_open_loop(&r, &cfg);
+    rig_run(&r, 300U, &rev);
+    CHECK_INT(-300, r.out.left_pwm);
+    CHECK_INT(-260, r.out.right_pwm);
+}
+
+static void test_right_wheel_has_its_own_feed_forward(void)
+{
+    rig_t r;
+    motion_config_t cfg = make_config();
+    motion_cmd_t fwd = drive(92U, 80, 0);
+
+    cfg.ff_right_num = 3;
+    cfg.ff_right_den = 1;
+    cfg.pwm_offset_right = 10;
+    rig_init_open_loop(&r, &cfg);
+    rig_run(&r, 300U, &fwd);
+    CHECK_INT(200, r.out.left_pwm);             /* left keeps 5/2 */
+    CHECK_INT(250, r.out.right_pwm);            /* 80 x 3 + 10 */
+}
+
+static void test_zero_right_den_means_shared_feed_forward(void)
+{
+    rig_t r;
+    motion_config_t cfg = make_config();
+    motion_cmd_t fwd = drive(93U, 80, 0);
+
+    cfg.ff_right_num = 7;                       /* ignored: den is 0 */
+    cfg.ff_right_den = 0;
+    rig_init_open_loop(&r, &cfg);
+    rig_run(&r, 300U, &fwd);
+    CHECK_INT(200, r.out.left_pwm);
+    CHECK_INT(200, r.out.right_pwm);
+}
+
+static void test_configured_pwm_limit_caps_both_wheels(void)
+{
+    rig_t r;
+    motion_config_t cfg = make_config();
+    motion_cmd_t c = drive(94U, 250, 0);
+    int i;
+
+    cfg.pwm_limit = 400;
+    cfg.pwm_offset_left = 150;
+    rig_init(&r);
+    motion_init(&r.m, &cfg);
+    for (i = 0; i < 200; i++) {
+        (void)motion_submit(&r.m, &c, r.now_ms);
+        rig_step(&r);
+        CHECK(r.out.left_pwm <= 400);
+        CHECK(r.out.right_pwm <= 400);
+        CHECK(r.out.left_pwm >= -400);
+    }
+}
+
 int main(void)
 {
     RUN(test_drive_reaches_commanded_speed);
@@ -598,5 +686,9 @@ int main(void)
     RUN(test_zero_speed_drive_outputs_zero);
     RUN(test_pwm_is_limited);
     RUN(test_unit_conversions);
+    RUN(test_offset_is_added_in_the_direction_of_the_target);
+    RUN(test_right_wheel_has_its_own_feed_forward);
+    RUN(test_zero_right_den_means_shared_feed_forward);
+    RUN(test_configured_pwm_limit_caps_both_wheels);
     return TEST_REPORT();
 }

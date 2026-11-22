@@ -32,6 +32,7 @@ int32_t lwip_utk_ipv4_configure(struct netif *netif,
         const char *address, const char *netmask, const char *gateway,
         const char *target);
 int32_t lwip_utk_ipv4_adopt_netif(struct netif *netif);
+void lwip_utk_ipv4_reset(struct netif *netif);
 void lwip_utk_ipv4_poll(struct netif *netif);
 void lwip_utk_ipv4_get_status(T_LWIP_UTK_IPV4_STATUS *status);
 

@@ -53,7 +53,50 @@ typedef struct {
     uint16_t    assumed_depth_mm;       /* the ultrasonic sees only the front face */
     uint16_t    min_turn_distance_mm;   /* nearer than this: reverse first */
     uint16_t    recovery_limit_mm;      /* longest allowed return leg (0.5 m) */
+
+    /*
+     * 0 = off: free space beside the obstacle must be confirmed out to the
+     * clearance the car needs.  The HC-SR04's beam is wide and the servo sweeps only
+     * about 28 degrees each side, so on the real car the sonar can confirm only 40 to
+     * 120 mm beside a box and that rule always stops the car.  N > 0: a side counts as
+     * open when at least N rays in a row beyond the obstacle, out to the end of the
+     * sweep, are clear (a far echo, or with no_echo_is_clear a no echo).  The car then
+     * drives up to a car-width into space the sonar never saw.  Only for a controlled
+     * arena: it weakens the "confirmed free space" rule.
+     */
+    uint8_t     sweep_clear_min_rays;
+
+    /*
+     * 0 = off.  The sonar makes a box look much wider than it is (the beam is wide: an
+     * 80 to 150 mm box reads 300 to 650 mm), which makes the sideways leg of a bypass
+     * far too long.  The scanned width is clamped to this, about its centre, for the
+     * profile's edges.  Set it to a little more than the widest real obstacle.
+     */
+    uint16_t    max_width_mm;
+
+    /* Added to the forward leg of a bypass, so the car does not turn back close to the
+     * far side of an obstacle deeper than assumed_depth_mm. */
+    uint16_t    forward_extra_mm;
+
+    /* The side the blind bypass takes: +1 left, -1 right, 0 = the side whose outer rays read
+     * farther.  When the box fills the sweep that choice is close to noise, so set this to
+     * the side the course leaves free.  A forced side that needs more than recovery_limit_mm
+     * gives no plan. */
+    int8_t      blind_side;
+
+    /*
+     * The forward leg of a bypass, from the car's real geometry.  The axle moves from the stop
+     * until the car's REAR is past the obstacle's back edge:
+     *     forward = distance to the obstacle's front (sonar) + sensor_to_axle_mm
+     *             + assumed_depth_mm + axle_to_rear_mm + forward_margin_mm + forward_extra_mm.
+     * Set axle_to_rear_mm to 0 for the older, much longer estimate that adds the car's whole
+     * length (robot_length_mm) and margin_mm instead.
+     */
+    uint16_t    sensor_to_axle_mm;      /* the sonar face is this far ahead of the wheel axle */
+    uint16_t    axle_to_rear_mm;        /* the axle to the car's rear edge */
+    uint16_t    forward_margin_mm;      /* clearance of the car's rear past the obstacle's back edge */
 } obstacle_config_t;
+
 
 /* ---- scan sequencer --------------------------------------------------- */
 
@@ -176,6 +219,19 @@ typedef struct {
 
 void obstacle_plan(const obstacle_config_t *cfg, const obstacle_profile_t *profile,
                    bypass_plan_t *plan);
+
+/*
+ * A bypass WITHOUT confirmed free space, for a controlled open arena only.  When the
+ * sonar sees the obstacle across the whole sweep (the beam is too wide to find its
+ * edges) no side can be shown to be clear, so obstacle_plan() stops.  This goes round
+ * anyway: it takes the side whose outermost rays read farther (the obstacle seems to
+ * end sooner there; a tie goes right), with the sideways distance taken from the
+ * scanned width plus the corridor.  Returns false, leaving *plan untouched, when there
+ * is no obstacle in the path, it is too close to turn, or the detour exceeds the
+ * recovery limit on both sides.  The caller must keep an eye on the sonar while moving.
+ */
+bool obstacle_blind_plan(const obstacle_config_t *cfg, const scan_point_t *pts, uint8_t n,
+                         const obstacle_profile_t *profile, bypass_plan_t *plan);
 
 /* Table-based trigonometry in per-mille, angles in whole degrees 0..180. */
 int16_t trig_sin_permille(int16_t deg);

@@ -50,7 +50,7 @@
 #define	TM_CONSOLE_USB_CDC	(0)	/* USB CDC-ACM console */
 #endif
 #ifndef TM_CONSOLE_UART
-#define	TM_CONSOLE_UART		(1)	/* UART0 early/panic mirror */
+#define	TM_CONSOLE_UART		(0)	/* UART0 early/panic mirror */
 #endif
 
 #endif /* __TM_CONFIG_H__ */

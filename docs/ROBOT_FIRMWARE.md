@@ -37,6 +37,7 @@ The code follows the Barr C standard as far as the µT-Kernel glue allows (4-spa
                                                             ▲
  encoders ─GPIO irq─────────────────────────────────────────┘ (snapshot)
  IMU ─I2C1─▶ IMU task ──hump status──▶ LINE (suppress false line-lost) and VEHICLE
+                 └── sustained lift/overturn ──FAULT_IMU_LIFT──▶ Motion STOP + latched VC_STOPPED
 ```
 
 | Pri | Task | Period | Owns | File |
@@ -45,7 +46,7 @@ The code follows the Barr C standard as far as the µT-Kernel glue allows (4-spa
 | 2 | Line | 10 ms | IR ring, calibration, barcode lanes, junctions, steering request | `line_nav.c`, `line_sensor.c`, `barcode.c` |
 | 3 | Vehicle | 10 ms | mission state; the only sender of movement commands; safety evaluation | `vehicle.c`, `safety.c` |
 | 3 | Obstacle | 10 ms | servo, HC-SR04, scan, profile, bypass plan | `ultrasonic.c`, `servo.c`, `obstacle.c` |
-| 5 | IMU | 20 ms | I2C1, tilt, hump height, motion events | `imu.c` |
+| 5 | IMU | 20 ms | I2C1, tilt, lift/overturn and hump height | `imu.c` |
 | 10 | Net | 20 ms | MQTT client, telemetry publishing, remote commands | `mqtt_client.c`, `telemetry.c` |
 | 11 | Diag | 1 s | one console status line | `robot_tasks.c` |
 
@@ -58,7 +59,12 @@ The 1 kHz tick is a hardware-timer interrupt, **not** the kernel tick (10 ms): t
 - Motion is the only code that writes motor PWM. A command has an **id** and a **50 ms lease**; if the Vehicle Controller stops refreshing it, the wheels stop by themselves. A refresh of the same id never restarts a manoeuvre; an expired, stopped or finished id can never be resumed; commands older than the newest accepted id are rejected (wrap-aware).
 - A stop-class fault zeroes the PWM **from inside the Motion task**, without waiting for the Vehicle task.
 - The obstacle scan starts only after Motion confirms the car has stopped *for the STOP that was sent* (a stale "stopped" flag from an earlier command does not count).
-- The IMU is deliberately **not** a stop-class fault: an IMU failure degrades to "hump N/A".
+- An IMU read failure remains informational and degrades to "hump N/A". A sustained
+  tilt of at least 60 degrees or acceleration magnitude at most 300 mg for
+  300 ms raises stop-class `FAULT_IMU_LIFT`, sends STOP, reports a fault event,
+  and latches `VC_STOPPED` until reboot/reset.
+  These limits are provisional. A single accelerometer cannot detect a level,
+  stationary robot lifted evenly; that needs a wheel-contact sensor or another input.
 - Network loss never reaches the control tasks: telemetry is a bounded, non-blocking queue that drops new records when full and discards anything older than 1 s.
 
 ---
@@ -143,9 +149,11 @@ A decoded Code 39 letter is mapped to a command by the mapping the PC sent over 
 
 ### MQTT mapping
 
-The car has **no built-in letter-to-movement mapping**. The PC publishes it to `aai12/robot/map` (`ROBOT_MQTT_BASE "/map"`); the car subscribes to that topic after connecting, so a **retained** message is applied again after every reboot or reconnect. Each message replaces the whole mapping; a message with any error is rejected whole and the old mapping is kept. The car answers on `aai12/robot/map_ack` with `OK n=<entries>` or `ERR empty|syntax|letter|action|duplicate`.
+The car has **no built-in letter-to-movement mapping**. The PC publishes it to `aai12/robot/map` (`ROBOT_MQTT_BASE "/map"`); the car subscribes to that topic after connecting, so a **retained** message is applied again after every reboot or reconnect. Each message replaces the whole mapping; a message with any error is rejected whole and the old mapping is kept. The car answers on `aai12/robot/map_ack` with two bytes: type `0x13`, then the result in bits 7 to 5 (0 OK, 1 empty, 2 syntax, 3 letter, 4 action, 5 duplicate) and the number of letters in bits 4 to 0 (the dashboard shows `OK n=3` or `ERR duplicate`).
 
-Payload (text, at most 128 bytes, case-insensitive; entries separated by comma, semicolon, space, tab or newline; no spaces around `=`):
+Payload, **binary (v23 and newer):** type `0x12`, then **one byte per letter**: the letter index (A = 0 to Z = 25) in bits 7 to 3 and the movement in bits 2 to 0 (1 left, 2 right, 3 straight, 4 U-turn). `A=L,B=R,F=U` is the four bytes `12 01 0a 2c`; the type byte alone (`12`) clears the map; at most 26 letters, so at most 27 bytes. The car keeps the map in this same form. The text form below is still accepted by the car (the dashboard now sends binary):
+
+Text payload (at most 32 bytes since v24, which is the mailbox size; was 128; case-insensitive; entries separated by comma, semicolon, space, tab or newline; no spaces around `=`):
 
 | Form | Example |
 |---|---|
@@ -155,7 +163,8 @@ Payload (text, at most 128 bytes, case-insensitive; entries separated by comma, 
 
 Actions: `L`/`LEFT`, `R`/`RIGHT`, `F`/`FWD`/`FORWARD`/`S`/`STRAIGHT` (go straight on), `U`/`UTURN`/`U-TURN` (U-turn to the right).
 
-Example from a PC with mosquitto: `mosquitto_pub -h <broker> -t aai12/robot/map -r -m "A=L,B=R,C=F,D=U"`. The status line shows `map=<entries>/<rejected messages>`.
+Example from a PC with mosquitto (text form): `mosquitto_pub -h <broker> -t aai12/robot/map -r -m "A=L,B=R,C=F,D=U"`; the binary form is `mosquitto_pub -h <broker> -t aai12/robot/map -r -m $'
+,'` or `npm run map` in the dashboard folder. The status line shows `map=<entries>/<rejected messages>`.
 
 ### Telemetry: the data representation table (minimum-bit change)
 
@@ -179,7 +188,7 @@ Messages are bit-packed MSB first with a 1-byte type header; **no C bit-fields o
 | highest hump | 7 | mm, 127 = none |
 | saturated flags | 4 | position, speed, distance, obstacle |
 
-Encoded sizes: status **17 bytes**, event 7, hump 6, obstacle 10, heartbeat 9, command 5, ack 3 (against a 128-byte record limit). Report RAM before/after packing with `arm-none-eabi-size` and these `sizeof`s for the Week 13 comparison.
+Encoded sizes: status **17 bytes**, event 7, hump 6, obstacle 10, heartbeat 9, command 5, ack 3 (against the 32-byte record limit; it was 128 before the queue slots were resized). Report RAM before/after packing with `arm-none-eabi-size` and these `sizeof`s for the Week 13 comparison.
 
 ### Remote commands
 

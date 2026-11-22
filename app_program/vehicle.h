@@ -75,6 +75,11 @@ typedef struct {
     int16_t  hump_mm_s;
     int16_t  creep_mm_s;                /* reacquiring / recovering a line */
     int16_t  approach_mm_s;             /* top speed while a barcode waits for its junction (0 = off) */
+    int16_t  recover_advance_mm;        /* wheel axle to the IR sensor row, less half the line: once the
+                                           line is found the car drives this far so the axle is over the
+                                           line before it turns to face along it.  0 = turn at once */
+    int16_t  recover_mm_s;              /* returning to the line after a bypass: the whole sideways leg
+                                           (up to 0.5 m) must be covered inside recovery_time_limit_ms */
     int16_t  junction_advance_mm;       /* sensor bar to wheel axle, less the crossing offset */
     int16_t  turn_deg;                  /* a left/right instruction: + left; sets the side only */
     int16_t  uturn_deg;                 /* + left, - right; sets the side only */
@@ -91,6 +96,27 @@ typedef struct {
     uint32_t recovery_time_limit_ms;    /* 5 s */
     int16_t  recovery_distance_limit_mm;/* 0.5 m */
     uint32_t obstacle_blank_ms;         /* ignore a cleared obstacle for a while */
+    uint16_t bypass_stop_mm;            /* the sonar reads less than this on a straight leg of a bypass, or
+                                           on the drive back to the line: stop and wait.  0 = not watched */
+    uint32_t bypass_blank_ms;           /* ignore the sonar this long after a leg starts: its median still
+                                           holds readings from before the turn */
+    uint32_t bypass_hold_ms;            /* wait this long for the way to clear, then fault */
+
+    /*
+     * Looking at the box while passing it.  On the straight leg beside the box the sonar is
+     * tilted toward it.  The car keeps going until the box is no longer seen, then drives only
+     * as far more as its rear needs to clear the box's back corner.  The planned leg (from the
+     * assumed depth) is the limit: the sonar only shortens it, unless the box is still in view
+     * at its end, when the car goes on a little at a time.  0 = the sonar is not used this way.
+     */
+    int16_t  side_aim_deg;              /* tilt of the sonar toward the box (the servo reaches about 28) */
+    uint16_t side_min_mm;               /* an echo inside [min, max] is the box's side */
+    uint16_t side_max_mm;
+    uint16_t side_loss_ahead_pct;       /* when the echo is lost, the box's back corner is this % of the last
+                                           range ahead of the sonar: sin(aim) / tan(aim + half the beam) */
+    uint16_t side_tail_mm;              /* from that moment: sonar to axle + axle to rear corner + margin */
+    uint16_t side_extend_mm;            /* box still in view at the end of the leg: go this much further ... */
+    uint16_t side_extend_max_mm;        /* ... up to this much in all */
     uint8_t  max_reverse_attempts;
     uint8_t  found_cycles;              /* consecutive visible cycles = line found */
     uint32_t cmd_timeout_base_ms;       /* finite manoeuvre time allowance */
@@ -113,6 +139,11 @@ typedef struct {
 
     motion_status_t  motion;
     bool             obstacle_present;  /* forward monitor */
+    bool             obstacle_mm_valid; /* a fresh distance from the forward sonar ... */
+    uint16_t         obstacle_mm;       /* ... and the distance itself, from the sonar face */
+    uint16_t         side_seq;          /* the latest raw sonar reading: its sequence number ... */
+    bool             side_echo;         /* ... whether it had an echo ... */
+    uint16_t         side_mm;           /* ... and the range */
     bool             scan_done;
     bypass_plan_t    plan;
     bool             hump_in_progress;
@@ -135,6 +166,7 @@ typedef struct {
     fault_bits_t    clear_faults;       /* authorised by the operator */
     vehicle_state_t state;
     uint8_t         activity;           /* VC_ACT_* */
+    int8_t          sonar_aim;          /* +1 tilt the sonar left, -1 right, 0 straight ahead */
     uint8_t         event_count;
     vehicle_event_t events[VC_MAX_EVENTS];
 } vehicle_out_t;
@@ -172,6 +204,23 @@ typedef struct {
     int32_t          start_distance_mm;
     int16_t          realign_turn_deg;
     bool             stop_sent;
+    uint32_t         hold_since_ms;     /* when a bypass leg was stopped for something in the way */
+    uint32_t         clear_since_ms;    /* when the way last became clear (0 = it is not) */
+    int32_t          step_start_mm;     /* odometer at the start of the current straight leg */
+    int16_t          leg_mm;            /* the distance that leg was asked to cover */
+
+    /* the straight leg beside the box */
+    int32_t          leg_origin_mm;     /* odometer when the leg began */
+    int16_t          leg_total_mm;      /* what the leg is to cover in all, from there */
+    int16_t          leg_extended_mm;
+    uint16_t         side_seq_seen;
+    uint8_t          side_hits;         /* readings in a row that saw the box's side */
+    uint8_t          side_miss;         /* readings in a row that did not */
+    bool             side_seen;         /* the box has been seen on this leg */
+    bool             side_cut_done;
+    uint16_t         side_last_mm;      /* the last range that saw it */
+    int32_t          side_miss_mm;      /* odometer when the readings stopped seeing it */
+    bool             imu_lift_latched;
 } vehicle_t;
 
 void vehicle_init(vehicle_t *vc, const vehicle_config_t *cfg);
@@ -187,8 +236,8 @@ void vehicle_step(vehicle_t *vc, const vehicle_in_t *in, vehicle_out_t *out);
  * Remote commands never move the wheels, and START, CALIBRATE and
  * CLEAR_FAULTS are refused while the mission is running.
  */
-uint8_t vehicle_remote_policy(vehicle_state_t state, bool allow_remote_stop, uint8_t cmd,
-                              uint8_t *request_bit);
+uint8_t vehicle_remote_policy(vehicle_state_t state, bool allow_remote_stop,
+                              bool imu_lift_latched, uint8_t cmd, uint8_t *request_bit);
 
 bool vehicle_is_running(vehicle_state_t state);
 

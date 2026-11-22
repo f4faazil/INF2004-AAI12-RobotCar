@@ -1,0 +1,627 @@
+15:54:15.535  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=1360 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=0 net=0 us(m/l/v/isr)=152/275/399/195 ovr=0/0/0
+15:54:15.744  [wifi] radio=NOT-READY init=-5 networks-seen=0 strongest=-32768dBm join=waiting-for-scan attempts=0 failed=0 last-rc=-5 link=0 rssi=-32768dBm dhcp=0 ip=0.0.0.0 mqtt=0
+15:54:16.636  [robot] st=1 f=4020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=2460 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=13 net=0 us(m/l/v/isr)=152/275/446/195 ovr=0/0/0
+15:54:16.838  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=joining attempts=1 failed=0 last-rc=-5 link=0 rssi=-32768dBm dhcp=0 ip=0.0.0.0 mqtt=0
+15:54:17.737  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=3560 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=27 net=0 us(m/l/v/isr)=152/275/446/195 ovr=0/0/0
+15:54:17.951  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=joining attempts=1 failed=0 last-rc=-5 link=0 rssi=-32768dBm dhcp=0 ip=0.0.0.0 mqtt=0
+15:54:18.837  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=4660 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=40 net=0 us(m/l/v/isr)=152/275/446/195 ovr=0/0/0
+15:54:19.052  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=joining attempts=1 failed=0 last-rc=-5 link=0 rssi=-32768dBm dhcp=0 ip=0.0.0.0 mqtt=0
+15:54:19.937  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=5760 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=53 net=0 us(m/l/v/isr)=152/275/446/195 ovr=0/0/0
+15:54:20.147  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=0 ip=0.0.0.0 mqtt=0
+15:54:21.037  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=6860 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=66 net=0 us(m/l/v/isr)=152/275/446/195 ovr=0/0/0
+15:54:21.241  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=0 ip=0.0.0.0 mqtt=0
+15:54:22.137  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=7960 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=79 net=0 us(m/l/v/isr)=152/275/446/195 ovr=0/0/0
+15:54:22.353  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=0 ip=0.0.0.0 mqtt=0
+15:54:23.237  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=9060 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=93 net=0 us(m/l/v/isr)=152/275/446/195 ovr=0/0/0
+15:54:23.439  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=0 ip=0.0.0.0 mqtt=0
+15:54:24.338  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=10160 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=106 net=0 us(m/l/v/isr)=152/275/446/195 ovr=0/0/0
+15:54:24.553  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=0 ip=0.0.0.0 mqtt=0
+15:54:25.437  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=11260 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=119 net=0 us(m/l/v/isr)=152/275/446/195 ovr=0/0/0
+15:54:25.647  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=0 ip=0.0.0.0 mqtt=0
+15:54:26.538  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=12360 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=132 net=0 us(m/l/v/isr)=152/275/446/195 ovr=0/0/0
+15:54:26.744  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=0 ip=0.0.0.0 mqtt=0
+15:54:27.638  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=13460 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=145 net=1 us(m/l/v/isr)=152/275/446/195 ovr=0/0/0
+15:54:27.843  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:54:28.738  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=14560 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=159 net=1 us(m/l/v/isr)=152/275/446/195 ovr=0/0/0
+15:54:28.945  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:54:29.839  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=15660 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=172 net=1 us(m/l/v/isr)=152/275/446/195 ovr=0/0/0
+15:54:30.047  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:54:30.939  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=16760 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=185 net=1 us(m/l/v/isr)=152/275/446/195 ovr=0/0/0
+15:54:31.146  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:54:32.040  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=17860 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=198 net=1 us(m/l/v/isr)=152/275/446/195 ovr=0/0/0
+15:54:32.242  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:54:33.140  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=18960 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=211 net=1 us(m/l/v/isr)=152/275/446/195 ovr=0/0/0
+15:54:33.349  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:54:34.240  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=20060 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=225 net=1 us(m/l/v/isr)=152/275/446/195 ovr=0/0/0
+15:54:34.440  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:54:35.340  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=21160 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=238 net=1 us(m/l/v/isr)=152/275/446/195 ovr=0/0/0
+15:54:35.546  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:54:36.441  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=22260 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=251 net=1 us(m/l/v/isr)=152/275/446/195 ovr=0/0/0
+15:54:36.654  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:54:37.541  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=23360 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=264 net=4 us(m/l/v/isr)=152/275/446/195 ovr=0/0/0
+15:54:37.747  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:54:38.640  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=24460 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=277 net=4 us(m/l/v/isr)=152/275/446/195 ovr=0/0/0
+15:54:38.844  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:54:39.740  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=25560 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=291 net=1 us(m/l/v/isr)=152/275/446/195 ovr=0/0/0
+15:54:39.944  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:54:40.840  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=26660 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=304 net=1 us(m/l/v/isr)=152/275/446/195 ovr=0/0/0
+15:54:41.055  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:54:41.941  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=27760 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=317 net=1 us(m/l/v/isr)=152/275/446/195 ovr=0/0/0
+15:54:42.152  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:54:43.041  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=28860 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=330 net=1 us(m/l/v/isr)=152/275/446/195 ovr=0/0/0
+15:54:43.250  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:54:44.142  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=29960 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=343 net=1 us(m/l/v/isr)=152/275/446/195 ovr=0/0/0
+15:54:44.349  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:54:45.241  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=31060 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=357 net=1 us(m/l/v/isr)=152/275/446/195 ovr=0/0/0
+15:54:45.447  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:54:46.342  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=32160 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=370 net=1 us(m/l/v/isr)=152/275/446/195 ovr=0/0/0
+15:54:46.556  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:54:47.441  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=33260 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=383 net=1 us(m/l/v/isr)=152/275/446/195 ovr=0/0/0
+15:54:47.651  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:54:48.542  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=34360 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=396 net=1 us(m/l/v/isr)=152/275/446/195 ovr=0/0/0
+15:54:48.751  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:54:49.643  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=35460 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=399 net=3 us(m/l/v/isr)=152/275/499/195 ovr=0/0/0
+15:54:49.848  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:54:50.742  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=36560 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=399 net=3 us(m/l/v/isr)=152/275/499/195 ovr=0/0/0
+15:54:50.946  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:54:51.843  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=37660 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=399 net=3 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:54:52.058  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:54:52.943  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=38760 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=399 net=3 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:54:53.150  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:54:54.044  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=39860 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=399 net=4 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:54:54.252  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:54:55.143  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=40960 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=399 net=4 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:54:55.345  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:54:56.244  [robot] st=1 f=4020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=42060 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=411 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:54:56.454  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:54:57.343  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=43160 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=424 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:54:57.545  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:54:58.444  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=44260 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=437 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:54:58.656  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:54:59.545  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=45360 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=450 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:54:59.750  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:55:00.644  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=46460 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=463 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:00.858  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:55:01.744  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=47560 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=477 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:01.950  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:55:02.845  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=48660 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=490 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:03.051  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:55:03.945  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=49760 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=503 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:04.151  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:55:05.045  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=50860 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=516 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:05.246  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:55:06.145  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=51960 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=529 net=4 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:06.354  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:55:07.245  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=53060 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=543 net=4 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:07.449  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:55:08.345  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=54160 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=556 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:08.558  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:55:09.445  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=55260 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=569 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:09.652  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:55:10.545  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=56360 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=582 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:10.746  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:55:11.646  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=57460 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=595 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:11.851  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:55:12.747  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=58560 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=609 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:12.957  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:55:13.847  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=59660 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=622 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:14.050  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:55:14.947  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=60760 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=628 net=3 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:15.158  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:55:16.048  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=61860 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=628 net=3 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:16.250  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:55:17.147  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=62960 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=628 net=3 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:17.361  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:55:18.247  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=64060 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=628 net=3 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:18.461  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:55:19.347  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=65160 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=628 net=3 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:19.557  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:55:20.448  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=66260 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=628 net=4 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:20.653  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:55:21.548  [robot] st=1 f=4020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=67360 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=636 net=4 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:21.749  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:55:22.648  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=68460 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=649 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:22.857  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:55:23.748  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=69560 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=663 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:23.952  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:55:24.848  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=70660 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=676 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:25.064  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:55:25.949  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=71760 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=689 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:26.161  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:55:27.049  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=72860 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=702 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:27.264  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:55:28.149  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=73960 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=715 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:28.361  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:55:29.250  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=75060 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=729 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:29.455  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:55:30.350  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=76160 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=742 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:30.563  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:55:31.449  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=77260 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=755 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:31.656  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:55:32.550  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=78360 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=768 net=4 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:32.763  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:55:33.650  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=79460 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=781 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:33.860  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:55:34.750  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=80560 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=795 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:34.956  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:55:35.850  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=81660 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=808 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:36.055  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:55:36.950  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=82760 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=821 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:37.153  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:55:38.051  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=83860 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=834 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:38.265  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:55:39.151  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=84960 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=847 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:39.359  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:55:40.251  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=86060 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=856 net=3 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:40.456  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:55:41.351  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=87160 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=856 net=3 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:41.564  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:55:42.452  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=88260 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=856 net=3 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:42.666  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:55:43.552  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=89360 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=856 net=3 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:43.762  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:55:44.651  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=90460 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=856 net=3 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:44.852  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:55:45.752  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=91560 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=856 net=4 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:45.963  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:55:46.852  [robot] st=1 f=4020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=92660 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=862 net=4 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:47.067  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:55:47.952  [robot] st=1 f=4020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=93760 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=875 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:48.167  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:55:49.052  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=94860 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=888 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:49.265  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:55:50.153  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=95960 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=901 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:50.357  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:55:51.253  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=97060 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=915 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:51.467  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:55:52.354  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=98160 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=928 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:52.560  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:55:53.454  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=99260 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=941 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:53.667  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:55:54.554  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=100360 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=954 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:54.759  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:55:55.654  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=101460 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=967 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:55.867  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:55:56.754  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=102560 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=981 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:56.969  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:55:57.854  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=103660 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=994 net=4 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:58.057  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:55:58.954  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=104760 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1007 net=4 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:55:59.157  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:56:00.055  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=105860 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1020 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:56:00.268  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:56:01.155  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=106960 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1033 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:56:01.363  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:56:02.255  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=108060 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1047 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:56:02.462  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:56:03.355  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=109160 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1060 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:56:03.569  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:56:04.455  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=110260 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1073 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:56:04.658  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:56:05.556  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=111360 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1084 net=3 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:56:05.764  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:56:06.656  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=112460 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1084 net=3 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:56:06.856  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:56:07.756  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=113560 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1084 net=3 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:56:07.966  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:56:08.856  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=114660 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1084 net=3 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:56:09.058  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:56:09.956  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=115760 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1084 net=3 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:56:10.167  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:56:11.057  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=116860 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1084 net=4 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:56:11.261  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:56:12.157  [robot] st=1 f=4020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=117960 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1086 net=4 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:56:12.372  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:56:13.256  [robot] st=1 f=4020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=119060 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1100 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:56:13.471  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:56:14.357  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=120160 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1113 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:56:14.566  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:56:15.456  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=121260 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1126 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:56:15.658  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:56:16.557  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=122360 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1139 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:56:16.763  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:56:17.658  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=123460 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1152 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:56:17.860  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:56:18.758  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=124560 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1166 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:56:18.969  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:56:19.858  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=125660 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1179 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:56:20.068  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:56:20.957  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=126760 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1192 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:56:21.168  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:56:22.058  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=127860 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1205 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:56:22.268  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:56:23.159  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=128960 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1218 net=4 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:56:23.365  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:56:24.258  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=130060 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1232 net=4 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:56:24.463  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:56:25.359  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=131160 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1245 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:56:25.571  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:56:26.459  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=132260 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1258 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:56:26.668  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:56:27.559  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=133360 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1271 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:56:27.774  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:56:28.659  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=134460 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1284 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:56:28.876  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:56:29.760  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=135560 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1298 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:56:29.968  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:56:30.860  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=136660 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1311 net=1 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:56:31.061  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:56:31.961  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=137760 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1312 net=3 us(m/l/v/isr)=152/275/503/195 ovr=0/0/0
+15:56:32.171  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:56:33.060  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=138860 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1312 net=3 us(m/l/v/isr)=152/275/506/195 ovr=0/0/0
+15:56:33.268  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:56:34.160  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=139960 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1312 net=3 us(m/l/v/isr)=152/275/506/195 ovr=0/0/0
+15:56:34.363  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:56:35.261  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=141060 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1312 net=3 us(m/l/v/isr)=152/275/506/195 ovr=0/0/0
+15:56:35.474  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:56:36.361  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=142160 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1312 net=4 us(m/l/v/isr)=152/275/506/195 ovr=0/0/0
+15:56:36.572  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:56:37.461  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=143260 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1312 net=4 us(m/l/v/isr)=152/275/506/195 ovr=0/0/0
+15:56:37.672  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:56:38.560  [robot] st=1 f=4020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=144360 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1323 net=1 us(m/l/v/isr)=152/275/506/195 ovr=0/0/0
+15:56:38.765  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:56:39.661  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=145460 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1336 net=1 us(m/l/v/isr)=152/275/506/195 ovr=0/0/0
+15:56:39.877  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:56:40.762  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=146560 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1350 net=1 us(m/l/v/isr)=152/275/506/195 ovr=0/0/0
+15:56:40.969  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:56:41.862  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=147660 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1363 net=1 us(m/l/v/isr)=152/275/506/195 ovr=0/0/0
+15:56:42.063  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:56:42.962  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=148760 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1376 net=1 us(m/l/v/isr)=152/275/506/195 ovr=0/0/0
+15:56:43.171  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:56:44.062  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=149860 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1389 net=1 us(m/l/v/isr)=152/275/506/195 ovr=0/0/0
+15:56:44.265  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:56:45.162  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=150960 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1402 net=1 us(m/l/v/isr)=152/275/506/195 ovr=0/0/0
+15:56:45.370  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:56:46.262  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=152060 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1416 net=1 us(m/l/v/isr)=152/275/506/195 ovr=0/0/0
+15:56:46.462  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:56:47.362  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=153160 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1429 net=1 us(m/l/v/isr)=152/275/506/195 ovr=0/0/0
+15:56:47.573  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:56:48.463  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=154260 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1442 net=4 us(m/l/v/isr)=152/275/506/195 ovr=0/0/0
+15:56:48.668  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:56:49.563  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=155360 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1455 net=4 us(m/l/v/isr)=152/275/506/195 ovr=0/0/0
+15:56:49.777  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:56:50.664  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=156460 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1468 net=1 us(m/l/v/isr)=152/275/506/195 ovr=0/0/0
+15:56:50.875  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:56:51.764  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=157560 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1482 net=1 us(m/l/v/isr)=152/275/506/195 ovr=0/0/0
+15:56:51.975  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:56:52.864  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=158660 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1495 net=1 us(m/l/v/isr)=152/275/506/195 ovr=0/0/0
+15:56:53.066  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:56:53.964  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=159760 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1508 net=1 us(m/l/v/isr)=152/275/506/195 ovr=0/0/0
+15:56:54.178  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:56:55.064  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=160860 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1521 net=1 us(m/l/v/isr)=152/275/506/195 ovr=0/0/0
+15:56:55.269  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:56:56.164  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=161960 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1534 net=1 us(m/l/v/isr)=152/275/506/195 ovr=0/0/0
+15:56:56.378  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:56:57.265  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=163060 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1539 net=3 us(m/l/v/isr)=152/275/506/195 ovr=0/0/0
+15:56:57.469  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:56:58.365  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=164160 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1539 net=3 us(m/l/v/isr)=152/275/506/195 ovr=0/0/0
+15:56:58.578  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:56:59.465  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=165260 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1539 net=3 us(m/l/v/isr)=152/275/506/195 ovr=0/0/0
+15:56:59.666  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:57:00.565  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=166360 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1539 net=3 us(m/l/v/isr)=152/275/506/195 ovr=0/0/0
+15:57:00.775  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:57:01.666  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=167460 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1539 net=3 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:01.868  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:57:02.765  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=168560 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1539 net=4 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:02.966  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:57:03.866  [robot] st=1 f=4020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=169660 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1550 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:04.076  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:57:04.966  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=170760 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1563 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:05.174  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:57:06.067  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=171860 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1576 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:06.274  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:57:07.167  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=172960 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1589 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:07.379  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:57:08.266  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=174060 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1603 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:08.481  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:57:09.367  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=175160 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1616 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:09.576  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:57:10.467  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=176260 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1629 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:10.669  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:57:11.567  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=177360 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1642 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:11.768  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:57:12.668  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=178460 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1655 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:12.877  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:57:13.768  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=179560 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1669 net=4 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:13.971  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:57:14.867  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=180660 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1682 net=4 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:15.077  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:57:15.967  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=181760 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1695 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:16.173  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:57:17.068  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=182860 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1708 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:17.281  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:57:18.168  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=183960 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1721 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:18.379  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:57:19.268  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=185060 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1735 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:19.473  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:57:20.369  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=186160 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1748 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:20.581  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:57:21.469  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=187260 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1761 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:21.673  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:57:22.569  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=188360 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1767 net=3 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:22.776  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:57:23.669  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=189460 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1767 net=3 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:23.876  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:57:24.770  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=190560 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1767 net=3 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:24.971  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:57:25.870  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=191660 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1767 net=3 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:26.082  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:57:26.969  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=192760 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1767 net=3 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:27.179  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:57:28.070  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=193860 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1767 net=4 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:28.277  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:57:29.170  [robot] st=1 f=4020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=194960 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1773 net=4 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:29.374  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:57:30.270  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=196060 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1787 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:30.473  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:57:31.371  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=197160 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1800 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:31.576  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:57:32.470  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=198260 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1813 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:32.679  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:57:33.571  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=199360 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1826 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:33.786  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:57:34.671  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=200460 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1839 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:34.874  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:57:35.771  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=201560 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1853 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:35.982  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:57:36.871  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=202660 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1866 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:37.079  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:57:37.971  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=203760 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1879 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:38.173  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:57:39.072  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=204860 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1892 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:39.282  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:57:40.172  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=205960 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1905 net=4 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:40.387  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:57:41.272  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=207060 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1919 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:41.481  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:57:42.372  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=208160 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1932 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:42.574  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:57:43.473  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=209260 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1945 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:43.683  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:57:44.573  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=210360 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1958 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:44.780  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:57:45.673  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=211460 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1971 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:45.875  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:57:46.772  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=212560 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1985 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:46.988  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:57:47.874  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=213660 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1994 net=3 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:48.088  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:57:48.974  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=214760 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1994 net=3 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:49.180  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:57:50.073  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=215860 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1994 net=3 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:50.275  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:57:51.173  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=216960 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1994 net=3 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:51.384  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:57:52.273  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=218060 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1994 net=3 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:52.478  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:57:53.374  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=219160 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=1994 net=4 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:53.586  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:57:54.474  [robot] st=1 f=4020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=220260 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2000 net=4 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:54.679  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:57:55.574  [robot] st=1 f=4020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=221360 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2013 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:55.785  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:57:56.675  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=222460 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2026 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:56.881  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:57:57.775  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=223560 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2040 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:57.977  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:57:58.875  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=224660 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2053 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:57:59.087  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:57:59.976  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=225760 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2066 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:58:00.181  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:58:01.076  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=226860 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2079 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:58:01.286  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:58:02.176  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=227960 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2092 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:58:02.394  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:58:03.276  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=229060 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2106 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:58:03.492  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:58:04.377  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=230160 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2119 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:58:04.580  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:58:05.476  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=231260 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2132 net=4 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:58:05.682  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:58:06.577  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=232360 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2145 net=4 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:58:06.779  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:58:07.677  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=233460 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2158 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:58:07.888  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:58:08.777  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=234560 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2172 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:58:08.981  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:58:09.878  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=235660 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2185 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:58:10.091  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:58:10.977  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=236760 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2198 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:58:11.186  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:58:12.077  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=237860 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2211 net=1 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:58:12.288  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:58:13.178  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=238960 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2222 net=3 us(m/l/v/isr)=152/275/508/195 ovr=0/0/0
+15:58:13.385  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:58:14.277  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=240060 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2222 net=3 us(m/l/v/isr)=152/275/510/195 ovr=0/0/0
+15:58:14.491  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:58:15.378  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=241160 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2222 net=3 us(m/l/v/isr)=152/275/510/195 ovr=0/0/0
+15:58:15.583  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:58:16.478  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=242260 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2222 net=3 us(m/l/v/isr)=152/275/510/195 ovr=0/0/0
+15:58:16.683  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:58:17.579  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=243360 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2222 net=3 us(m/l/v/isr)=152/275/510/195 ovr=0/0/0
+15:58:17.792  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:58:18.678  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=244460 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2222 net=4 us(m/l/v/isr)=152/275/510/195 ovr=0/0/0
+15:58:18.885  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:58:19.778  [robot] st=1 f=4020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=245560 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2224 net=4 us(m/l/v/isr)=152/275/510/195 ovr=0/0/0
+15:58:19.988  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:58:20.879  [robot] st=1 f=4020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=246660 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2237 net=1 us(m/l/v/isr)=152/275/510/195 ovr=0/0/0
+15:58:21.086  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:58:21.979  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=247760 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2250 net=1 us(m/l/v/isr)=152/275/510/195 ovr=0/0/0
+15:58:22.189  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:58:23.079  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=248860 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2263 net=1 us(m/l/v/isr)=152/275/510/195 ovr=0/0/0
+15:58:23.290  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:58:24.180  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=249960 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2276 net=1 us(m/l/v/isr)=152/275/510/195 ovr=0/0/0
+15:58:24.394  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:58:25.280  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=251060 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2290 net=1 us(m/l/v/isr)=152/275/510/195 ovr=0/0/0
+15:58:25.496  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:58:26.380  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=252160 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2303 net=1 us(m/l/v/isr)=152/275/510/195 ovr=0/0/0
+15:58:26.592  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:58:27.481  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=253260 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2316 net=1 us(m/l/v/isr)=152/275/510/195 ovr=0/0/0
+15:58:27.687  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:58:28.580  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=254360 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2329 net=1 us(m/l/v/isr)=152/275/510/195 ovr=0/0/0
+15:58:28.783  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:58:29.681  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=255460 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2342 net=1 us(m/l/v/isr)=152/275/510/195 ovr=0/0/0
+15:58:29.890  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:58:30.781  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=256560 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2356 net=4 us(m/l/v/isr)=152/275/510/195 ovr=0/0/0
+15:58:30.987  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:58:31.881  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=257660 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2369 net=4 us(m/l/v/isr)=152/275/510/195 ovr=0/0/0
+15:58:32.082  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:58:32.981  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=258760 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2382 net=1 us(m/l/v/isr)=152/275/510/195 ovr=0/0/0
+15:58:33.190  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:58:34.081  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=259860 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2395 net=1 us(m/l/v/isr)=152/275/510/195 ovr=0/0/0
+15:58:34.297  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:58:35.182  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=260960 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2408 net=1 us(m/l/v/isr)=152/275/510/195 ovr=0/0/0
+15:58:35.390  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:58:36.282  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=262060 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2422 net=1 us(m/l/v/isr)=152/275/510/195 ovr=0/0/0
+15:58:36.484  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:58:37.382  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=263160 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2435 net=1 us(m/l/v/isr)=152/275/510/195 ovr=0/0/0
+15:58:37.595  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:58:38.482  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=264260 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2448 net=1 us(m/l/v/isr)=152/275/510/195 ovr=0/0/0
+15:58:38.690  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:58:39.583  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=265360 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2449 net=3 us(m/l/v/isr)=152/275/510/195 ovr=0/0/0
+15:58:39.788  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:58:40.683  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=266460 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2449 net=3 us(m/l/v/isr)=152/275/510/195 ovr=0/0/0
+15:58:40.884  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:58:41.783  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=267560 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2449 net=3 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:58:41.984  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:58:42.883  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=268660 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2449 net=3 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:58:43.098  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:58:43.984  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=269760 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2449 net=4 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:58:44.189  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:58:45.084  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=270860 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2449 net=4 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:58:45.284  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:58:46.183  [robot] st=1 f=4020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=271960 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2461 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:58:46.394  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:58:47.284  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=273060 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2475 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:58:47.492  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:58:48.384  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=274160 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2488 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:58:48.591  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:58:49.484  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=275260 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2501 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:58:49.685  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:58:50.584  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=276360 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2514 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:58:50.790  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:58:51.684  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=277460 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2527 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:58:51.900  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:58:52.785  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=278560 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2541 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:58:52.998  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:58:53.885  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=279660 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2554 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:58:54.092  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:58:54.985  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=280760 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2567 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:58:55.200  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:58:56.086  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=281860 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2580 net=4 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:58:56.292  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:58:57.185  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=282960 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2593 net=4 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:58:57.388  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:58:58.285  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=284060 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2607 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:58:58.501  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:58:59.385  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=285160 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2620 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:58:59.593  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:59:00.486  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=286260 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2633 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:00.691  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:59:01.586  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=287360 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2646 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:01.790  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:59:02.686  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=288460 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2659 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:02.894  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:59:03.786  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=289560 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2673 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:03.999  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:59:04.886  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=290660 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2676 net=3 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:05.095  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:59:05.987  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=291760 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2676 net=3 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:06.195  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:59:07.088  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=292860 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2676 net=3 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:07.296  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:59:08.188  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=293960 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2676 net=3 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:08.390  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:59:09.288  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=295060 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2676 net=3 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:09.498  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=3
+15:59:10.388  [robot] st=1 f=0020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=296160 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2676 net=4 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:10.594  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:59:11.489  [robot] st=1 f=4020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=297260 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2685 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:11.693  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:59:12.589  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=298360 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2698 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:12.790  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:59:13.688  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=299460 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2711 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:13.901  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:59:14.789  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=300560 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2725 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:15.001  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:59:15.889  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=301660 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2738 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:16.091  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:59:16.989  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=302760 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2751 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:17.190  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:59:18.090  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=303860 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2764 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:18.298  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:59:19.189  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=304960 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2777 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:19.391  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:59:20.290  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=306060 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2791 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:20.500  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:59:21.389  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=307160 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2804 net=4 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:21.592  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:59:22.490  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=308260 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2817 net=4 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:22.704  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:59:23.590  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=309360 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2830 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:23.805  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:59:24.690  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=310460 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2843 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:24.900  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:59:25.790  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=311560 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2857 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:25.993  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:59:26.890  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=312660 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2870 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:27.101  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:59:27.991  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=313760 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2883 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:28.195  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:59:29.091  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=314860 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2896 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:29.296  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:59:30.191  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=315960 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2909 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:30.403  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:59:31.291  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=317060 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2923 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:31.493  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:59:32.392  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=318160 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2936 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:32.602  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:59:33.492  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=319260 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2949 net=4 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:33.694  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:59:34.591  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=320360 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2962 net=4 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:34.804  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:59:35.692  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=321460 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2975 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:35.904  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:59:36.792  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=322560 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=2989 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:36.996  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:59:37.892  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=323660 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=3002 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:38.106  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:59:38.993  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=324760 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=3015 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:39.198  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:59:40.093  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=325860 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=3028 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:40.295  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:59:41.193  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=326960 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=3041 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:41.397  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:59:42.293  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=328060 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=3055 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:42.497  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:59:43.394  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=329160 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=3068 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:43.602  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:59:44.494  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=330260 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=3081 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:44.700  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:59:45.594  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=331360 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=3094 net=4 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:45.799  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:59:46.694  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=332460 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=3107 net=4 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:46.909  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:59:47.794  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=333560 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=3121 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:48.000  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:59:48.894  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=334660 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=3134 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:49.100  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:59:49.995  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=335760 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=3147 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:50.198  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:59:51.095  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=336860 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=3160 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:51.306  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:59:52.195  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=337960 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=3173 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:52.398  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:59:53.295  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=339060 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=3187 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:53.505  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:59:54.395  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=340160 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=3200 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:54.599  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:59:55.495  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=341260 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=3213 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:55.696  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:59:56.595  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=342360 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=3226 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:56.805  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=1
+15:59:57.696  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=343460 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=3239 net=4 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:57.907  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:59:58.796  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=344560 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=3253 net=4 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0
+15:59:59.004  [wifi] radio=ready init=0 networks-seen=43 strongest=-47dBm join=connected attempts=1 failed=0 last-rc=0 link=1 rssi=-46dBm dhcp=1 ip=192.168.137.125 mqtt=4
+15:59:59.896  [robot] st=1 f=c020 pos=0 v=0/0 d=0mm enc=0/0 bad=0/0 ir=345660 do=000 edges=0/0/0 vm=7 bc=- map=0/0 bar=0/0 bars=0/0 try=0/0 jn=0/0 ex=0 ovf=0 drop=3266 net=1 us(m/l/v/isr)=152/275/512/195 ovr=0/0/0

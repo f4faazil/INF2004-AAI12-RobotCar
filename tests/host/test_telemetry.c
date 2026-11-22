@@ -252,6 +252,121 @@ static void test_obstacle_matches_the_reference_vector(void)
     CHECK_INT(1, d.action);
 }
 
+static tel_sensors_t sample_sensors(void)
+{
+    tel_sensors_t s;
+
+    s.ts10 = 12345U;
+    s.ir_levels = 5U;               /* left and right black */
+    s.ir_valid_mask = 7U;
+    s.pair_on_line = true;
+    s.junction_armed = false;
+    s.bars_now = 9U;
+    s.bars_done = 3U;
+    s.decoded = 2U;
+    s.rejected = 1U;
+    s.junctions = 4U;
+    s.executed = 2U;
+    s.map_entries = 26U;
+    s.last_letter = 26U;            /* Z */
+    s.motion_state = 1U;
+    s.motion_stopped = false;
+    s.encoder_fault = false;
+    s.enc_bad_left = 12U;
+    s.enc_bad_right = 200U;
+    s.roll_permille = -137;
+    s.imu_ok = true;
+    s.lift_latched = false;
+    s.hump_active = true;
+    s.us_mm = 406U;
+    s.us_valid = true;
+    s.us_obstacle = false;
+    s.us_fault = false;
+    s.servo_aim = TEL_AIM_RIGHT;
+    s.net_state = 3U;
+    s.link_up = true;
+    s.saturated = 0U;
+    return s;
+}
+
+/* Every field of the per-sensor record survives an encode and a decode, and the record is 18 bytes. */
+static void test_sensors_round_trip_and_size(void)
+{
+    uint8_t out[TEL_MAX_MESSAGE];
+    tel_sensors_t s = sample_sensors();
+    tel_sensors_t d;
+    uint16_t n = tel_encode_sensors(&s, out, sizeof(out));
+
+    CHECK_INT(18, n);
+    CHECK_INT(TEL_TYPE_SENSORS, out[0]);
+    CHECK(tel_decode_sensors(out, n, &d));
+    CHECK_INT(12345, d.ts10);
+    CHECK_INT(5, d.ir_levels);
+    CHECK_INT(7, d.ir_valid_mask);
+    CHECK(d.pair_on_line);
+    CHECK(!d.junction_armed);
+    CHECK_INT(9, d.bars_now);
+    CHECK_INT(3, (int)d.bars_done);
+    CHECK_INT(2, (int)d.decoded);
+    CHECK_INT(1, (int)d.rejected);
+    CHECK_INT(4, (int)d.junctions);
+    CHECK_INT(2, (int)d.executed);
+    CHECK_INT(26, d.map_entries);
+    CHECK_INT(26, d.last_letter);
+    CHECK_INT(1, d.motion_state);
+    CHECK(!d.motion_stopped);
+    CHECK(!d.encoder_fault);
+    CHECK_INT(12, (int)d.enc_bad_left);
+    CHECK_INT(200, (int)d.enc_bad_right);
+    CHECK_INT(-137, d.roll_permille);
+    CHECK(d.imu_ok);
+    CHECK(!d.lift_latched);
+    CHECK(d.hump_active);
+    CHECK_INT(406, d.us_mm);
+    CHECK(d.us_valid);
+    CHECK(!d.us_obstacle);
+    CHECK(!d.us_fault);
+    CHECK_INT(TEL_AIM_RIGHT, d.servo_aim);
+    CHECK_INT(3, d.net_state);
+    CHECK(d.link_up);
+    CHECK_INT(0, d.saturated);
+}
+
+/* A counter past 255 or a distance past 8190 mm is clipped and the record says so; the roll is clipped to
+ * +/-1000.  Catches: a wrapped counter that looks like a small number. */
+static void test_sensors_clip_and_flag_out_of_range_values(void)
+{
+    uint8_t out[TEL_MAX_MESSAGE];
+    tel_sensors_t s = sample_sensors();
+    tel_sensors_t d;
+    uint16_t n;
+
+    s.decoded = 300U;
+    s.roll_permille = 1500;
+    s.us_mm = 9000U;
+    n = tel_encode_sensors(&s, out, sizeof(out));
+    CHECK(n > 0U);
+    CHECK_INT(1, s.saturated);
+    CHECK(tel_decode_sensors(out, n, &d));
+    CHECK_INT(255, (int)d.decoded);
+    CHECK_INT(1000, d.roll_permille);
+    CHECK_INT(8190, d.us_mm);
+    CHECK_INT(1, d.saturated);
+}
+
+/* A short record or another type is refused. */
+static void test_sensors_wrong_type_and_short_records_are_rejected(void)
+{
+    uint8_t out[TEL_MAX_MESSAGE];
+    tel_sensors_t s = sample_sensors();
+    tel_sensors_t d;
+    uint16_t n = tel_encode_sensors(&s, out, sizeof(out));
+
+    CHECK(!tel_decode_sensors(out, (uint16_t)(n - 1U), &d));
+    out[0] = TEL_TYPE_STATUS;
+    CHECK(!tel_decode_sensors(out, n, &d));
+}
+
 static void test_heartbeat_matches_the_reference_vector(void)
 {
     static const uint8_t EXPECTED[] = { 0x05, 0x00, 0x00, 0x0e, 0x4d, 0x00, 0x03, 0x02, 0x2a };
@@ -442,6 +557,9 @@ int main(void)
     RUN(test_event_matches_the_reference_vector);
     RUN(test_hump_matches_the_reference_vector);
     RUN(test_obstacle_matches_the_reference_vector);
+    RUN(test_sensors_round_trip_and_size);
+    RUN(test_sensors_clip_and_flag_out_of_range_values);
+    RUN(test_sensors_wrong_type_and_short_records_are_rejected);
     RUN(test_heartbeat_matches_the_reference_vector);
     RUN(test_command_and_ack_round_trip);
     RUN(test_wrong_type_and_short_messages_are_rejected);

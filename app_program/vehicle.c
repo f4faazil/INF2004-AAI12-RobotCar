@@ -18,6 +18,22 @@
 /* RECOVER_LINE phases */
 #define REC_CREEP           (0U)
 #define REC_ALIGN           (1U)
+#define REC_ADVANCE         (2U)
+#define REC_STOPPING        (3U)        /* stopped for something in the way: wait for the wheels */
+#define REC_HOLD            (4U)        /* waiting for the way to clear */
+
+/* BYPASS phases */
+#define BYP_RUN             (0U)
+#define BYP_STOPPING        (1U)
+#define BYP_HOLD            (2U)
+
+#define BYPASS_CLEAR_HYST_MM    (40U)   /* the way is clear this far beyond the stop distance ... */
+#define BYPASS_CLEAR_MS         (300U)  /* ... for this long */
+#define BYPASS_MIN_LEFT_MM      (10)    /* less than this left of a leg: it is done */
+#define SIDE_SEEN_N             (3U)    /* readings in a row that see the box before it counts as seen */
+#define SIDE_LOST_N             (3U)    /* readings in a row that miss it before it counts as passed */
+#define SIDE_MIN_CUT_MM         (20)    /* the shortest leg left after the box is passed */
+#define RECOVER_EARLY_MM        (100)   /* a line this much nearer than the planned return is not the one to rejoin */
 
 /* SEARCH_LINE phases */
 #define SEARCH_STOPPING     (0U)
@@ -44,8 +60,8 @@ bool vehicle_is_running(vehicle_state_t state)
     return (state >= VC_CALIBRATE) && (state <= VC_RECOVER_LINE);
 }
 
-uint8_t vehicle_remote_policy(vehicle_state_t state, bool allow_remote_stop, uint8_t cmd,
-                              uint8_t *request_bit)
+uint8_t vehicle_remote_policy(vehicle_state_t state, bool allow_remote_stop,
+                              bool imu_lift_latched, uint8_t cmd, uint8_t *request_bit)
 {
     const bool running = vehicle_is_running(state);
 
@@ -61,6 +77,9 @@ uint8_t vehicle_remote_policy(vehicle_state_t state, bool allow_remote_stop, uin
     case TEL_CMD_START:
     case TEL_CMD_CALIBRATE:
     case TEL_CMD_CLEAR_FAULTS:
+        if (imu_lift_latched) {
+            return TEL_ACK_REJECTED_RUNNING;    /* the lift stop clears itself when the car is back on the floor */
+        }
         if (running) {
             return TEL_ACK_REJECTED_RUNNING;    /* never change the mission mid-run */
         }
@@ -107,6 +126,21 @@ void vehicle_init(vehicle_t *vc, const vehicle_config_t *cfg)
     vc->start_distance_mm = 0;
     vc->realign_turn_deg = 0;
     vc->stop_sent = false;
+    vc->hold_since_ms = 0U;
+    vc->clear_since_ms = 0U;
+    vc->step_start_mm = 0;
+    vc->leg_mm = 0;
+    vc->leg_origin_mm = 0;
+    vc->leg_total_mm = 0;
+    vc->leg_extended_mm = 0;
+    vc->side_seq_seen = 0U;
+    vc->side_hits = 0U;
+    vc->side_miss = 0U;
+    vc->side_seen = false;
+    vc->side_cut_done = false;
+    vc->side_last_mm = 0U;
+    vc->side_miss_mm = 0;
+    vc->imu_lift_latched = false;
 }
 
 /* ---- helpers --------------------------------------------------------- */
@@ -261,10 +295,109 @@ static void enter_search(vehicle_t *vc, vehicle_out_t *out, uint32_t now)
     enter(vc, out, VC_SEARCH_LINE, now);
 }
 
-static void start_bypass_step(vehicle_t *vc, vehicle_out_t *out, uint32_t now)
+/* Something is closer than the stop distance (plus extra) straight ahead of the car. */
+static bool path_blocked(const vehicle_t *vc, const vehicle_in_t *in, uint16_t extra_mm)
+{
+    return (vc->cfg.bypass_stop_mm > 0U) && in->obstacle_mm_valid &&
+           (in->obstacle_mm < (uint16_t)(vc->cfg.bypass_stop_mm + extra_mm));
+}
+
+/* True once the way has stayed clear long enough to move again. */
+static bool way_cleared(vehicle_t *vc, const vehicle_in_t *in, uint32_t now)
+{
+    if (path_blocked(vc, in, BYPASS_CLEAR_HYST_MM)) {
+        vc->clear_since_ms = 0U;
+        return false;
+    }
+    if (vc->clear_since_ms == 0U) {
+        vc->clear_since_ms = now;
+    }
+    return (now - vc->clear_since_ms) >= BYPASS_CLEAR_MS;
+}
+
+/* The straight leg that runs beside the box: the last one before the turn toward the line. */
+static bool is_side_leg(const vehicle_t *vc)
+{
+    return (vc->cfg.side_aim_deg > 0) && (vc->plan.step_count >= 3U) &&
+           ((vc->step_idx + 2U) == vc->plan.step_count) &&
+           !vc->plan.steps[vc->step_idx].is_turn;
+}
+
+/* Count the raw sonar readings that see the box's side, and note where they stop. */
+static void side_observe(vehicle_t *vc, const vehicle_in_t *in)
+{
+    if (in->side_seq == vc->side_seq_seen) {
+        return;                                 /* no new reading */
+    }
+    vc->side_seq_seen = in->side_seq;
+    if (in->side_echo && (in->side_mm >= vc->cfg.side_min_mm) &&
+        (in->side_mm <= vc->cfg.side_max_mm)) {
+        if (vc->side_hits < UINT8_MAX) {
+            vc->side_hits++;
+        }
+        vc->side_miss = 0U;
+        vc->side_last_mm = in->side_mm;
+        if (vc->side_hits >= SIDE_SEEN_N) {
+            vc->side_seen = true;
+        }
+    } else {
+        if (vc->side_miss == 0U) {
+            vc->side_miss_mm = in->motion.distance_mm;      /* it was last seen about here */
+        }
+        if (vc->side_miss < UINT8_MAX) {
+            vc->side_miss++;
+        }
+        vc->side_hits = 0U;
+    }
+}
+
+/* The box was seen and now is not: the leg need only cover what the rear needs. */
+static void side_cut_leg(vehicle_t *vc, vehicle_out_t *out, uint32_t now, const vehicle_in_t *in)
+{
+    const int32_t ahead = ((int32_t)vc->side_last_mm * (int32_t)vc->cfg.side_loss_ahead_pct) / 100;
+    const int32_t total = abs32(vc->side_miss_mm - vc->leg_origin_mm) + ahead +
+                          (int32_t)vc->cfg.side_tail_mm;
+
+    vc->side_cut_done = true;
+    if (total < (int32_t)vc->leg_total_mm) {
+        const int32_t travelled = abs32(in->motion.distance_mm - vc->leg_origin_mm);
+        int32_t left = total - travelled;
+
+        if (left < SIDE_MIN_CUT_MM) {
+            left = SIDE_MIN_CUT_MM;
+        }
+        vc->leg_total_mm = (int16_t)total;
+        vc->leg_mm = (int16_t)left;
+        vc->step_start_mm = in->motion.distance_mm;
+        start_cmd(vc, out, now, MOTION_CMD_MOVE, vc->cfg.curve_mm_s, 0, vc->leg_mm, 0);
+        add_event(out, TEL_EVT_OBSTACLE, 2U);   /* 2: the box is passed, the leg is cut short */
+    }
+}
+
+static void stop_for_obstacle(vehicle_t *vc, vehicle_out_t *out, uint32_t now)
+{
+    send_stop(vc, out);
+    add_event(out, TEL_EVT_OBSTACLE, 1U);       /* 1: met during a bypass */
+    vc->hold_since_ms = now;
+    vc->clear_since_ms = 0U;
+}
+
+static void start_bypass_step(vehicle_t *vc, vehicle_out_t *out, uint32_t now,
+                              const vehicle_in_t *in)
 {
     const plan_step_t *step = &vc->plan.steps[vc->step_idx];
 
+    vc->found_run = 0U;
+    vc->leg_mm = step->value;
+    vc->step_start_mm = in->motion.distance_mm;
+    vc->leg_origin_mm = in->motion.distance_mm;
+    vc->leg_total_mm = step->value;
+    vc->leg_extended_mm = 0;
+    vc->side_seq_seen = in->side_seq;
+    vc->side_hits = 0U;
+    vc->side_miss = 0U;
+    vc->side_seen = false;
+    vc->side_cut_done = false;
     if (step->is_turn) {
         start_cmd(vc, out, now, MOTION_CMD_TURN, 0, 0, 0, step->value);
     } else {
@@ -282,7 +415,7 @@ static void enter_recover(vehicle_t *vc, vehicle_out_t *out, uint32_t now,
     vc->realign_turn_deg = (vc->plan.step_count > 0U && last->is_turn)
                            ? (int16_t)(-last->value) : 0;
     vc->start_distance_mm = in->motion.distance_mm;
-    start_cmd(vc, out, now, MOTION_CMD_DRIVE, vc->cfg.creep_mm_s, 0, 0, 0);
+    start_cmd(vc, out, now, MOTION_CMD_DRIVE, vc->cfg.recover_mm_s, 0, 0, 0);
     enter(vc, out, VC_RECOVER_LINE, now);
     vc->phase = REC_CREEP;
     vc->phase_since_ms = now;
@@ -572,7 +705,7 @@ static void run_state(vehicle_t *vc, const vehicle_in_t *in, vehicle_out_t *out,
                    (in->plan.action == PLAN_BYPASS_RIGHT)) {
             vc->plan = in->plan;
             vc->step_idx = 0U;
-            start_bypass_step(vc, out, now);
+            start_bypass_step(vc, out, now, in);
             enter(vc, out, VC_BYPASS, now);
         } else if (in->plan.action == PLAN_REVERSE) {
             if (vc->reverse_attempts >= vc->cfg.max_reverse_attempts) {
@@ -601,24 +734,88 @@ static void run_state(vehicle_t *vc, const vehicle_in_t *in, vehicle_out_t *out,
         break;
 
     case VC_BYPASS:
-        if (cmd_done(vc, in)) {
-            vc->step_idx++;
-            if (vc->step_idx < vc->plan.step_count) {
-                start_bypass_step(vc, out, now);
+        if (vc->phase == BYP_STOPPING) {
+            if (stop_confirmed(vc, in)) {
+                const int32_t travelled = abs32(in->motion.distance_mm - vc->step_start_mm);
+
+                vc->leg_mm = (int16_t)(vc->leg_mm - travelled);       /* what is left of the leg */
+                vc->phase = BYP_HOLD;
+            } else if ((now - vc->hold_since_ms) > vc->cfg.stop_confirm_timeout_ms) {
+                enter_fault(vc, out, now, FAULT_MOTION);
             } else {
-                enter_recover(vc, out, now, in);
+                /* the wheels are still stopping */
+            }
+        } else if (vc->phase == BYP_HOLD) {
+            if (way_cleared(vc, in, now)) {
+                vc->phase = BYP_RUN;
+                if (vc->leg_mm > BYPASS_MIN_LEFT_MM) {
+                    vc->step_start_mm = in->motion.distance_mm;
+                    start_cmd(vc, out, now, MOTION_CMD_MOVE, vc->cfg.curve_mm_s, 0, vc->leg_mm, 0);
+                } else {
+                    vc->step_idx++;                 /* the leg was all but done */
+                    if (vc->step_idx < vc->plan.step_count) {
+                        start_bypass_step(vc, out, now, in);
+                    } else {
+                        enter_recover(vc, out, now, in);
+                    }
+                }
+            } else if ((now - vc->hold_since_ms) > vc->cfg.bypass_hold_ms) {
+                enter_fault(vc, out, now, FAULT_NO_SAFE_PATH);
+            } else {
+                /* still blocked: stay put */
+            }
+        } else if (cmd_done(vc, in)) {
+            if (is_side_leg(vc) && vc->side_seen && (vc->side_miss == 0U) &&
+                (vc->leg_extended_mm < (int16_t)vc->cfg.side_extend_max_mm)) {
+                /* the box is still in view at the end of the leg: it is deeper than assumed */
+                vc->leg_extended_mm = (int16_t)(vc->leg_extended_mm + (int16_t)vc->cfg.side_extend_mm);
+                vc->leg_mm = (int16_t)vc->cfg.side_extend_mm;
+                vc->step_start_mm = in->motion.distance_mm;
+                start_cmd(vc, out, now, MOTION_CMD_MOVE, vc->cfg.curve_mm_s, 0, vc->leg_mm, 0);
+                add_event(out, TEL_EVT_OBSTACLE, 3U);   /* 3: still beside the box, going on */
+            } else {
+                vc->step_idx++;
+                if (vc->step_idx < vc->plan.step_count) {
+                    start_bypass_step(vc, out, now, in);
+                } else {
+                    enter_recover(vc, out, now, in);
+                }
             }
         } else if (cmd_timed_out(vc, now)) {
             enter_fault(vc, out, now, FAULT_MOTION);
         } else {
-            refresh_cmd(vc, out);
+            const bool straight = !vc->plan.steps[vc->step_idx].is_turn;
+            const bool settled = (now - vc->cmd_started_ms) >= vc->cfg.bypass_blank_ms;
+
+            if (straight && settled && is_side_leg(vc)) {
+                side_observe(vc, in);
+            }
+            if (straight && settled && path_blocked(vc, in, 0U)) {
+                stop_for_obstacle(vc, out, now);
+                vc->phase = BYP_STOPPING;
+            } else if (straight && settled && is_side_leg(vc) && vc->side_seen &&
+                       !vc->side_cut_done && (vc->side_miss >= SIDE_LOST_N)) {
+                side_cut_leg(vc, out, now, in);
+            } else {
+                refresh_cmd(vc, out);
+            }
         }
         break;
 
     case VC_RECOVER_LINE:
         if (vc->phase == REC_CREEP) {
-            if (line_found(vc, in)) {
-                if (vc->realign_turn_deg != 0) {
+            /* The line to rejoin is about return_leg_mm away.  A line seen much sooner is a line
+             * crossing the way (a junction beside the box), not it: drive on over it. */
+            const int32_t travelled = abs32(in->motion.distance_mm - vc->start_distance_mm);
+            const bool may_accept = travelled >= ((int32_t)vc->plan.return_leg_mm - RECOVER_EARLY_MM);
+
+            if (may_accept && line_found(vc, in)) {
+                if ((vc->realign_turn_deg != 0) && (vc->cfg.recover_advance_mm > 0)) {
+                    /* The sensors are ahead of the axle: turning here would swing the line off to
+                     * the side.  Drive on until the axle is over it, then turn. */
+                    start_cmd(vc, out, now, MOTION_CMD_MOVE, vc->cfg.creep_mm_s, 0, vc->cfg.recover_advance_mm, 0);
+                    vc->phase = REC_ADVANCE;
+                } else if (vc->realign_turn_deg != 0) {
                     start_cmd(vc, out, now, MOTION_CMD_TURN, 0, 0, 0, vc->realign_turn_deg);
                     vc->phase = REC_ALIGN;
                 } else {
@@ -631,6 +828,38 @@ static void run_state(vehicle_t *vc, const vehicle_in_t *in, vehicle_out_t *out,
             } else if (abs32(in->motion.distance_mm - vc->start_distance_mm) >=
                        vc->cfg.recovery_distance_limit_mm) {
                 enter_fault(vc, out, now, FAULT_RECOVERY_LIMIT);
+            } else if (path_blocked(vc, in, 0U) &&
+                       ((now - vc->cmd_started_ms) >= vc->cfg.bypass_blank_ms)) {
+                stop_for_obstacle(vc, out, now);
+                vc->phase = REC_STOPPING;
+            } else {
+                refresh_cmd(vc, out);
+            }
+        } else if (vc->phase == REC_STOPPING) {
+            if (stop_confirmed(vc, in)) {
+                vc->phase = REC_HOLD;
+            } else if ((now - vc->hold_since_ms) > vc->cfg.stop_confirm_timeout_ms) {
+                enter_fault(vc, out, now, FAULT_MOTION);
+            } else {
+                /* the wheels are still stopping */
+            }
+        } else if (vc->phase == REC_HOLD) {
+            if (way_cleared(vc, in, now)) {
+                /* the time spent waiting does not count against the 5 s recovery limit */
+                vc->phase_since_ms += (now - vc->hold_since_ms);
+                start_cmd(vc, out, now, MOTION_CMD_DRIVE, vc->cfg.recover_mm_s, 0, 0, 0);
+                vc->phase = REC_CREEP;
+            } else if ((now - vc->hold_since_ms) > vc->cfg.bypass_hold_ms) {
+                enter_fault(vc, out, now, FAULT_NO_SAFE_PATH);
+            } else {
+                /* still blocked: stay put */
+            }
+        } else if (vc->phase == REC_ADVANCE) {
+            if (cmd_done(vc, in)) {
+                start_cmd(vc, out, now, MOTION_CMD_TURN, 0, 0, 0, vc->realign_turn_deg);
+                vc->phase = REC_ALIGN;
+            } else if (cmd_timed_out(vc, now)) {
+                enter_fault(vc, out, now, FAULT_MOTION);
             } else {
                 refresh_cmd(vc, out);
             }
@@ -654,6 +883,7 @@ void vehicle_step(vehicle_t *vc, const vehicle_in_t *in, vehicle_out_t *out)
 {
     const uint32_t now = in->now_ms;
     const bool fault_stop = (in->faults & FAULT_STOP_MASK) != 0U;
+    const bool imu_lift = (in->faults & FAULT_IMU_LIFT) != 0U;
     const bool stop_req = in->stop_pressed ||
                           (((in->remote & VC_REMOTE_STOP) != 0U) && vc->cfg.allow_remote_stop);
 
@@ -678,7 +908,20 @@ void vehicle_step(vehicle_t *vc, const vehicle_in_t *in, vehicle_out_t *out)
         vc->state_since_ms = now;
     }
 
-    if (vehicle_is_running(vc->state)) {
+    if (imu_lift && !vc->imu_lift_latched) {
+        vc->imu_lift_latched = true;
+        add_event(out, TEL_EVT_FAULT, (uint16_t)FAULT_IMU_LIFT);
+    }
+    if (!imu_lift && vc->imu_lift_latched) {
+        /* The IMU task cleared the lift fault: the car is back on the floor.  It stays STOPPED until START. */
+        vc->imu_lift_latched = false;
+        add_event(out, TEL_EVT_FAULT_CLEAR, (uint16_t)FAULT_IMU_LIFT);
+    }
+    if (vc->imu_lift_latched) {
+        if (vc->state != VC_STOPPED) {
+            enter_stopped(vc, out, now);
+        }
+    } else if (vehicle_is_running(vc->state)) {
         if (fault_stop) {
             enter_fault(vc, out, now, 0U);          /* someone else raised it */
         } else if (stop_req) {
@@ -691,6 +934,12 @@ void vehicle_step(vehicle_t *vc, const vehicle_in_t *in, vehicle_out_t *out)
     }
 
     out->state = vc->state;
+    out->sonar_aim = 0;
+    if ((vc->state == VC_BYPASS) && (vc->cfg.side_aim_deg > 0) && (vc->plan.step_count >= 3U) &&
+        (vc->step_idx + 3U >= vc->plan.step_count) && (vc->step_idx + 2U <= vc->plan.step_count)) {
+        /* from the turn before the leg beside the box until that leg ends: look at the box */
+        out->sonar_aim = (vc->plan.action == PLAN_BYPASS_LEFT) ? (int8_t)-1 : (int8_t)1;
+    }
     out->activity = 0U;
     if ((vc->state == VC_FOLLOW) || (vc->state == VC_JUNCTION_ADVANCE) ||
         (vc->state == VC_JUNCTION_TURN) || (vc->state == VC_REACQUIRE) ||

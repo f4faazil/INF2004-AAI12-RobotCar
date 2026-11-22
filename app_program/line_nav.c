@@ -91,6 +91,11 @@ void line_nav_init(line_nav_t *nav, const line_nav_config_t *cfg)
     uint8_t i;
 
     nav->cfg = *cfg;
+    nav->cfg.map_len = 0U;
+    if (cfg->map != NULL) {
+        line_nav_set_map(nav, cfg->map, cfg->map_len);     /* packs it: the table the caller passed is not kept */
+    }
+    nav->cfg.map = NULL;
     line_cal_init(&nav->cal);
     nav->calibrating = false;
     nav->valid_mask = 0U;
@@ -173,7 +178,8 @@ bool line_nav_calibrate_end(line_nav_t *nav)
 static void handle_decode(line_nav_t *nav, char letter, uint32_t now_ms)
 {
     uint8_t i;
-    const nav_map_entry_t *entry = NULL;
+    bool found = false;
+    nav_command_t command = NAV_CMD_NONE;
 
     /* a whole barcode has gone by, whatever its letter: the next thing is its junction */
     nav->bars_done = true;
@@ -185,11 +191,12 @@ static void handle_decode(line_nav_t *nav, char letter, uint32_t now_ms)
     lanes_reset(nav);
 
     for (i = 0U; i < nav->cfg.map_len; i++) {
-        if (nav->cfg.map[i].letter == letter) {
-            entry = &nav->cfg.map[i];
+        if (nav_map_letter(nav->map_packed[i]) == letter) {
+            command = nav_map_command(nav->map_packed[i]);      /* the last entry for a letter wins */
+            found = true;
         }
     }
-    if (entry == NULL) {
+    if (!found) {
         nav->rejected_count++;
         nav->events |= NAV_EVENT_BARCODE_REJECTED;
         return;
@@ -198,7 +205,7 @@ static void handle_decode(line_nav_t *nav, char letter, uint32_t now_ms)
         nav->overwritten_count++;
     }
     nav->pending.letter = letter;
-    nav->pending.command = entry->command;
+    nav->pending.command = command;
     nav->pending.id = nav->next_id;
     nav->pending.timestamp_ms = now_ms;
     nav->next_id++;
@@ -207,16 +214,60 @@ static void handle_decode(line_nav_t *nav, char letter, uint32_t now_ms)
     nav->events |= NAV_EVENT_BARCODE;
 }
 
+bool nav_map_pack(char letter, nav_command_t command, uint8_t *packed)
+{
+    if ((letter < 'A') || (letter > 'Z') || (command < NAV_CMD_LEFT) || (command > NAV_CMD_UTURN)) {
+        return false;
+    }
+    *packed = (uint8_t)((((uint8_t)(letter - 'A')) << NAV_PACKED_LETTER_SHIFT) | (uint8_t)command);
+    return true;
+}
+
+char nav_map_letter(uint8_t packed)
+{
+    return (char)('A' + (packed >> NAV_PACKED_LETTER_SHIFT));
+}
+
+nav_command_t nav_map_command(uint8_t packed)
+{
+    return (nav_command_t)(packed & 7U);
+}
+
 void line_nav_set_map(line_nav_t *nav, const nav_map_entry_t *entries, uint8_t len)
 {
     uint8_t i;
+    uint8_t count = 0U;
     const uint8_t n = (len > NAV_MAP_MAX) ? (uint8_t)NAV_MAP_MAX : len;
 
     for (i = 0U; i < n; i++) {
-        nav->map_store[i] = entries[i];
+        uint8_t packed;
+
+        if (nav_map_pack(entries[i].letter, entries[i].command, &packed)) {
+            nav->map_packed[count] = packed;
+            count++;
+        }
     }
-    nav->cfg.map = nav->map_store;
-    nav->cfg.map_len = n;
+    nav->cfg.map = NULL;
+    nav->cfg.map_len = count;
+}
+
+void line_nav_set_map_packed(line_nav_t *nav, const uint8_t *packed, uint8_t len)
+{
+    uint8_t i;
+    uint8_t count = 0U;
+    const uint8_t n = (len > NAV_MAP_MAX) ? (uint8_t)NAV_MAP_MAX : len;
+
+    for (i = 0U; i < n; i++) {
+        const uint8_t letter_index = (uint8_t)(packed[i] >> NAV_PACKED_LETTER_SHIFT);
+        const uint8_t command = (uint8_t)(packed[i] & 7U);
+
+        if ((letter_index < NAV_MAP_MAX) && (command >= (uint8_t)NAV_CMD_LEFT) && (command <= (uint8_t)NAV_CMD_UTURN)) {
+            nav->map_packed[count] = packed[i];
+            count++;
+        }
+    }
+    nav->cfg.map = NULL;
+    nav->cfg.map_len = count;
 }
 
 void line_nav_set_travel(line_nav_t *nav, int32_t travel, uint32_t now_ms)
@@ -466,7 +517,7 @@ void line_nav_step(line_nav_t *nav, uint32_t now_ms, int16_t speed_mm_s,
             const bool black_now = valid && nav->ch_black[channel];
             /* travelled while black: speed (mm/s) x frames (ms) = micrometres */
             const uint32_t black_um = (speed_mm_s > 0)
-                                      ? (nav->ch_black_frames[channel] * (uint32_t)speed_mm_s) : 0U;
+                                      ? ((uint32_t)nav->ch_black_frames[channel] * (uint32_t)speed_mm_s) : 0U;
 
             if (black_now && (is_lane || is_branch)) {
                 any_black |= LANE_SIDE[i];

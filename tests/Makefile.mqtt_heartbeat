@@ -1,0 +1,14 @@
+CC ?= cc
+CFLAGS = -std=c11 -O2 -Wall -Wextra -Werror -pedantic
+
+.PHONY: test clean
+test: test_mqtt_heartbeat
+	./test_mqtt_heartbeat
+
+test_mqtt_heartbeat: test_mqtt_heartbeat.c ../app_program/mqtt_heartbeat.c \
+                     ../app_program/mqtt_heartbeat.h
+	$(CC) $(CFLAGS) -I../app_program -o $@ test_mqtt_heartbeat.c \
+		../app_program/mqtt_heartbeat.c
+
+clean:
+	rm -f test_mqtt_heartbeat

@@ -69,6 +69,7 @@ void hal_servo_set_pulse_us(uint16_t us);
 
 /* Start the encoder/ECHO edge interrupt (once, after hal_init). */
 ER hal_gpio_irq_start(void);
+uint32_t hal_gpio_isr_count(void);         /* how many times the GPIO edge interrupt has run (encoders and sonar echo) */
 
 void hal_encoders_snapshot(encoder_snapshot_t *left, encoder_snapshot_t *right);
 

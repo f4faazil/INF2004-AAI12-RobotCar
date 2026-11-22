@@ -1,0 +1,13 @@
+CC ?= cc
+CFLAGS ?= -std=c11 -O2 -Wall -Wextra -Werror -pedantic
+
+.PHONY: test clean
+
+test: test_telemetry_rtos
+	./test_telemetry_rtos
+
+test_telemetry_rtos: test_telemetry_rtos.c mock_tkernel/tk/tkernel.h ../app_program/telemetry_rtos.c ../app_program/telemetry_rtos.h ../app_program/telemetry_tkernel_port.c ../app_program/telemetry_tkernel_port.h ../app_program/telemetry_inbox.c ../app_program/telemetry_inbox.h ../app_program/telemetry_queue.c ../app_program/telemetry_queue.h
+	$(CC) $(CFLAGS) -Imock_tkernel -Imock_pico -I../app_program -o $@ test_telemetry_rtos.c ../app_program/telemetry_rtos.c ../app_program/telemetry_tkernel_port.c ../app_program/telemetry_inbox.c ../app_program/telemetry_queue.c
+
+clean:
+	rm -f test_telemetry_rtos

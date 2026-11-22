@@ -24,7 +24,10 @@
  */
 #define INITTASK_EXINF		(0x0)
 #define INITTASK_ITSKPRI	(1)
-#define INITTASK_STKSZ		(1*1024)
+/* 4 KB, not 1: usermain() runs on this stack and the robot's start-up (robot_start: the HAL set-up, the telemetry inbox, task creation)
+ * overflowed 1 KB on the radio build.  The overflow landed in the last variable of .bss, whose memset then zeroed the overflowed
+ * frames, including a return address: a hard fault and no USB console. */
+#define INITTASK_STKSZ		(4*1024)
 #define INITTASK_DSNAME		"inittsk"
 
 #if USE_IMALLOC

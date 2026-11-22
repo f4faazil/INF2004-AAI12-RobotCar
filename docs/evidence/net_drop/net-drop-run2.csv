@@ -1,0 +1,11 @@
+trial,down_s,reconnect_s,first_record_s,records_in_first_5s,heartbeat_dropped,queue_depth,faults_after,result
+1,20,0.3,0.5,67,628,0,IMU,PASS
+2,20,0.3,0.5,68,856,0,IMU,PASS
+3,20,0.3,0.5,68,1084,0,IMU,PASS
+4,20,0.3,0.5,68,1312,0,IMU,PASS
+5,20,0.3,0.4,66,1539,0,IMU,PASS
+6,20,0.3,0.5,68,1767,0,IMU,PASS
+7,20,0.3,0.4,66,1994,0,IMU,PASS
+8,20,0.3,0.5,68,2222,0,IMU,PASS
+9,20,0.3,0.5,67,2449,0,IMU,PASS
+10,20,0.3,0.5,69,2676,0,IMU,PASS

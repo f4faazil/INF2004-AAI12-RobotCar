@@ -1,0 +1,13 @@
+CC ?= cc
+CFLAGS ?= -std=c11 -O2 -Wall -Wextra -Werror -pedantic
+
+.PHONY: test clean
+
+test: test_telemetry_inbox
+	./test_telemetry_inbox
+
+test_telemetry_inbox: test_telemetry_inbox.c ../app_program/telemetry_inbox.c ../app_program/telemetry_inbox.h ../app_program/telemetry_queue.c ../app_program/telemetry_queue.h
+	$(CC) $(CFLAGS) -I../app_program -o $@ test_telemetry_inbox.c ../app_program/telemetry_inbox.c ../app_program/telemetry_queue.c
+
+clean:
+	rm -f test_telemetry_inbox
