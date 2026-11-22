@@ -183,6 +183,73 @@ bmap_result_t bmap_parse(const uint8_t *payload, uint16_t len,
     return BMAP_OK;
 }
 
+bmap_result_t bmap_parse_binary(const uint8_t *payload, uint16_t len,
+                                nav_map_entry_t out[BMAP_MAX], uint8_t *out_len)
+{
+    uint8_t count = 0U;
+    uint8_t i;
+
+    if (len == 0U) {
+        return BMAP_ERR_EMPTY;
+    }
+    if ((payload[0] != TEL_TYPE_MAP) || ((uint16_t)(len - 1U) > BMAP_MAX)) {
+        return BMAP_ERR_SYNTAX;
+    }
+    for (i = 1U; i < len; i++) {
+        const uint8_t letter_index = (uint8_t)(payload[i] >> NAV_PACKED_LETTER_SHIFT);
+        const uint8_t command = (uint8_t)(payload[i] & 7U);
+        bmap_result_t r;
+
+        if (letter_index >= BMAP_MAX) {
+            return BMAP_ERR_LETTER;
+        }
+        if ((command < (uint8_t)NAV_CMD_LEFT) || (command > (uint8_t)NAV_CMD_UTURN)) {
+            return BMAP_ERR_ACTION;
+        }
+        r = add_entry(out, &count, (char)('A' + letter_index), (nav_command_t)command);
+        if (r != BMAP_OK) {
+            return r;
+        }
+    }
+    *out_len = count;
+    return BMAP_OK;
+}
+
+bmap_result_t bmap_parse_any(const uint8_t *payload, uint16_t len,
+                             nav_map_entry_t out[BMAP_MAX], uint8_t *out_len)
+{
+    if ((len >= 1U) && (payload[0] == TEL_TYPE_MAP)) {
+        return bmap_parse_binary(payload, len, out, out_len);
+    }
+    return bmap_parse(payload, len, out, out_len);
+}
+
+uint16_t bmap_encode_map(const nav_map_entry_t *entries, uint8_t n, uint8_t *out, uint16_t capacity)
+{
+    uint8_t i;
+
+    if ((n > BMAP_MAX) || (capacity < (uint16_t)(1U + n))) {
+        return 0U;
+    }
+    out[0] = (uint8_t)TEL_TYPE_MAP;
+    for (i = 0U; i < n; i++) {
+        uint8_t packed;
+
+        if (!nav_map_pack(entries[i].letter, entries[i].command, &packed)) {
+            return 0U;
+        }
+        out[1U + i] = packed;
+    }
+    return (uint16_t)(1U + n);
+}
+
+uint16_t bmap_encode_ack(bmap_result_t result, uint8_t count, uint8_t out[2])
+{
+    out[0] = (uint8_t)TEL_TYPE_MAP_ACK;
+    out[1] = (uint8_t)((((uint8_t)result & 7U) << 5) | (count & 31U));
+    return 2U;
+}
+
 const char *bmap_result_text(bmap_result_t result)
 {
     switch (result) {

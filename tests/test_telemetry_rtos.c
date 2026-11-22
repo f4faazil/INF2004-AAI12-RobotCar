@@ -4,6 +4,11 @@
 #include <string.h>
 #include <tk/tkernel.h>
 #include "telemetry_rtos.h"
+#include "telemetry_tkernel_port.h"
+
+/* telemetry_robot_submit() stamps each record with the Pico clock; the host test supplies a fake one. */
+static uint64_t fake_clock_us;
+uint64_t time_us_64(void) { return fake_clock_us; }
 
 static int mock_held;
 static int mock_busy;
@@ -119,6 +124,22 @@ static void test_invalid_and_balanced(void)
     assert(locks == unlocks);
 }
 
+/* The robot-side entry point stamps the record with the clock in milliseconds and hands it to the inbox. */
+static void test_robot_submit_uses_the_clock(void)
+{
+    static const uint8_t frame[3] = { 1U, 2U, 3U };
+    uint8_t out[TELEMETRY_QUEUE_MAX_BYTES];
+    size_t len = 0U;
+    fake_clock_us = 5000000ULL;                 /* 5000 ms */
+    assert(telemetry_robot_submit(frame, sizeof frame) == (int)TELEMETRY_INBOX_OK);
+    assert(telemetry_rtos_peek(5500U, out, sizeof out, &len) == TELEMETRY_INBOX_OK);   /* 500 ms old: fresh */
+    assert(len == sizeof frame && memcmp(out, frame, sizeof frame) == 0);
+    assert(telemetry_rtos_commit() == TELEMETRY_INBOX_OK);
+    fake_clock_us = 6000000ULL;
+    assert(telemetry_robot_submit(frame, sizeof frame) == (int)TELEMETRY_INBOX_OK);
+    assert(telemetry_rtos_peek(7001U, out, sizeof out, &len) == TELEMETRY_INBOX_EMPTY);  /* 1001 ms old: stale, so proof the stamp was 6000 */
+}
+
 int main(void)
 {
     test_initialize();
@@ -126,6 +147,7 @@ int main(void)
     test_nonblocking_busy();
     test_full_and_stale();
     test_invalid_and_balanced();
-    puts("PASS: 5 RTOS mutex-port mock tests (non-waiting lock)");
+    test_robot_submit_uses_the_clock();
+    puts("PASS: 6 RTOS mutex-port mock tests (non-waiting lock)");
     return 0;
 }

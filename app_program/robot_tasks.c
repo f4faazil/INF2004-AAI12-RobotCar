@@ -155,7 +155,7 @@ static volatile uint8_t g_vstate = (uint8_t)VC_BOOT;
 static volatile uint8_t g_remote_bits;
 
 /* The letter -> movement mapping: parsed by the Net task from MQTT, copied by the Line task. */
-static nav_map_entry_t g_map_stage[BMAP_MAX];
+static uint8_t g_map_stage[BMAP_MAX];           /* one packed byte per letter (nav_map_pack): 26 bytes, was 208 */
 static volatile uint8_t g_map_stage_len;
 static volatile uint32_t g_map_seq;             /* bumped for every accepted mapping */
 static volatile uint32_t g_map_applied;         /* mappings the Line task has applied */
@@ -171,6 +171,19 @@ static volatile uint8_t g_remote_req[4];        /* req_id + 1 per VC_REMOTE_* bi
 static uint8_t g_event_seq;
 
 static volatile uint32_t g_max_motion_us;
+#if ROBOT_STOP_TIMING
+/* Obstacle-to-stop timing (microseconds from hal_time_us, wrap-safe differences).  state: 0 idle, 1 sonar saw it, 2 monitor declared it,
+ * 3 Vehicle posted STOP, 4 PWM zero, 5 wheels still.  Each stage is written by one task; the diagnostic task prints and resets. */
+static volatile uint8_t  g_st_state;
+static volatile uint32_t g_st_first_us;
+static volatile uint32_t g_st_declared_us;
+static volatile uint32_t g_st_cmd_us;
+static volatile uint32_t g_st_pwm0_us;
+static volatile uint32_t g_st_still_us;
+static volatile uint16_t g_st_first_mm;
+static volatile uint16_t g_st_threshold_mm;
+static volatile uint32_t g_st_count;
+#endif
 static volatile uint32_t g_max_line_us;
 static volatile uint32_t g_max_vehicle_us;
 static volatile uint32_t g_ir_frames;
@@ -250,6 +263,18 @@ typedef struct {
     int16_t steps[PLAN_MAX_STEPS];
 } diag_scan_t;
 static diag_scan_t g_diag_scan;
+#if ROBOT_SCAN_RAYS
+/* The raw rays of the last scan: copied by the sonar task, printed by the diagnostics task. */
+typedef struct {
+    uint8_t  angle;
+    uint8_t  kind;
+    uint16_t mm;
+} diag_ray_t;
+static diag_ray_t g_diag_ray[SCAN_MAX_POINTS];
+static volatile uint8_t g_diag_ray_count;
+static volatile bool g_diag_ray_fresh;
+static uint32_t g_diag_ray_scan_no;
+#endif
 #endif
 
 static void tel_push_event(uint8_t code, uint16_t arg)
@@ -300,6 +325,12 @@ static void cmd_post(const motion_cmd_t *cmd)
     g_cmd_ring[g_cmd_head % ROBOT_CMD_RING] = *cmd;
     g_cmd_head++;
     robot_irq_restore(state);
+#if ROBOT_STOP_TIMING
+    if ((cmd->type == MOTION_CMD_STOP) && (g_st_state == 2U)) {
+        g_st_cmd_us = hal_time_us();
+        g_st_state = 3U;
+    }
+#endif
 }
 
 static bool cmd_take(motion_cmd_t *cmd)
@@ -366,6 +397,16 @@ static void motion_task(INT stacd, void *exinf)
         hal_encoders_snapshot(&left, &right);
         motion_step(&motion, &left, &right, hal_time_ms(), hal_time_us(), &out);
         hal_motor_set(out.left_pwm, out.right_pwm);
+#if ROBOT_STOP_TIMING
+        if ((g_st_state == 3U) && (out.left_pwm == 0) && (out.right_pwm == 0)) {
+            g_st_pwm0_us = hal_time_us();
+            g_st_state = 4U;
+        }
+        if ((g_st_state == 4U) && ((motion_status(&motion)->flags & MOTION_FLAG_STOPPED) != 0U)) {
+            g_st_still_us = hal_time_us();
+            g_st_state = 5U;
+        }
+#endif
 
         {
             robot_irq_state_t state = robot_irq_save();
@@ -447,17 +488,17 @@ static void line_task(INT stacd, void *exinf)
         }
 
         if (g_map_seq != map_applied_seq) {
-            nav_map_entry_t entries[BMAP_MAX];
+            uint8_t packed[BMAP_MAX];
             uint8_t entry_count;
             robot_irq_state_t state = robot_irq_save();
 
             entry_count = g_map_stage_len;
             for (uint8_t k = 0U; k < entry_count; k++) {
-                entries[k] = g_map_stage[k];
+                packed[k] = g_map_stage[k];
             }
             map_applied_seq = g_map_seq;
             robot_irq_restore(state);
-            line_nav_set_map(&nav, entries, entry_count);
+            line_nav_set_map_packed(&nav, packed, entry_count);
             g_map_len = entry_count;
             g_map_applied++;
         }
@@ -915,8 +956,43 @@ static void obstacle_task(INT stacd, void *exinf)
                     if (threshold < ROBOT_OBSTACLE_SCAN_MM) {
                         threshold = ROBOT_OBSTACLE_SCAN_MM;     /* stop early enough for the scan to work */
                     }
+#if ROBOT_STOP_TIMING
+                    {
+                        static bool under;
+
+                        if (reading.status == US_VALID) {
+                            if (reading.distance_mm >= threshold) {
+                                under = false;
+                            } else if (!under) {
+                                under = true;
+                                if (g_st_state == 0U) {
+                                    g_st_first_us = hal_time_us();
+                                    g_st_first_mm = reading.distance_mm;
+                                    g_st_threshold_mm = threshold;
+                                    g_st_state = 1U;
+                                }
+                            } else {
+                                /* still inside the range: the chain is already running */
+                            }
+                        }
+                    }
+#endif
+#if ROBOT_STOP_TIMING
+                    {
+                        static bool was_obstacle;
+                        const bool is_obstacle = us_monitor_update(&mon, &reading, threshold, ROBOT_OBSTACLE_HYST_MM,
+                                                                   (uint16_t)(threshold / 2U));
+
+                        if (is_obstacle && !was_obstacle && (g_st_state == 1U)) {
+                            g_st_declared_us = hal_time_us();
+                            g_st_state = 2U;
+                        }
+                        was_obstacle = is_obstacle;
+                    }
+#else
                     (void)us_monitor_update(&mon, &reading, threshold, ROBOT_OBSTACLE_HYST_MM,
                                             (uint16_t)(threshold / 2U));
+#endif
                     publish_obstacle_state(&mon, now);
                     {
                         robot_irq_state_t state = robot_irq_save();
@@ -1005,6 +1081,19 @@ static void obstacle_task(INT stacd, void *exinf)
                     }
                     g_diag_scan.fresh = true;
                 }
+#if ROBOT_SCAN_RAYS
+                {
+                    uint8_t r;
+
+                    for (r = 0U; (r < scan.point_count) && (r < SCAN_MAX_POINTS); r++) {
+                        g_diag_ray[r].angle = scan.points[r].angle_deg;
+                        g_diag_ray[r].kind = (uint8_t)scan.points[r].kind;
+                        g_diag_ray[r].mm = scan.points[r].distance_mm;
+                    }
+                    g_diag_ray_count = (scan.point_count < SCAN_MAX_POINTS) ? scan.point_count : (uint8_t)SCAN_MAX_POINTS;
+                    g_diag_ray_fresh = true;
+                }
+#endif
 #endif
                 scanning = false;
             }
@@ -1218,53 +1307,47 @@ static bool topic_is(const char *topic, const char *expect)
     return (*topic == '\0') && (*expect == '\0');
 }
 
-/* The acknowledgement text for the last mapping message, published by the Net loop. */
-static char g_map_ack[24];
+/* The reply to the last mapping message, published by the Net loop: 2 bytes (type, then result in 3 bits and entry count in 5). */
+static uint8_t g_map_ack[2];
 static uint8_t g_map_ack_len;
 
-static void map_ack(const char *text, uint8_t count, bool with_count)
+static void map_ack(bmap_result_t result, uint8_t count)
 {
-    uint8_t n = 0U;
-
-    while ((text[n] != '\0') && (n < 12U)) {
-        g_map_ack[n] = text[n];
-        n++;
-    }
-    if (with_count) {
-        g_map_ack[n++] = ' ';
-        g_map_ack[n++] = 'n';
-        g_map_ack[n++] = '=';
-        if (count >= 10U) {
-            g_map_ack[n++] = (char)('0' + (count / 10U));
-        }
-        g_map_ack[n++] = (char)('0' + (count % 10U));
-    }
-    g_map_ack_len = n;
+    g_map_ack_len = (uint8_t)bmap_encode_ack(result, count, g_map_ack);
 }
 
 /* A mapping from the PC.  Applied whole or not at all; the old one is kept on any error. */
 static void on_map(const uint8_t *payload, uint16_t len)
 {
     nav_map_entry_t parsed[BMAP_MAX];
+    uint8_t packed[BMAP_MAX];
     uint8_t count = 0U;
-    bmap_result_t r = bmap_parse(payload, len, parsed, &count);
+    bmap_result_t r = bmap_parse_any(payload, len, parsed, &count);
 
+    if (r == BMAP_OK) {
+        for (uint8_t k = 0U; k < count; k++) {
+            if (!nav_map_pack(parsed[k].letter, parsed[k].command, &packed[k])) {
+                r = BMAP_ERR_ACTION;            /* cannot happen for a parsed map; refuse rather than store garbage */
+                break;
+            }
+        }
+    }
     if (r != BMAP_OK) {
         g_map_rejected++;
-        map_ack(bmap_result_text(r), 0U, false);
+        map_ack(r, 0U);
         return;
     }
     {
         robot_irq_state_t state = robot_irq_save();
 
         for (uint8_t k = 0U; k < count; k++) {
-            g_map_stage[k] = parsed[k];
+            g_map_stage[k] = packed[k];
         }
         g_map_stage_len = count;
         g_map_seq++;
         robot_irq_restore(state);
     }
-    map_ack("OK", count, true);
+    map_ack(BMAP_OK, count);
 }
 
 static void on_command(void *ctx, const char *topic, const uint8_t *payload, uint16_t len)
@@ -1558,6 +1641,21 @@ static void diag_drain_events(void)
         }
         tm_printf((UB *)"(plan 0=continue 1=left 2=right 3=reverse 4=stop)\n");
     }
+#if ROBOT_SCAN_RAYS
+    if (g_diag_ray_fresh) {
+        /* angle:kind:mm per ray, kind O = obstacle echo, F = far echo, N = no echo, I = invalid; the angle is the servo angle, 90 straight ahead */
+        static const char KIND[4] = { 'O', 'F', 'N', 'I' };
+        uint8_t r;
+        uint8_t n = g_diag_ray_count;
+
+        g_diag_ray_fresh = false;
+        g_diag_ray_scan_no++;
+        tm_printf((UB *)"[ray] scan=%u rays=%u (angle:kind:mm, O obstacle F far N no-echo I invalid)\n", (UINT)g_diag_ray_scan_no, (UINT)n);
+        for (r = 0U; r < n; r++) {
+            tm_printf((UB *)"[ray] %u:%c:%u\n", (UINT)g_diag_ray[r].angle, KIND[g_diag_ray[r].kind & 3U], (UINT)g_diag_ray[r].mm);
+        }
+    }
+#endif
 }
 
 static void diag_task(INT stacd, void *exinf)
@@ -1608,6 +1706,28 @@ static void diag_task(INT stacd, void *exinf)
                   (UINT)g_max_motion_us, (UINT)g_max_line_us, (UINT)g_max_vehicle_us,
                   (UINT)hal_adc_max_isr_us(), (UINT)hal_tick_overruns(HAL_TICK_MOTION),
                   (UINT)hal_tick_overruns(HAL_TICK_CONTROL), (UINT)hal_tick_overruns(HAL_TICK_VEHICLE));
+#if ROBOT_STOP_TIMING
+        if (g_st_state >= 4U) {
+            /* print once the wheels are still, or after 3 s if they never were */
+            static uint32_t waiting_since_ms;
+            const uint32_t now_ms = hal_time_ms();
+
+            if (g_st_state == 4U) {
+                if (waiting_since_ms == 0U) {
+                    waiting_since_ms = now_ms;
+                }
+            }
+            if ((g_st_state == 5U) || ((now_ms - waiting_since_ms) > 3000U)) {
+                tm_printf((UB *)"[stop] #%u first-reading=%umm threshold=%umm  sonar-to-declared=%uus declared-to-STOP=%uus STOP-to-PWM0=%uus  total=%uus  wheels-still=%s%uus\n",
+                          (UINT)(++g_st_count), (UINT)g_st_first_mm, (UINT)g_st_threshold_mm,
+                          (UINT)(g_st_declared_us - g_st_first_us), (UINT)(g_st_cmd_us - g_st_declared_us),
+                          (UINT)(g_st_pwm0_us - g_st_cmd_us), (UINT)(g_st_pwm0_us - g_st_first_us),
+                          (g_st_state == 5U) ? "" : ">", (UINT)((g_st_state == 5U) ? (g_st_still_us - g_st_first_us) : 3000000U));
+                waiting_since_ms = 0U;
+                g_st_state = 0U;
+            }
+        }
+#endif
         tm_printf((UB *)"[gpio] edge-interrupts=%u (the encoders and the sonar echo count here)  switched on from processor %d, result %d\n",
                   (UINT)hal_gpio_isr_count(), (INT)g_irq_prc, (INT)g_irq_result);
 #if TM_WIFI_CYW43

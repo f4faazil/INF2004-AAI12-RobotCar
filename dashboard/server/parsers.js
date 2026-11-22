@@ -10,7 +10,41 @@ const DIAGNOSTIC_NAMES = Object.freeze({
   ja: "joinAttempts", jr: "joinRecoveries"
 });
 
+// ---- the binary forms the firmware sends (lib/libnet/lwip/mqtt_lwip.c, app_program/mqtt_heartbeat.h) -----------------------------------------
+// Everything is big-endian.  Each decoder returns the same named fields and the same "k=v,k=v" text as the old text payloads did, so the page and
+// the recordings keep working; text payloads from older firmware are still read below.
+const DIAG_LAYOUT = {
+  0x23: { length: 50, fields: [["b", 4], ["rr", 1], ["tk", 2], ["r", 1], ["t", 4], ["s", 1], ["oc", 4], ["og", 4], ["mp", 4], ["mg", 4], ["lp", 4], ["lt", 4], ["pa", 4], ["pq", 4], ["pr", 4]] },
+  0x24: { length: 58, fields: [["b", 4], ["wf", 4], ["of", 4], ["te", 4], ["le", -4], ["ui", 4], ["us", 4], ["ue", 4], ["ul", 1], ["wc", 4], ["wt", 4], ["dc", 4], ["dt", 4], ["ja", 4], ["jr", 4]] }
+};
+const hex32 = value => value.toString(16).padStart(8, "0");
+
+function decodeBinaryDiagnostic(buffer) {
+  const layout = DIAG_LAYOUT[buffer[0]];
+  if (!layout || buffer.length !== layout.length) return null;
+  const fields = {}, parts = ["v=1"];
+  let at = 1;
+  for (const [key, size] of layout.fields) {
+    const width = Math.abs(size);
+    const value = size < 0 ? buffer.readIntBE(at, width) : buffer.readUIntBE(at, width);
+    at += width;
+    fields[DIAGNOSTIC_NAMES[key]] = key === "b" ? hex32(value) : value;
+    parts.push(`${key}=${key === "b" ? hex32(value) : value}`);
+  }
+  return { raw: parts.join(","), fields: { schemaVersion: 1, ...fields } };
+}
+
+// The online marker is the single byte 0x22 (older firmware sent the text AAI12_PICO_W_ONLINE).
+export function decodeOnlineMarker(payload) {
+  if (Buffer.isBuffer(payload) && payload.length === 1 && payload[0] === 0x22) return "AAI12_PICO_W_ONLINE";
+  return Buffer.isBuffer(payload) ? payload.toString("utf8") : String(payload);
+}
+
 export function parseDiagnostic(input) {
+  if (Buffer.isBuffer(input)) {
+    const binary = decodeBinaryDiagnostic(input);
+    if (binary) return binary;
+  }
   const text = Buffer.isBuffer(input) ? input.toString("utf8") : String(input);
   const fields = {};
   for (const token of text.split(",")) {
@@ -56,6 +90,11 @@ export function parseFutureJson(payload) {
 }
 
 export function parseHeartbeat(input) {
+  // 13 bytes: 0x21, boot id u32, sequence u32, uptime ms u32
+  if (Buffer.isBuffer(input) && input.length === 13 && input[0] === 0x21) {
+    const fields = { schemaVersion: 1, bootId: hex32(input.readUInt32BE(1)), sequence: input.readUInt32BE(5), uptimeMs: input.readUInt32BE(9) };
+    return { raw: `v=1,b=${fields.bootId},seq=${fields.sequence},up=${fields.uptimeMs}`, fields };
+  }
   const text = Buffer.isBuffer(input) ? input.toString("utf8") : String(input);
   const fields = {};
   for (const token of text.split(",")) {

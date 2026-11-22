@@ -38,9 +38,13 @@
 
 #define AAI12_MQTT_RX_CHUNK 64U
 #define AAI12_MQTT_OUTPUT_TIMEOUT_MS 5000U
-#define AAI12_MQTT_DIAG_PAYLOAD_BYTES 220U
+#define AAI12_MQTT_DIAG_PAYLOAD_BYTES 64U
+#define AAI12_DIAG_PART1_TYPE 0x23U
+#define AAI12_DIAG_PART2_TYPE 0x24U
+#define AAI12_ONLINE_MARKER_TYPE 0x22U
 
-static const uint8_t qualification_message[] = "AAI12_PICO_W_ONLINE";
+/* The online marker is the single byte 0x22 (it was the 19 characters AAI12_PICO_W_ONLINE). */
+static const uint8_t qualification_message[] = { AAI12_ONLINE_MARKER_TYPE };
 static const char robot_telemetry_topic[] = "aai12/robot/telemetry";
 static const char diagnostic_topic[] = "aai12/diagnostic";
 static const char heartbeat_topic[] = "aai12/robot/heartbeat";
@@ -137,67 +141,39 @@ typedef struct {
 static mqtt_lwip_adapter_t adapter;
 static T_MQTT_LWIP_STATUS diagnostics;
 
+/* The diagnostic records are binary, all numbers big-endian.  Part 1 is 50 bytes and part 2 is 58 bytes, where the text form was
+ * about 150 and 140.  The dashboard (server/parsers.js, parseDiagnostic) turns them back into the same named fields.
+ *   0x23  part 1: boot nonce u32, reset reason u8, timer tick config u16, failure reason u8, failure time u32, mqtt state u8,
+ *         then u32 each: owner calls, owner max gap, mqtt polls, mqtt max gap, last poll, last tx, ping attempts, pings, ping responses
+ *   0x24  part 2: boot nonce u32, then u32 each: tcp write failures, tcp output failures, tcp errors, last tcp error (signed),
+ *         usb irq, usb service, usb event; usb link state u8; then u32 each: wifi link changes, last wifi change,
+ *         dhcp changes, last dhcp change, join attempts, join recoveries */
 typedef struct {
-    char *bytes;
+    uint8_t *bytes;
     size_t capacity;
     size_t length;
     bool valid;
 } mqtt_diag_builder_t;
 
-static void diag_text(mqtt_diag_builder_t *d, const char *text)
+static void diag_u8(mqtt_diag_builder_t *d, uint32_t value)
 {
-    while (*text != '\0') {
-        if (d->length >= d->capacity) {
-            d->valid = false;
-            return;
-        }
-        d->bytes[d->length++] = *text++;
+    if (d->length >= d->capacity) {
+        d->valid = false;
+        return;
     }
+    d->bytes[d->length++] = (uint8_t)value;
 }
 
-static void diag_u32(mqtt_diag_builder_t *d, const char *key,
-                     uint32_t value)
+static void diag_u16(mqtt_diag_builder_t *d, uint32_t value)
 {
-    char reversed[10];
-    size_t count = 0U;
-
-    diag_text(d, key);
-    do {
-        reversed[count++] = (char)('0' + value % 10U);
-        value /= 10U;
-    } while (value != 0U);
-    while (count > 0U) {
-        char digit[2] = { reversed[--count], '\0' };
-        diag_text(d, digit);
-    }
+    diag_u8(d, value >> 8);
+    diag_u8(d, value);
 }
 
-static void diag_i32(mqtt_diag_builder_t *d, const char *key, int32_t value)
+static void diag_u32(mqtt_diag_builder_t *d, uint32_t value)
 {
-    uint32_t magnitude;
-
-    diag_text(d, key);
-    if (value < 0) {
-        diag_text(d, "-");
-        magnitude = 0U - (uint32_t)value;
-    } else {
-        magnitude = (uint32_t)value;
-    }
-    diag_u32(d, "", magnitude);
-}
-
-static void diag_hex32(mqtt_diag_builder_t *d, const char *key,
-                       uint32_t value)
-{
-    static const char digits[] = "0123456789abcdef";
-
-    diag_text(d, key);
-    for (unsigned int shift = 32U; shift != 0U; shift -= 4U) {
-        char digit[2] = {
-            digits[(value >> (shift - 4U)) & 0x0fU], '\0'
-        };
-        diag_text(d, digit);
-    }
+    diag_u16(d, value >> 16);
+    diag_u16(d, value);
 }
 
 static uint32_t make_boot_nonce(uint32_t now)
@@ -545,7 +521,7 @@ void mqtt_lwip_observe_owner(uint32_t wifi_link_up, uint32_t dhcp_complete,
 
 static bool publish_diagnostic(mqtt_lwip_adapter_t *a, uint32_t now)
 {
-    char payload[AAI12_MQTT_DIAG_PAYLOAD_BYTES];
+    uint8_t payload[AAI12_MQTT_DIAG_PAYLOAD_BYTES];
     const mqtt_failure_snapshot_t *s = &a->previous;
     mqtt_diag_builder_t d = { payload, sizeof payload, 0U, true };
 
@@ -553,43 +529,43 @@ static bool publish_diagnostic(mqtt_lwip_adapter_t *a, uint32_t now)
         capture_failure(a, MQTT_DIAG_NONE, now);
     }
     if (a->diagnostic_part == 0U) {
-        diag_text(&d, "v=1");
-        diag_hex32(&d, ",b=", diagnostics.boot_nonce);
-        diag_u32(&d, ",rr=", diagnostics.reset_reason);
-        diag_u32(&d, ",tk=", diagnostics.timer_tick_config);
-        diag_u32(&d, ",r=", s->reason);
-        diag_u32(&d, ",t=", s->at_ms);
-        diag_u32(&d, ",s=", s->state);
-        diag_u32(&d, ",oc=", s->owner_calls);
-        diag_u32(&d, ",og=", s->owner_max_gap_ms);
-        diag_u32(&d, ",mp=", s->mqtt_polls);
-        diag_u32(&d, ",mg=", s->mqtt_max_gap_ms);
-        diag_u32(&d, ",lp=", s->last_poll_ms);
-        diag_u32(&d, ",lt=", s->last_tx_ms);
-        diag_u32(&d, ",pa=", s->ping_attempts);
-        diag_u32(&d, ",pq=", s->pings);
-        diag_u32(&d, ",pr=", s->ping_responses);
+        diag_u8(&d, AAI12_DIAG_PART1_TYPE);
+        diag_u32(&d, diagnostics.boot_nonce);
+        diag_u8(&d, diagnostics.reset_reason);
+        diag_u16(&d, diagnostics.timer_tick_config);
+        diag_u8(&d, s->reason);
+        diag_u32(&d, s->at_ms);
+        diag_u8(&d, s->state);
+        diag_u32(&d, s->owner_calls);
+        diag_u32(&d, s->owner_max_gap_ms);
+        diag_u32(&d, s->mqtt_polls);
+        diag_u32(&d, s->mqtt_max_gap_ms);
+        diag_u32(&d, s->last_poll_ms);
+        diag_u32(&d, s->last_tx_ms);
+        diag_u32(&d, s->ping_attempts);
+        diag_u32(&d, s->pings);
+        diag_u32(&d, s->ping_responses);
     } else {
-        diag_text(&d, "v=1");
-        diag_hex32(&d, ",b=", diagnostics.boot_nonce);
-        diag_u32(&d, ",wf=", s->tcp_write_failures);
-        diag_u32(&d, ",of=", s->tcp_output_failures);
-        diag_u32(&d, ",te=", s->tcp_errors);
-        diag_i32(&d, ",le=", s->last_tcp_error);
-        diag_u32(&d, ",ui=", s->usb_irq_count);
-        diag_u32(&d, ",us=", s->usb_service_count);
-        diag_u32(&d, ",ue=", s->usb_event_count);
-        diag_u32(&d, ",ul=", s->usb_link_state);
-        diag_u32(&d, ",wc=", s->wifi_link_changes);
-        diag_u32(&d, ",wt=", s->last_wifi_change_ms);
-        diag_u32(&d, ",dc=", s->dhcp_changes);
-        diag_u32(&d, ",dt=", s->last_dhcp_change_ms);
-        diag_u32(&d, ",ja=", s->join_attempts);
-        diag_u32(&d, ",jr=", s->join_recoveries);
+        diag_u8(&d, AAI12_DIAG_PART2_TYPE);
+        diag_u32(&d, diagnostics.boot_nonce);
+        diag_u32(&d, s->tcp_write_failures);
+        diag_u32(&d, s->tcp_output_failures);
+        diag_u32(&d, s->tcp_errors);
+        diag_u32(&d, (uint32_t)s->last_tcp_error);
+        diag_u32(&d, s->usb_irq_count);
+        diag_u32(&d, s->usb_service_count);
+        diag_u32(&d, s->usb_event_count);
+        diag_u8(&d, s->usb_link_state);
+        diag_u32(&d, s->wifi_link_changes);
+        diag_u32(&d, s->last_wifi_change_ms);
+        diag_u32(&d, s->dhcp_changes);
+        diag_u32(&d, s->last_dhcp_change_ms);
+        diag_u32(&d, s->join_attempts);
+        diag_u32(&d, s->join_recoveries);
     }
     if (!d.valid ||
         !publish_with_diagnostics(a, diagnostic_topic,
-                                  (const uint8_t *)payload, d.length, now)) {
+                                  payload, d.length, now)) {
         diagnostics.diagnostic_publish_failures++;
         return false;
     }
@@ -706,7 +682,7 @@ void mqtt_lwip_poll(struct netif *netif)
         adapter.session.sessions_online != adapter.published_online_session) {
         if (publish_with_diagnostics(&adapter, AAI12_MQTT_TEST_TOPIC,
                                      qualification_message,
-                                     sizeof(qualification_message) - 1U,
+                                     sizeof qualification_message,
                                      now)) {
             adapter.published_online_session = adapter.session.sessions_online;
         }
@@ -728,11 +704,11 @@ void mqtt_lwip_poll(struct netif *netif)
      * it. A failed local TX is retried with the same sequence next iteration. */
     if (adapter.session.state == MQTT_SESSION_ONLINE &&
         mqtt_heartbeat_due(&adapter.heartbeat, now)) {
-        char payload[MQTT_HEARTBEAT_PAYLOAD_BYTES];
+        uint8_t payload[MQTT_HEARTBEAT_PAYLOAD_BYTES];
         size_t length = mqtt_heartbeat_prepare(&adapter.heartbeat, now,
                                                 payload, sizeof payload);
         if (length != 0U && publish_with_diagnostics(&adapter,
-                heartbeat_topic, (const uint8_t *)payload, length, now)) {
+                heartbeat_topic, payload, length, now)) {
             mqtt_heartbeat_published(&adapter.heartbeat, now);
         }
         return;

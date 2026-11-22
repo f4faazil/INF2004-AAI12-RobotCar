@@ -173,12 +173,12 @@ static void test_invalid_args(void)
     assert(telemetry_inbox_submit(NULL, &sample, 1U, 0U) == TELEMETRY_INBOX_INVALID);
     assert(telemetry_inbox_submit(&box, NULL, 1U, 0U) == TELEMETRY_INBOX_INVALID);
     assert(telemetry_inbox_submit(&box, &sample, 0U, 0U) == TELEMETRY_INBOX_INVALID);
-    assert(telemetry_inbox_submit(&box, &sample, 129U, 0U) == TELEMETRY_INBOX_INVALID);
+    assert(telemetry_inbox_submit(&box, &sample, TELEMETRY_QUEUE_MAX_BYTES + 1U, 0U) == TELEMETRY_INBOX_INVALID);
     assert(telemetry_inbox_peek(&box, 0U, out, 1U, &n) == TELEMETRY_INBOX_INVALID);
     assert(telemetry_inbox_snapshot(&box, NULL) == TELEMETRY_INBOX_INVALID);
 }
 
-static void test_full_128_bytes(void)
+static void test_full_max_bytes(void)
 {
     telemetry_inbox_t box;
     mock_guard_t guard;
@@ -203,7 +203,7 @@ int main(void)
     test_retry_and_fifo();
     test_wraparound();
     test_invalid_args();
-    test_full_128_bytes();
+    test_full_max_bytes();
     puts("PASS: 11 guarded telemetry inbox host tests");
     return 0;
 }

@@ -33,8 +33,11 @@ lock-free mailbox (`mqtt_mailbox.c`); the answer to a map goes back on `aai12/ro
 goes through the same policy as the button: refused while the car is picked up, START refused while running. Commands are
 never retained, so one is never replayed when the car reconnects.
 
-**Barcode letter map.** The car has no built-in table. The dashboard sends one (`A=L,B=R,F=U`), retained, and the car says
-`OK n=<count>` or `ERR ...`. Until a map arrives every decoded barcode is counted as rejected.
+**Barcode letter map.** The car has no built-in table. The dashboard sends one (`A=L,B=R,F=U`), retained, as binary
+(`12 01 0a 2c`: type 0x12, then one byte per letter), and the car answers with two bytes (`13 03` = OK, 3 letters; the dashboard
+shows `OK n=3`). Until a map arrives every decoded barcode is counted as rejected. The heartbeat, the online marker and the
+diagnostic records are binary too (types 0x21 to 0x24, see `docs/DATA_REPRESENTATION.md`, section 6). **Firmware v23 or newer
+is needed:** a car on v22 or earlier only understands the text map.
 
 **Telemetry.** Hadi's bit-packed records plus a new per-sensor record (type 0x06, 18 bytes: IR levels, barcode progress, motors
 and encoders, IMU tilt and lift, ultrasonic and servo, WiFi/MQTT state). Decoders: `tools/robot_telemetry.py` and

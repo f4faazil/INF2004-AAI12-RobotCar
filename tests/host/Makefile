@@ -18,7 +18,7 @@ TESTS   := test_barcode test_barcode_map test_line_sensor test_pipeline test_fau
            test_encoder test_pid test_motion test_motor_cal test_imu test_ultrasonic test_obstacle test_line_nav test_telemetry test_mqtt_codec test_mqtt_client test_safety test_vehicle test_follow_sim
 
 SRC_test_barcode      := barcode.c
-SRC_test_barcode_map  := barcode_map.c
+SRC_test_barcode_map  := barcode_map.c line_nav.c line_sensor.c barcode.c
 SRC_test_line_sensor  := line_sensor.c
 SRC_test_pipeline     := barcode.c line_sensor.c
 SRC_test_fault_mask   := fault_mask.c
@@ -37,7 +37,7 @@ SRC_test_safety       := safety.c fault_mask.c
 SRC_test_follow_sim   := line_nav.c line_sensor.c barcode.c
 SRC_test_vehicle      := vehicle.c line_nav.c line_sensor.c barcode.c obstacle.c ultrasonic.c servo.c motion.c pid.c encoder.c
 
-.PHONY: test clean sim
+.PHONY: test clean sim stress
 test: $(TESTS)
 	@for t in $(TESTS); do echo "== $$t"; ./$$t || exit 1; done
 
@@ -54,5 +54,13 @@ sim_report: sim_report.c sim_trace.h $(APP)/barcode.c $(APP)/line_sensor.c \
 sim: sim_report
 	./sim_report
 
+# Not a test of the default run: the fault-mask concurrency stress test (needs pthreads) and its negative control.
+# make stress   -> the protected build must PASS and the -DUNPROTECTED control must lose updates.
+stress: ../../app_program/fault_mask.c test_fault_mask_stress.c
+	$(CC) -std=c11 -O2 -Wall -Wextra -pthread -I$(APP) -o stress_protected test_fault_mask_stress.c $(APP)/fault_mask.c
+	$(CC) -std=c11 -O2 -Wall -Wextra -pthread -DUNPROTECTED -I$(APP) -o stress_unprotected test_fault_mask_stress.c $(APP)/fault_mask.c
+	./stress_protected
+	./stress_unprotected
+
 clean:
-	rm -f $(TESTS) sim_report
+	rm -f $(TESTS) sim_report stress_protected stress_unprotected

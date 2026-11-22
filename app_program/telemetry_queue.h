@@ -16,7 +16,9 @@
  * submission non-blocking. Never call it from an ISR without that design.
  */
 #define TELEMETRY_QUEUE_CAPACITY      16U
-#define TELEMETRY_QUEUE_MAX_BYTES    128U
+/* Largest telemetry record: 18 bytes (the robot's per-sensor record); the demo frames are 3. 32 leaves headroom and replaces the old
+ * 128-byte slot, which made the inbox and the queue 2.2 KB each. A longer record is refused (TELEMETRY_QUEUE_INVALID). */
+#define TELEMETRY_QUEUE_MAX_BYTES     32U
 #define TELEMETRY_QUEUE_MAX_AGE_MS  1000U
 
 typedef enum {

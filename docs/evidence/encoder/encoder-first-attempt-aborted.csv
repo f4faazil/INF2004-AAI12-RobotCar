@@ -1,0 +1,2 @@
+cycle,leg,expected_mm,measured_mm,error_mm,error_percent,direction_ok,bad_transitions_added
+1,forward,500,0,-500,-100.0,no,0

@@ -1583,8 +1583,31 @@ static void test_mapping_longer_than_the_alphabet_is_clamped(void)
     CHECK_INT((int)NAV_MAP_MAX, (int)r.nav.cfg.map_len);
 }
 
+/* The map is kept one byte per letter (26 bytes, was 208).  An entry that cannot be packed (not A to Z, no command) is skipped, and the bytes are the ones
+ * documented for the wire.  Catches: a changed layout, a table that overflows, a garbage entry stored. */
+static void test_map_is_stored_packed_and_unpackable_entries_are_skipped(void)
+{
+    rig_t r;
+    const nav_map_entry_t in[4] = { { 'A', NAV_CMD_LEFT }, { '1', NAV_CMD_LEFT }, { 'B', NAV_CMD_NONE }, { 'Z', NAV_CMD_UTURN } };
+    const uint8_t packed[4] = { 0x01U, (uint8_t)((26U << 3) | 1U), 0x2cU, (uint8_t)((3U << 3) | 6U) };
+
+    rig_init(&r);
+    CHECK_INT(26, (int)sizeof(r.nav.map_packed));
+    line_nav_set_map(&r.nav, in, 4U);
+    CHECK_INT(2, (int)r.nav.cfg.map_len);                                   /* '1' and "no command" were skipped */
+    CHECK_INT(0x01, (int)r.nav.map_packed[0]);
+    CHECK_INT((25 << 3) | 4, (int)r.nav.map_packed[1]);
+    line_nav_set_map_packed(&r.nav, packed, 4U);
+    CHECK_INT(2, (int)r.nav.cfg.map_len);                                   /* index 26 and command 6 do not unpack */
+    CHECK_INT(0x01, (int)r.nav.map_packed[0]);
+    CHECK_INT(0x2c, (int)r.nav.map_packed[1]);
+    line_nav_set_map_packed(&r.nav, packed, 0U);
+    CHECK_INT(0, (int)r.nav.cfg.map_len);
+}
+
 int main(void)
 {
+    RUN(test_map_is_stored_packed_and_unpackable_entries_are_skipped);
     RUN(test_barcode_reads_while_accelerating_when_distance_is_known);
     RUN(test_barcode_reads_through_a_freeze_when_distance_is_known);
     RUN(test_travel_going_backwards_adds_no_width);
