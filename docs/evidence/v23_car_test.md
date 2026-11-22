@@ -42,3 +42,18 @@ needs a hand on the button. A way to test it: the same 100 s run with the PC dis
 - The firmware was flashed once; no repeated reconnect test was run on v23.
 
 Tool used for the map cases: `dashboard/tools/map-cases.mjs` (needs the dashboard running with the car connected). Raw logs are in the session scratchpad, not in the repo.
+
+## v24 (smaller MQTT mailbox) on the car, same day, car stationary
+Firmware `robot_wifi_telemetry_v24_mailbox_fazfaz_smp1.uf2` (commit b60eca1): the MQTT mailbox payload is 32 bytes instead of 128 (`.bss` 63 732 B).
+
+| Check | Result |
+|---|---|
+| Online marker, both diagnostic parts, heartbeat | Decoded as on v23 (new boot id `b5aab54b` in all of them) |
+| Map `A=L,B=R,F=U` | `OK n=3` |
+| The seven binary map cases (26 letters, clear, duplicate, action 0, action 7, 27 letters, valid again) | Same replies as v23: `13 1a`, `13 00`, `13 a0`, `13 80`, `13 80`, `13 40`, `13 03` |
+| Text map of 15 bytes | accepted, reply `13 04` (4 letters) |
+| Text map of 35 bytes (over the new 32-byte limit) | no reply: dropped by the mailbox, as intended |
+| Steady feed over 20 s | status 10.1 / s, sensors 2.0 / s, heartbeat 1.0 / s; drop counter flat (151 to 151) |
+| Serial status | `map=3/4`, no tick overruns (0/0/0), worst task times motion 156 us, line 273 us, vehicle 492 us |
+
+The 35-byte text map is the one behaviour that changed from v23 (v23 accepted it); the dashboard sends binary, so this affects hand-typed text maps only. The car was not driven.
