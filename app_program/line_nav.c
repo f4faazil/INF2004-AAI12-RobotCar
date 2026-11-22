@@ -517,7 +517,7 @@ void line_nav_step(line_nav_t *nav, uint32_t now_ms, int16_t speed_mm_s,
             const bool black_now = valid && nav->ch_black[channel];
             /* travelled while black: speed (mm/s) x frames (ms) = micrometres */
             const uint32_t black_um = (speed_mm_s > 0)
-                                      ? (nav->ch_black_frames[channel] * (uint32_t)speed_mm_s) : 0U;
+                                      ? ((uint32_t)nav->ch_black_frames[channel] * (uint32_t)speed_mm_s) : 0U;
 
             if (black_now && (is_lane || is_branch)) {
                 any_black |= LANE_SIDE[i];
