@@ -149,9 +149,11 @@ A decoded Code 39 letter is mapped to a command by the mapping the PC sent over 
 
 ### MQTT mapping
 
-The car has **no built-in letter-to-movement mapping**. The PC publishes it to `aai12/robot/map` (`ROBOT_MQTT_BASE "/map"`); the car subscribes to that topic after connecting, so a **retained** message is applied again after every reboot or reconnect. Each message replaces the whole mapping; a message with any error is rejected whole and the old mapping is kept. The car answers on `aai12/robot/map_ack` with `OK n=<entries>` or `ERR empty|syntax|letter|action|duplicate`.
+The car has **no built-in letter-to-movement mapping**. The PC publishes it to `aai12/robot/map` (`ROBOT_MQTT_BASE "/map"`); the car subscribes to that topic after connecting, so a **retained** message is applied again after every reboot or reconnect. Each message replaces the whole mapping; a message with any error is rejected whole and the old mapping is kept. The car answers on `aai12/robot/map_ack` with two bytes: type `0x13`, then the result in bits 7 to 5 (0 OK, 1 empty, 2 syntax, 3 letter, 4 action, 5 duplicate) and the number of letters in bits 4 to 0 (the dashboard shows `OK n=3` or `ERR duplicate`).
 
-Payload (text, at most 128 bytes, case-insensitive; entries separated by comma, semicolon, space, tab or newline; no spaces around `=`):
+Payload, **binary (v23 and newer):** type `0x12`, then **one byte per letter**: the letter index (A = 0 to Z = 25) in bits 7 to 3 and the movement in bits 2 to 0 (1 left, 2 right, 3 straight, 4 U-turn). `A=L,B=R,F=U` is the four bytes `12 01 0a 2c`; the type byte alone (`12`) clears the map; at most 26 letters, so at most 27 bytes. The car keeps the map in this same form. The text form below is still accepted by the car (the dashboard now sends binary):
+
+Text payload (at most 128 bytes, case-insensitive; entries separated by comma, semicolon, space, tab or newline; no spaces around `=`):
 
 | Form | Example |
 |---|---|
@@ -161,7 +163,8 @@ Payload (text, at most 128 bytes, case-insensitive; entries separated by comma, 
 
 Actions: `L`/`LEFT`, `R`/`RIGHT`, `F`/`FWD`/`FORWARD`/`S`/`STRAIGHT` (go straight on), `U`/`UTURN`/`U-TURN` (U-turn to the right).
 
-Example from a PC with mosquitto: `mosquitto_pub -h <broker> -t aai12/robot/map -r -m "A=L,B=R,C=F,D=U"`. The status line shows `map=<entries>/<rejected messages>`.
+Example from a PC with mosquitto (text form): `mosquitto_pub -h <broker> -t aai12/robot/map -r -m "A=L,B=R,C=F,D=U"`; the binary form is `mosquitto_pub -h <broker> -t aai12/robot/map -r -m $'
+,'` or `npm run map` in the dashboard folder. The status line shows `map=<entries>/<rejected messages>`.
 
 ### Telemetry: the data representation table (minimum-bit change)
 

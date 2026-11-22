@@ -45,10 +45,10 @@ Restart the backend after changing `.env`.
 
 The dashboard implementation was based on commit `b97bf5e` of `feature/aamir-robot-integration`.
 
-- The configured test topic (default `aai12/test`) sends `AAI12_PICO_W_ONLINE` once after each MQTT connection.
-- `aai12/diagnostic` sends two compact comma-separated `key=value` records after connecting. The dashboard expands the firmware's abbreviated keys into readable names.
+- The configured test topic (default `aai12/test`) sends the one-byte online marker `0x22` once after each MQTT connection; the page shows it as `AAI12_PICO_W_ONLINE` (firmware before v23 sent that text, which is still understood).
+- `aai12/diagnostic` sends two binary records after connecting (type `0x23`, 50 bytes, and `0x24`, 58 bytes; big-endian counters, layout in `lib/libnet/lwip/mqtt_lwip.c`). The dashboard decodes them and expands the abbreviated keys into readable names. Older firmware sent the same keys as `key=value` text, which is still understood.
 - `aai12/robot/telemetry` carries the temporary three-byte Stage 5C diagnostic format: `type`, `status`, `height`, `validity`, and `imu_fault`. It is explicitly marked by the firmware as diagnostic-only and not the approved robot schema.
-- `aai12/robot/heartbeat` sends `v=1,b=<boot-id>,seq=<sequence>,up=<uptime-ms>` approximately every ten seconds while the MQTT session is online. A heartbeat less than 30 seconds old is the dashboard's only current Pico-online evidence.
+- `aai12/robot/heartbeat` sends 13 bytes (`0x21`, boot id, sequence, uptime in ms, each a big-endian 32-bit number; older firmware sent the text `v=1,b=<boot-id>,seq=<sequence>,up=<uptime-ms>`) approximately every ten seconds while the MQTT session is online. A heartbeat less than 30 seconds old is the dashboard's only current Pico-online evidence.
 
 The firmware does **not** currently publish a confirmed movement state, accelerometer axes, gyroscope axes, or IMU temperature. Those measurements are therefore absent from the main live dashboard. Reserved placeholders show where agreed teammate telemetry can be integrated later.
 
@@ -146,8 +146,8 @@ rejoin, barcode Z, U-turn, hump, picked up) through exactly the same decoding.  
 The car has **no built-in barcode table**: until one arrives over MQTT every barcode it reads is rejected. The page's
 **Barcode instructions** card sets what each letter does (Left, Right, Straight, U-turn; “—” leaves it unmapped) and
 **Send to the robot** publishes it, *retained*, on `aai12/robot/map`. The car subscribes to that topic when it connects (so
-it gets the table even if it connects after you sent it) and answers on `aai12/robot/map_ack` (`OK n=3`, or `ERR ...` and
-it keeps its old table). The answer shows on the card.
+it gets the table even if it connects after you sent it) and answers on `aai12/robot/map_ack` (two bytes; the page shows `OK n=3`, or `ERR ...` and
+it keeps its old table). The map goes out as bytes too: `0x12` then one byte per letter (`A=L,B=R,F=U` is `12 01 0a 2c`). This needs firmware v23 or newer. The answer shows on the card.
 
 From a terminal instead (the dashboard must be running):
 

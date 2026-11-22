@@ -28,6 +28,22 @@ How the numbers were obtained:
 Steady stream (status 10 Hz + sensors 2 Hz + heartbeat 1 Hz), payload only: packed 215 B/s, natural 390 B/s, text 3611 B/s.
 
 
+## The other MQTT payloads (binary since v23)
+
+| Payload | Before (text) | Now (binary) | Note |
+|---|---|---|---|
+| Barcode map, 3 letters (`A=L,B=R,F=U`) | 11 B | 4 B | type 0x12 plus one byte per letter |
+| Barcode map, all 26 letters | up to 100 B | 27 B | |
+| Map reply (`OK n=3`, `ERR duplicate`) | 6 to 13 B | 2 B | type 0x13 plus result (3 bits) and count (5 bits) |
+| Heartbeat | 25 to 43 B | 13 B | text length grows with the numbers; shown here from all-zero to all-ten-digit values |
+| Online marker | 19 B | 1 B | `AAI12_PICO_W_ONLINE` is now the byte 0x22 |
+| Diagnostic part 1 | 81 to 207 B | 50 B | same range of values |
+| Diagnostic part 2 | 84 to 210 B | 58 B | |
+
+The binary sizes are the lengths asserted in the firmware tests (`tests/host/test_barcode_map.c`, `tests/test_mqtt_heartbeat.c`, `tests/test_mqtt_lwip.c`). The text sizes
+are those of the old text formats, computed for the smallest and the largest values the fields can hold. The diagnostic parts still carry full 32-bit counters, so they are
+compact rather than minimum-bit; they are debug output that is sent once per connection.
+
 ## What this shows
 - The large records shrink a lot: the per-sensor record is **67 % smaller** than natural-width binary (18 B against 55 B) and 96 % smaller than text; the status record is 37 % smaller.
 - The small records (event, hump, command, ack) are **already as small as natural width**: their fields are bytes or 16-bit values anyway. Packing gains nothing there.
@@ -38,5 +54,5 @@ Steady stream (status 10 Hz + sensors 2 Hz + heartbeat 1 Hz), payload only: pack
 ## Limits (stated plainly)
 - The text baseline counts only raw fields and no spaces, so it understates real JSON; the saving against text is, if anything, larger.
 - Natural width and text are reconstructions made for this comparison, not firmware that ever ran. The packed numbers are from the real encoders.
-- The barcode map (`A=L,B=R,F=U`, up to 128 bytes) and the radio diagnostic and heartbeat topics are text and are not covered by this table; see `DATA_REPRESENTATION.md`, section 6.
+- The table above is the robot's own records. The other MQTT payloads are in the second table below.
 - These are message sizes only. Timing before and after is in the timing evidence.
